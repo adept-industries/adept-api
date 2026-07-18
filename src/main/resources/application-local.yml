@@ -1,0 +1,16 @@
+# application-local.yml
+spring:
+  datasource:
+    # The API runs on the host, so it connects through the published host port.
+    url: jdbc:postgresql://localhost:${POSTGRES_PORT:5432}/${POSTGRES_DB:adept}
+    username: ${POSTGRES_USER:adept}
+    password: ${POSTGRES_PASSWORD}
+  mail:
+    host: localhost
+    port: 1025
+
+logging:
+  level:
+    # Application debug logs are useful locally; SQL statements remain at INFO.
+    com.adept.api: DEBUG
+    org.hibernate.SQL: INFO

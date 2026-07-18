@@ -1,0 +1,161 @@
+# Stable Compose project name used by every developer.
+name: adept-local
+
+services:
+  # Relational database shared by the API and engine.
+  postgres:
+    # "18-alpine" follows PostgreSQL 18 maintenance updates on a small base OS.
+    image: postgres:18-alpine
+    container_name: adept-postgres
+    # Restart after a local Docker restart unless a developer explicitly stopped it.
+    restart: unless-stopped
+    environment:
+      # "${NAME:-default}" means use NAME, or the shown local default if unset.
+      POSTGRES_DB: ${POSTGRES_DB:-adept}
+      POSTGRES_USER: ${POSTGRES_USER:-adept}
+      # No default is allowed for the password; .env must provide it.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      # host-port:container-port; PostgreSQL listens on 5432 inside the container.
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      # Persist PostgreSQL 18 data at the path used by the official image.
+      - adept_pg_data:/var/lib/postgresql
+    healthcheck:
+      # pg_isready asks the server whether it can accept connections.
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-adept} -d ${POSTGRES_DB:-adept}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [adept]
+
+  # Local SMTP server and web inbox. It captures mail so no real email is sent.
+  mailpit:
+    # Pin the version so every developer runs the same local mail tool.
+    image: axllent/mailpit:v1.30.0
+    container_name: adept-mailpit
+    restart: unless-stopped
+    ports:
+      # 1025 is SMTP for applications; 8025 is the browser inbox.
+      - "1025:1025"
+      - "8025:8025"
+    networks: [adept]
+
+  # Public Java API. It is omitted unless the "full" profile is selected.
+  api:
+    profiles: ["full"]
+    build:
+      # From infra/local, ../.. is the adept-api repository root.
+      context: ../..
+      dockerfile: Dockerfile
+    container_name: adept-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        # Start only after the database healthcheck succeeds.
+        condition: service_healthy
+    env_file:
+      # From infra/local, ../../.. is the shared adept-local parent directory.
+      - ../../../.env
+    environment:
+      # Activates settings intended for container-to-container hostnames.
+      SPRING_PROFILES_ACTIVE: docker
+      # "postgres" is the Compose service name and internal DNS hostname.
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-adept}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-adept}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      APP_FRONTEND_BASE_URL: http://localhost:3000
+      APP_ENGINE_BASE_URL: http://engine-api:8000
+      SPRING_MAIL_HOST: mailpit
+      SPRING_MAIL_PORT: 1025
+    ports:
+      # Makes the API reachable from the host at http://localhost:8080.
+      - "8080:8080"
+    healthcheck:
+      # Readiness becomes healthy only after Flyway and Hibernate validation finish.
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8080/actuator/health/readiness || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    networks: [adept]
+
+  # Small internal HTTP process for engine health/operator routes.
+  engine-api:
+    profiles: ["full"]
+    build:
+      # The engine is a sibling repository of adept-api.
+      context: ../../../adept-engine
+      dockerfile: Dockerfile
+    container_name: adept-engine-api
+    restart: unless-stopped
+    # uv run selects the locked /app/.venv created during the image build.
+    # --no-sync prevents a read-only runtime container from changing dependencies.
+    command: ["uv", "run", "--frozen", "--no-sync", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      # Waiting for API readiness prevents the engine reading tables before Flyway.
+      api:
+        condition: service_healthy
+    env_file:
+      - ../../../.env
+    environment:
+      # The engine builds a SQLAlchemy URL from separate fields so punctuation in
+      # a password is escaped safely. The database container always listens on
+      # 5432; POSTGRES_PORT in .env is only the port published to the host.
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+    expose:
+      # Available to other Compose services, but not published to the host.
+      - "8000"
+    networks: [adept]
+
+  # Background Python process that polls and handles durable jobs.
+  engine-worker:
+    profiles: ["full"]
+    build:
+      context: ../../../adept-engine
+      dockerfile: Dockerfile
+    container_name: adept-engine-worker
+    restart: unless-stopped
+    # Use the same locked virtual environment; -m runs the worker as a module.
+    command: ["uv", "run", "--frozen", "--no-sync", "python", "-m", "app.worker"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    env_file:
+      - ../../../.env
+    environment:
+      POSTGRES_HOST: postgres
+      # Use the container port here even if the host publishes PostgreSQL elsewhere.
+      POSTGRES_PORT: 5432
+      SMTP_HOST: mailpit
+      SMTP_PORT: 1025
+    networks: [adept]
+
+  # Production-like Nginx image serving the built React application locally.
+  frontend:
+    profiles: ["full"]
+    build:
+      context: ../../../adept-frontend
+      dockerfile: Dockerfile
+    container_name: adept-frontend
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      # Host port 3000 maps to Nginx port 80 inside the container.
+      - "3000:80"
+    networks: [adept]
+
+networks:
+  # Services on this bridge network find one another by service name.
+  adept:
+    driver: bridge
+
+volumes:
+  # Docker manages this named volume so database rows survive container recreation.
+  adept_pg_data:

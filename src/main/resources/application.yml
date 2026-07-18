@@ -1,0 +1,107 @@
+server:
+  # Embedded Tomcat listens on this container/process port.
+  port: 8080
+  forward-headers-strategy: framework
+  error:
+    include-message: never
+    include-stacktrace: never
+
+spring:
+  application:
+    name: adept-api
+  datasource:
+    # HikariCP maintains a reusable pool of PostgreSQL connections.
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+    hikari:
+      maximum-pool-size: ${DB_MAX_POOL_SIZE:10}
+      minimum-idle: ${DB_MIN_IDLE:2}
+      connection-timeout: 30000
+  jpa:
+    # Finish database access inside services; controllers must not trigger lazy SQL.
+    open-in-view: false
+    hibernate:
+      # Flyway creates the schema; Hibernate only checks that mappings agree.
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+        format_sql: false
+        default_batch_fetch_size: 50
+  flyway:
+    # Need to apply missing V... SQL files before Hibernate validation.
+    enabled: true
+    locations: classpath:db/migration
+    validate-migration-naming: true
+  jackson:
+    # Spring Boot 4 configures Jackson 3 for request/response JSON.
+    default-property-inclusion: non_null
+    time-zone: UTC
+  mail:
+    host: ${SPRING_MAIL_HOST}
+    port: ${SPRING_MAIL_PORT}
+    username: ${SPRING_MAIL_USERNAME:}
+    password: ${SPRING_MAIL_PASSWORD:}
+    properties:
+      mail.smtp.auth: ${SPRING_MAIL_AUTH:false}
+      mail.smtp.starttls.enable: ${SPRING_MAIL_STARTTLS:false}
+
+management:
+  # Expose only named operational endpoints, not every actuator endpoint.
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      group:
+        readiness:
+          # A ready API can serve only when Spring is accepting traffic and DB works.
+          include: "readinessState,db"
+      show-details: never
+
+app:
+  # "app" is Adept's own configuration namespace bound to AppProperties.
+  frontend-base-url: ${APP_FRONTEND_BASE_URL}
+  public-api-base-url: ${APP_PUBLIC_API_BASE_URL:http://localhost:8080}
+  email-from: ${APP_EMAIL_FROM}
+  jwt:
+    # The decoded secret signs access tokens; issuer/audience prevent token mixups.
+    secret-base64: ${APP_JWT_SECRET_BASE64}
+    issuer: adept-api
+    audience: adept-frontend
+    access-token-ttl: PT15M
+  refresh-token:
+    # Refresh tokens last longer and travel only in the named HttpOnly cookie.
+    ttl: P7D
+    cookie-name: adept_refresh
+    cookie-secure: ${APP_COOKIE_SECURE:false}
+    cookie-same-site: Strict
+  token-hash-pepper-base64: ${APP_TOKEN_HASH_PEPPER_BASE64}
+  integration-encryption:
+    # Keep old key versions while rows still exist that were encrypted with them.
+    active-key-version: ${APP_INTEGRATION_ENCRYPTION_ACTIVE_KEY_VERSION}
+    keys:
+      1: ${APP_INTEGRATION_ENCRYPTION_KEY_V1_BASE64}
+  github:
+    # Keep provider clients disabled until real credentials are configured.
+    enabled: ${GITHUB_INTEGRATION_ENABLED:false}
+    # Empty defaults let Phase 1 start without provider credentials. Code that
+    # creates GitHub clients must be conditional on enabled=true and validate
+    # that every required value is non-blank before creating the client.
+    app-id: ${GITHUB_APP_ID:}
+    app-slug: ${GITHUB_APP_SLUG:}
+    private-key-base64: ${GITHUB_APP_PRIVATE_KEY_BASE64:}
+    webhook-secret: ${GITHUB_WEBHOOK_SECRET:}
+  jira:
+    enabled: ${JIRA_INTEGRATION_ENABLED:false}
+    client-id: ${JIRA_CLIENT_ID:}
+    client-secret: ${JIRA_CLIENT_SECRET:}
+    callback-url: ${JIRA_CALLBACK_URL:http://localhost:8080/api/v1/integrations/jira/callback}
+  engine:
+    base-url: ${APP_ENGINE_BASE_URL:http://localhost:8000}
+    internal-token: ${APP_INTERNAL_ENGINE_TOKEN}
