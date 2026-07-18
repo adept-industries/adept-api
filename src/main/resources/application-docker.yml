@@ -1,0 +1,4 @@
+# application-docker.yml
+logging:
+  level:
+    com.adept.api: INFO
