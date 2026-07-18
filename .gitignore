@@ -1,0 +1,23 @@
+# Maven
+target/
+.mvn/timing.properties
+dependency-reduced-pom.xml
+
+# Java and IDE files
+*.class
+*.log
+*.iml
+.idea/
+.vscode/
+.settings/
+.project
+.classpath
+
+# Local environment files
+.env
+.env.*
+!.env.example
+
+# Operating-system files
+.DS_Store
+Thumbs.db
