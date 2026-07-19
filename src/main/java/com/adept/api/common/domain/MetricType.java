@@ -1,0 +1,6 @@
+package com.adept.api.common.domain;
+
+public enum MetricType {
+    CHANGE_LEAD_TIME_HOURS, DEPLOYMENT_FREQUENCY,
+    FAILED_DEPLOYMENT_RECOVERY_TIME_HOURS, CHANGE_FAILURE_RATE_PERCENT
+}
