@@ -28,5 +28,5 @@ public class PullRequestFeature extends BaseEntity {
     @Column(name = "test_file_ratio") private Double testFileRatio;
     private Double entropy;
     @JdbcTypeCode(SqlTypes.JSON) @Column(name = "feature_payload", nullable = false, columnDefinition = "jsonb") private Map<String,Object> featurePayload = Map.of();
-    @Column(name = "extracted_at", nullable = false) private Instant extractedAt;
+    @Column(name = "extracted_at", nullable = false) private Instant extractedAt = Instant.now();
 }

@@ -30,5 +30,5 @@ public class Membership extends BaseEntity {
     private MembershipStatus status = MembershipStatus.ACTIVE;
 
     @Column(name = "joined_at", nullable = false)
-    private Instant joinedAt;
+    private Instant joinedAt = Instant.now();
 }

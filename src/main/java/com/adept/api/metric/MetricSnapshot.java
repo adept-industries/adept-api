@@ -27,5 +27,5 @@ public class MetricSnapshot extends BaseEntity {
     @Column(name = "sample_size", nullable = false) private int sampleSize;
     @Column(name = "calculation_version", nullable = false, length = 64) private String calculationVersion;
     @JdbcTypeCode(SqlTypes.JSON) @Column(nullable = false, columnDefinition = "jsonb") private Map<String,Object> dimensions = Map.of();
-    @Column(name = "calculated_at", nullable = false) private Instant calculatedAt;
+    @Column(name = "calculated_at", nullable = false) private Instant calculatedAt = Instant.now();
 }

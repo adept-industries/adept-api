@@ -3,6 +3,8 @@ package com.adept.api.integration.jira;
 import com.adept.api.integration.github.GitRepository;
 import jakarta.persistence.*;
 import lombok.*;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 import java.io.Serializable;
 import java.time.Instant;
 import java.util.UUID;
@@ -17,6 +19,7 @@ class RepositoryJiraProjectId implements Serializable {
 
 @Getter @Setter @NoArgsConstructor
 @Entity
+@EntityListeners(AuditingEntityListener.class)
 @Table(name = "repository_jira_projects")
 // Join entity maps repositories and Jira projects many-to-many.
 public class RepositoryJiraProject {
@@ -33,6 +36,7 @@ public class RepositoryJiraProject {
     @JoinColumn(name = "jira_project_id", nullable = false)
     private JiraProject jiraProject;
 
+    @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 }

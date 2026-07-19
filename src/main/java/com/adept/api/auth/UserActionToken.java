@@ -4,11 +4,14 @@ import com.adept.api.common.domain.ActionTokenPurpose;
 import com.adept.api.user.User;
 import jakarta.persistence.*;
 import lombok.*;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 import java.time.Instant;
 import java.util.UUID;
 
 @Getter @Setter @NoArgsConstructor
 @Entity
+@EntityListeners(AuditingEntityListener.class)
 @Table(name = "user_action_tokens")
 // Append-oriented one-use token record for verification or password reset.
 public class UserActionToken {
@@ -32,6 +35,7 @@ public class UserActionToken {
     @Column(name = "consumed_at")
     private Instant consumedAt;
 
+    @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 }

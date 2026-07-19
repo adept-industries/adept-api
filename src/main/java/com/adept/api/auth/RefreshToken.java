@@ -3,11 +3,14 @@ package com.adept.api.auth;
 import com.adept.api.user.User;
 import jakarta.persistence.*;
 import lombok.*;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 import java.time.Instant;
 import java.util.UUID;
 
 @Getter @Setter @NoArgsConstructor
 @Entity
+@EntityListeners(AuditingEntityListener.class)
 @Table(name = "refresh_tokens")
 // Stores only a refresh-token hash plus rotation-family security metadata.
 public class RefreshToken {
@@ -36,5 +39,6 @@ public class RefreshToken {
     @Column(name = "reuse_detected_at") private Instant reuseDetectedAt;
     @Column(name = "user_agent_hash", length = 128) private String userAgentHash;
     @Column(name = "ip_hash", length = 128) private String ipHash;
+    @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false) private Instant createdAt;
 }

@@ -47,7 +47,7 @@ public class GithubIntegration extends BaseEntity {
     @JoinColumn(name = "installed_by_membership_id")
     private Membership installedBy;
 
-    @Column(name = "installed_at", nullable = false) private Instant installedAt;
+    @Column(name = "installed_at", nullable = false) private Instant installedAt = Instant.now();
     @Column(name = "last_synced_at") private Instant lastSyncedAt;
     @Column(name = "suspended_at") private Instant suspendedAt;
 }

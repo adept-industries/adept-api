@@ -36,6 +36,6 @@ public class PullRequest extends BaseEntity {
     @Column(name = "first_commit_at") private Instant firstCommitAt;
     @Column(name = "closed_at") private Instant closedAt;
     @Column(name = "merged_at") private Instant mergedAt;
-    @Column(name = "last_synced_at", nullable = false) private Instant lastSyncedAt;
+    @Column(name = "last_synced_at", nullable = false) private Instant lastSyncedAt = Instant.now();
     @JdbcTypeCode(SqlTypes.JSON) @Column(name = "raw_data", nullable = false, columnDefinition = "jsonb") private Map<String,Object> rawData = Map.of();
 }

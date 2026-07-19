@@ -35,7 +35,8 @@ public class ProcessingJob extends BaseEntity {
     @Column(nullable = false) private int priority = 100;
     @Column(nullable = false) private int attempts;
     @Column(name = "max_attempts", nullable = false) private int maxAttempts = 8;
-    @Column(name = "available_at", nullable = false) private Instant availableAt;
+    // Jobs are immediately available unless scheduling overrides this timestamp.
+    @Column(name = "available_at", nullable = false) private Instant availableAt = Instant.now();
     @Column(name = "locked_at") private Instant lockedAt;
     @Column(name = "locked_by", length = 128) private String lockedBy;
     @Column(name = "last_error", columnDefinition = "text") private String lastError;

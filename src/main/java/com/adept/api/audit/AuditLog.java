@@ -6,12 +6,15 @@ import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
 
 @Getter @Setter @NoArgsConstructor
 @Entity
+@EntityListeners(AuditingEntityListener.class)
 @Table(name = "audit_logs")
 // Append-only description of a security- or administration-relevant action.
 public class AuditLog {
@@ -25,5 +28,6 @@ public class AuditLog {
     @JdbcTypeCode(SqlTypes.JSON) @Column(nullable = false, columnDefinition = "jsonb") private Map<String,Object> metadata = Map.of();
     @Column(name = "ip_hash", length = 128) private String ipHash;
     @Column(name = "user_agent", columnDefinition = "text") private String userAgent;
+    @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false) private Instant createdAt;
 }

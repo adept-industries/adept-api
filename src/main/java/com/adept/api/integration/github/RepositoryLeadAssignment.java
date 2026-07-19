@@ -35,5 +35,5 @@ public class RepositoryLeadAssignment extends BaseEntity {
     private Membership assignedBy;
 
     @Column(name = "assigned_at", nullable = false)
-    private Instant assignedAt;
+    private Instant assignedAt = Instant.now();
 }

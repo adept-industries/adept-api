@@ -44,7 +44,7 @@ public class RawWebhookEvent extends BaseEntity {
     @Column(name = "signature_valid", nullable = false) private boolean signatureValid;
     @Column(name = "attempt_count", nullable = false) private int attemptCount;
     @Column(name = "last_error", columnDefinition = "text") private String lastError;
-    @Column(name = "received_at", nullable = false) private Instant receivedAt;
+    @Column(name = "received_at", nullable = false) private Instant receivedAt = Instant.now();
     @Column(name = "processing_started_at") private Instant processingStartedAt;
     @Column(name = "processed_at") private Instant processedAt;
 }

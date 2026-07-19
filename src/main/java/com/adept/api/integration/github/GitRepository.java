@@ -28,11 +28,11 @@ public class GitRepository extends BaseEntity {
     @Column(name = "owner_login", nullable = false) private String ownerLogin;
     @Column(nullable = false) private String name;
     @Column(name = "full_name", nullable = false, length = 512) private String fullName;
-    @Column(name = "default_branch", nullable = false) private String defaultBranch;
+    @Column(name = "default_branch", nullable = false) private String defaultBranch = "main";
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)
-    private RepositoryVisibility visibility;
+    private RepositoryVisibility visibility = RepositoryVisibility.PRIVATE;
 
     @Column(nullable = false) private boolean archived;
     @Column(name = "tracking_enabled", nullable = false) private boolean trackingEnabled;
