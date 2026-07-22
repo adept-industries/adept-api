@@ -1,5 +1,6 @@
 package com.adept.api;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -10,8 +11,6 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 @Testcontainers
 @SpringBootTest(properties = {
@@ -78,5 +77,10 @@ class DatabaseMigrationSmokeTest {
                   AND column_name = 'created_at'
             )
             """, Boolean.class)).isTrue();
+            
+        var secondRun = flyway.migrate();
+
+        assertThat(secondRun.migrationsExecuted).isZero();
+        assertThat(flyway.info().applied()).hasSize(7);
     }
 }
