@@ -21,3 +21,6 @@ dependency-reduced-pom.xml
 # Operating-system files
 .DS_Store
 Thumbs.db
+
+docs/database/erd/
+
