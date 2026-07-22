@@ -1,41 +1,64 @@
 # Adept API
 
-The Adept API is the public backend service for the Adept developer-delivery analytics platform.
-
-## Responsibilities
-
-This repository owns:
-
-- authentication and sessions;
-- users, workspaces, memberships, and authorization;
-- GitHub and Jira integration orchestration;
-- public REST API endpoints;
-- webhook request verification and acceptance;
-- Flyway database migrations;
-- the canonical local Docker Compose configuration;
-- OpenAPI contract generation.
-
-This repository does not own:
-
-- the React frontend;
-- machine-learning model training;
-- risk-model inference logic;
-- DORA calculation worker logic.
-
-## Technology baseline
-
-- Java 25
-- Spring Boot 4.1.0
-- Maven Wrapper
-- PostgreSQL 18
-- Flyway
+The Adept API is the Java backend and the only owner of the shared PostgreSQL schema.
 
 ## Current status
 
-Phase 0 repository foundation.
+The Phase 1 API/database foundation is implemented: Spring Boot 4.1 on Java 25, Flyway V1–V7, Hibernate validation, PostgreSQL 18, Testcontainers tests, health endpoints, and a Java 25 container image. Authentication and business endpoints begin in later phases.
 
-The Spring Boot application, Maven Wrapper, database schema, Docker Compose files, and application run commands will be added during Phase 1.
+## Local sibling layout
 
-## Contribution
+```text
+adept-local/
+├── .env
+├── adept-api/
+├── adept-engine/
+└── adept-frontend/
+```
 
-All changes must be made through a feature branch and pull request after branch protection is enabled.
+## Start PostgreSQL and Mailpit
+
+From `adept-local`:
+
+```bash
+docker compose --env-file .env \
+  -f adept-api/infra/local/compose.yaml \
+  up -d postgres mailpit
+```
+
+PostgreSQL is published on port 5432 by default. Mailpit SMTP is on 1025 and its browser inbox is at <http://localhost:8025>.
+
+## Run the API on the host
+
+```bash
+cd adept-api
+set -a
+source ../.env
+set +a
+./mvnw spring-boot:run -Dspring-boot.run.profiles=local
+```
+
+Health: <http://localhost:8080/actuator/health>
+
+## Test
+
+Docker must be running because integration tests use disposable PostgreSQL 18 Testcontainers databases.
+
+```bash
+./mvnw -B clean verify
+```
+
+## Build the API image
+
+From `adept-local`:
+
+```bash
+docker compose --env-file .env \
+  -f adept-api/infra/local/compose.yaml \
+  --profile full build api
+```
+
+## Database ownership
+
+Flyway files under `src/main/resources/db/migration` are the schema source of truth. Hibernate uses `ddl-auto: validate`; do not change it to schema creation/update. Never edit an already-shared migration. Generate the local ERD with `./scripts/generate-erd.sh`.
+`
