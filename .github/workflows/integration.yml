@@ -1,0 +1,202 @@
+name: Full-stack integration
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "infra/local/compose.yaml"
+      - "Dockerfile"
+      - ".github/workflows/integration.yml"
+  push:
+    branches: [main]
+    paths:
+      - "infra/local/compose.yaml"
+      - "Dockerfile"
+      - ".github/workflows/integration.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  full-stack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out API
+        uses: actions/checkout@v6
+        with:
+          path: adept-api
+
+      - name: Check out engine
+        uses: actions/checkout@v6
+        with:
+          repository: adept-industries/adept-engine
+          token: ${{ secrets.ADEPT_CROSS_REPO_READ_TOKEN }}
+          path: adept-engine
+
+      - name: Check out frontend
+        uses: actions/checkout@v6
+        with:
+          repository: adept-industries/adept-frontend
+          token: ${{ secrets.ADEPT_CROSS_REPO_READ_TOKEN }}
+          path: adept-frontend
+
+      - name: Create test-only environment
+        shell: bash
+        run: |
+          cat > .env <<'ENVIRONMENT'
+          POSTGRES_HOST=localhost
+          POSTGRES_DB=adept
+          POSTGRES_USER=adept
+          POSTGRES_PASSWORD=ci-only-postgres-password
+          POSTGRES_PORT=5432
+          APP_JWT_SECRET_BASE64=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+          APP_TOKEN_HASH_PEPPER_BASE64=BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA=
+          APP_INTEGRATION_ENCRYPTION_KEY_V1_BASE64=CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCA=
+          APP_INTEGRATION_ENCRYPTION_ACTIVE_KEY_VERSION=1
+          APP_INTERNAL_ENGINE_TOKEN=ci-only-engine-token
+          APP_COOKIE_SECURE=false
+          APP_EMAIL_FROM="Adept CI <test@adept.local>"
+          APP_FRONTEND_BASE_URL=http://localhost:3000
+          APP_PUBLIC_API_BASE_URL=http://localhost:8080
+          APP_ENGINE_BASE_URL=http://localhost:8000
+          DB_MAX_POOL_SIZE=10
+          DB_MIN_IDLE=2
+          GITHUB_INTEGRATION_ENABLED=false
+          GITHUB_APP_ID=
+          GITHUB_APP_SLUG=
+          GITHUB_APP_PRIVATE_KEY_BASE64=
+          GITHUB_WEBHOOK_SECRET=
+          JIRA_INTEGRATION_ENABLED=false
+          JIRA_CLIENT_ID=
+          JIRA_CLIENT_SECRET=
+          JIRA_CALLBACK_URL=http://localhost:8080/api/v1/integrations/jira/callback
+          SPRING_MAIL_USERNAME=
+          SPRING_MAIL_PASSWORD=
+          SPRING_MAIL_AUTH=false
+          SPRING_MAIL_STARTTLS=false
+          SMTP_HOST=localhost
+          SMTP_PORT=1025
+          SMTP_USERNAME=
+          SMTP_PASSWORD=
+          ENGINE_POLL_INTERVAL_MS=1000
+          ENGINE_WORKER_ID=ci-worker-1
+          ENGINE_MAX_JOB_ATTEMPTS=8
+          ENVIRONMENT
+
+      - name: Validate Compose
+        run: |
+          docker compose --env-file .env \
+            -f adept-api/infra/local/compose.yaml \
+            --profile full config --quiet
+
+      - name: Build and start all six services
+        run: |
+          docker compose --env-file .env \
+            -f adept-api/infra/local/compose.yaml \
+            --profile full up -d --build
+
+      - name: Wait for API, engine, and frontend
+        shell: bash
+        run: |
+          for attempt in {1..90}; do
+            api_ok=false; engine_ok=false; frontend_ok=false
+
+            curl -fsS http://localhost:8080/actuator/health/readiness >/dev/null 2>&1 && api_ok=true
+            curl -fsS http://localhost:3000/ >/dev/null 2>&1 && frontend_ok=true
+            docker inspect --format='{{.State.Health.Status}}' adept-engine-api 2>/dev/null \
+              | grep -q healthy && engine_ok=true
+
+            if $api_ok && $engine_ok && $frontend_ok; then
+              echo "All services healthy after attempt $attempt"
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "Timed out waiting for services"
+          docker compose --env-file .env \
+            -f adept-api/infra/local/compose.yaml \
+            --profile full ps
+          docker compose --env-file .env \
+            -f adept-api/infra/local/compose.yaml \
+            --profile full logs engine-api --no-color --tail 50
+          exit 1
+
+      - name: Verify public host endpoints
+        run: |
+          curl -fsS http://localhost:8080/actuator/health
+          curl -fsS http://localhost:3000/
+          curl -fsS http://localhost:8025/
+
+      - name: Verify internal engine endpoints
+        run: |
+          docker compose --env-file .env \
+            -f adept-api/infra/local/compose.yaml \
+            exec -T engine-api \
+            uv run --frozen --no-sync python -c \
+            "import urllib.request; print(urllib.request.urlopen('http://localhost:8000/health').read().decode())"
+
+          docker compose --env-file .env \
+            -f adept-api/infra/local/compose.yaml \
+            exec -T engine-api \
+            uv run --frozen --no-sync python -c \
+            "import urllib.request; print(urllib.request.urlopen('http://localhost:8000/ready').read().decode())"
+
+      - name: Verify PostgreSQL and Flyway
+        run: |
+          docker compose --env-file .env \
+            -f adept-api/infra/local/compose.yaml \
+            exec -T postgres sh -c \
+            'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -c "SHOW server_version;"'
+
+          migration_count="$(
+            docker compose --env-file .env \
+              -f adept-api/infra/local/compose.yaml \
+              exec -T postgres sh -c \
+              'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "SELECT count(*) FROM flyway_schema_history WHERE success;"' \
+              | tr -d '[:space:]'
+          )"
+          test "$migration_count" = "7"
+
+      - name: Verify migration idempotency after API restart
+        shell: bash
+        run: |
+          docker compose --env-file .env \
+            -f adept-api/infra/local/compose.yaml \
+            --profile full restart api
+
+          for attempt in {1..60}; do
+            if curl -fsS http://localhost:8080/actuator/health/readiness >/dev/null; then
+              break
+            fi
+            sleep 2
+          done
+          curl -fsS http://localhost:8080/actuator/health/readiness >/dev/null
+
+          migration_count="$(
+            docker compose --env-file .env \
+              -f adept-api/infra/local/compose.yaml \
+              exec -T postgres sh -c \
+              'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "SELECT count(*) FROM flyway_schema_history WHERE success;"' \
+              | tr -d '[:space:]'
+          )"
+          test "$migration_count" = "7"
+
+      - name: Show service state and logs on failure
+        if: failure()
+        run: |
+          docker compose --env-file .env \
+            -f adept-api/infra/local/compose.yaml \
+            --profile full ps
+          docker compose --env-file .env \
+            -f adept-api/infra/local/compose.yaml \
+            --profile full logs --no-color
+
+      - name: Stop and remove disposable CI stack
+        if: always()
+        run: |
+          docker compose --env-file .env \
+            -f adept-api/infra/local/compose.yaml \
+            --profile full down -v --remove-orphans
