@@ -261,74 +261,74 @@ class DatabaseConstraintTest {
     }
 
     @Test
-void deletingLeadMembershipTargetDeletesAssignment() {
-    AssignmentFixture fixture = createAssignmentFixture();
-    UUID assignmentId = insertMembershipAssignment(fixture);
+    void deletingLeadMembershipTargetDeletesAssignment() {
+        AssignmentFixture fixture = createAssignmentFixture();
+        UUID assignmentId = insertMembershipAssignment(fixture);
 
-    assertThat(jdbc.update(
-        "DELETE FROM memberships WHERE id = ?", fixture.leadMembershipId()
-    )).isOne();
+        assertThat(jdbc.update(
+            "DELETE FROM memberships WHERE id = ?", fixture.leadMembershipId()
+        )).isOne();
 
-    assertThat(rowCount("repository_lead_assignments", assignmentId)).isZero();
-}
+        assertThat(rowCount("repository_lead_assignments", assignmentId)).isZero();
+    }
 
-@Test
-void deletingInvitationTargetDeletesAssignment() {
-    AssignmentFixture fixture = createAssignmentFixture();
-    UUID assignmentId = insertInvitationAssignment(fixture);
+    @Test
+    void deletingInvitationTargetDeletesAssignment() {
+        AssignmentFixture fixture = createAssignmentFixture();
+        UUID assignmentId = insertInvitationAssignment(fixture);
 
-    assertThat(jdbc.update(
-        "DELETE FROM workspace_invitations WHERE id = ?", fixture.invitationId()
-    )).isOne();
+        assertThat(jdbc.update(
+            "DELETE FROM workspace_invitations WHERE id = ?", fixture.invitationId()
+        )).isOne();
 
-    assertThat(rowCount("repository_lead_assignments", assignmentId)).isZero();
-}
+        assertThat(rowCount("repository_lead_assignments", assignmentId)).isZero();
+    }
 
-@Test
-void deletingAssignedByMembershipKeepsAssignmentAndClearsProvenance() {
-    AssignmentFixture fixture = createAssignmentFixture();
-    UUID assignmentId = insertMembershipAssignment(fixture);
+    @Test
+    void deletingAssignedByMembershipKeepsAssignmentAndClearsProvenance() {
+        AssignmentFixture fixture = createAssignmentFixture();
+        UUID assignmentId = insertMembershipAssignment(fixture);
 
-    assertThat(jdbc.update(
-        "DELETE FROM memberships WHERE id = ?",
-        fixture.tenant().managerMembershipId()
-    )).isOne();
+        assertThat(jdbc.update(
+            "DELETE FROM memberships WHERE id = ?",
+            fixture.tenant().managerMembershipId()
+        )).isOne();
 
-    assertThat(rowCount("repository_lead_assignments", assignmentId)).isOne();
-    assertThat(jdbc.queryForObject("""
-        SELECT assigned_by_membership_id IS NULL
-        FROM repository_lead_assignments
-        WHERE id = ?
-        """, Boolean.class, assignmentId)).isTrue();
-}
+        assertThat(rowCount("repository_lead_assignments", assignmentId)).isOne();
+        assertThat(jdbc.queryForObject("""
+            SELECT assigned_by_membership_id IS NULL
+            FROM repository_lead_assignments
+            WHERE id = ?
+            """, Boolean.class, assignmentId)).isTrue();
+    }
 
-private UUID insertMembershipAssignment(AssignmentFixture fixture) {
-    return jdbc.queryForObject("""
-        INSERT INTO repository_lead_assignments (
-            workspace_id, repository_id, lead_membership_id,
-            assigned_by_membership_id
-        ) VALUES (?, ?, ?, ?)
-        RETURNING id
-        """, UUID.class,
-        fixture.tenant().workspaceId(),
-        fixture.tenant().repositoryId(),
-        fixture.leadMembershipId(),
-        fixture.tenant().managerMembershipId());
-}
+    private UUID insertMembershipAssignment(AssignmentFixture fixture) {
+        return jdbc.queryForObject("""
+            INSERT INTO repository_lead_assignments (
+                workspace_id, repository_id, lead_membership_id,
+                assigned_by_membership_id
+            ) VALUES (?, ?, ?, ?)
+            RETURNING id
+            """, UUID.class,
+            fixture.tenant().workspaceId(),
+            fixture.tenant().repositoryId(),
+            fixture.leadMembershipId(),
+            fixture.tenant().managerMembershipId());
+    }
 
-private UUID insertInvitationAssignment(AssignmentFixture fixture) {
-    return jdbc.queryForObject("""
-        INSERT INTO repository_lead_assignments (
-            workspace_id, repository_id, invitation_id,
-            assigned_by_membership_id
-        ) VALUES (?, ?, ?, ?)
-        RETURNING id
-        """, UUID.class,
-        fixture.tenant().workspaceId(),
-        fixture.tenant().repositoryId(),
-        fixture.invitationId(),
-        fixture.tenant().managerMembershipId());
-}
+    private UUID insertInvitationAssignment(AssignmentFixture fixture) {
+        return jdbc.queryForObject("""
+            INSERT INTO repository_lead_assignments (
+                workspace_id, repository_id, invitation_id,
+                assigned_by_membership_id
+            ) VALUES (?, ?, ?, ?)
+            RETURNING id
+            """, UUID.class,
+            fixture.tenant().workspaceId(),
+            fixture.tenant().repositoryId(),
+            fixture.invitationId(),
+            fixture.tenant().managerMembershipId());
+    }
 
     private void assertInvalidEnum(String column, String sql, Object... identifyingArguments) {
         Object[] arguments = new Object[identifyingArguments.length + 1];
