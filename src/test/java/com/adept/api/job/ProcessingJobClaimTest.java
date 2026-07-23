@@ -1,6 +1,7 @@
 package com.adept.api.job;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -118,6 +119,7 @@ class ProcessingJobClaimTest {
         ProcessingJob job = new ProcessingJob();
         job.setJobType(ProcessingJobType.RECALCULATE_METRICS);
         job.setPriority(priority);
+        job.setAvailableAt(Instant.now().minusSeconds(5));
         return job;
     }
 

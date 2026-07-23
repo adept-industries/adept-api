@@ -61,4 +61,3 @@ docker compose --env-file .env \
 ## Database ownership
 
 Flyway files under `src/main/resources/db/migration` are the schema source of truth. Hibernate uses `ddl-auto: validate`; do not change it to schema creation/update. Never edit an already-shared migration. Generate the local ERD with `./scripts/generate-erd.sh`.
-`

@@ -77,7 +77,7 @@ class DatabaseMigrationSmokeTest {
                   AND column_name = 'created_at'
             )
             """, Boolean.class)).isTrue();
-            
+
         var secondRun = flyway.migrate();
 
         assertThat(secondRun.migrationsExecuted).isZero();
