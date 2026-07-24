@@ -32,14 +32,12 @@ jobs:
         uses: actions/checkout@v6
         with:
           repository: adept-industries/adept-engine
-          token: ${{ secrets.ADEPT_CROSS_REPO_READ_TOKEN }}
           path: adept-engine
 
       - name: Check out frontend
         uses: actions/checkout@v6
         with:
           repository: adept-industries/adept-frontend
-          token: ${{ secrets.ADEPT_CROSS_REPO_READ_TOKEN }}
           path: adept-frontend
 
       - name: Create test-only environment
