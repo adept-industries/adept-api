@@ -93,33 +93,43 @@ jobs:
         run: |
           docker compose --env-file .env \
             -f adept-api/infra/local/compose.yaml \
-            --profile full up -d --build
+            --profile full up -d --build --wait --wait-timeout 180
 
       - name: Wait for API, engine, and frontend
         shell: bash
         run: |
           for attempt in {1..90}; do
-            api_ok=false; engine_ok=false; frontend_ok=false
+            api_ok=false
+            engine_ok=false
+            frontend_ok=false
 
             curl -fsS http://localhost:8080/actuator/health/readiness >/dev/null 2>&1 && api_ok=true
             curl -fsS http://localhost:3000/ >/dev/null 2>&1 && frontend_ok=true
-            docker inspect --format='{{.State.Health.Status}}' adept-engine-api 2>/dev/null \
-              | grep -q healthy && engine_ok=true
+
+            docker compose --env-file .env \
+              -f adept-api/infra/local/compose.yaml \
+              exec -T engine-api \
+              python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/ready', timeout=3).close()" \
+              >/dev/null 2>&1 && engine_ok=true
 
             if $api_ok && $engine_ok && $frontend_ok; then
               echo "All services healthy after attempt $attempt"
               exit 0
             fi
+
             sleep 2
           done
 
           echo "Timed out waiting for services"
+
           docker compose --env-file .env \
             -f adept-api/infra/local/compose.yaml \
             --profile full ps
+
           docker compose --env-file .env \
             -f adept-api/infra/local/compose.yaml \
-            --profile full logs engine-api --no-color --tail 50
+            --profile full logs --no-color --tail 100
+
           exit 1
 
       - name: Verify public host endpoints
@@ -133,14 +143,12 @@ jobs:
           docker compose --env-file .env \
             -f adept-api/infra/local/compose.yaml \
             exec -T engine-api \
-            uv run --frozen --no-sync python -c \
-            "import urllib.request; print(urllib.request.urlopen('http://localhost:8000/health').read().decode())"
+            python -c "import urllib.request; print(urllib.request.urlopen('http://localhost:8000/health', timeout=3).read().decode())"
 
           docker compose --env-file .env \
             -f adept-api/infra/local/compose.yaml \
             exec -T engine-api \
-            uv run --frozen --no-sync python -c \
-            "import urllib.request; print(urllib.request.urlopen('http://localhost:8000/ready').read().decode())"
+            python -c "import urllib.request; print(urllib.request.urlopen('http://localhost:8000/ready', timeout=3).read().decode())"
 
       - name: Verify PostgreSQL and Flyway
         run: |
@@ -156,6 +164,8 @@ jobs:
               'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "SELECT count(*) FROM flyway_schema_history WHERE success;"' \
               | tr -d '[:space:]'
           )"
+
+          echo "Successful migration count: $migration_count"
           test "$migration_count" = "7"
 
       - name: Verify migration idempotency after API restart
@@ -165,13 +175,22 @@ jobs:
             -f adept-api/infra/local/compose.yaml \
             --profile full restart api
 
+          api_ready=false
+
           for attempt in {1..60}; do
-            if curl -fsS http://localhost:8080/actuator/health/readiness >/dev/null; then
+            if curl -fsS http://localhost:8080/actuator/health/readiness >/dev/null 2>&1; then
+              echo "API became ready after restart on attempt $attempt"
+              api_ready=true
               break
             fi
+
             sleep 2
           done
-          curl -fsS http://localhost:8080/actuator/health/readiness >/dev/null
+
+          if ! $api_ready; then
+            echo "API did not become ready after restart"
+            exit 1
+          fi
 
           migration_count="$(
             docker compose --env-file .env \
@@ -180,6 +199,8 @@ jobs:
               'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "SELECT count(*) FROM flyway_schema_history WHERE success;"' \
               | tr -d '[:space:]'
           )"
+
+          echo "Migration count after API restart: $migration_count"
           test "$migration_count" = "7"
 
       - name: Show service state and logs on failure
@@ -188,9 +209,10 @@ jobs:
           docker compose --env-file .env \
             -f adept-api/infra/local/compose.yaml \
             --profile full ps
+
           docker compose --env-file .env \
             -f adept-api/infra/local/compose.yaml \
-            --profile full logs --no-color
+            --profile full logs --no-color --tail 200
 
       - name: Stop and remove disposable CI stack
         if: always()
