@@ -4,7 +4,7 @@ The Adept API is the Java backend and the only owner of the shared PostgreSQL sc
 
 ## Current status
 
-The Phase 1 API/database foundation is implemented: Spring Boot 4.1 on Java 25, Flyway V1–V7, Hibernate validation, PostgreSQL 18, Testcontainers tests, health endpoints, and a Java 25 container image. Authentication and business endpoints begin in later phases.
+The Phase 1 API/database foundation is implemented: Spring Boot 4.1 on Java 25, Flyway V1–V8, Hibernate validation, PostgreSQL 18, Testcontainers tests, health endpoints, and a Java 25 container image. V8 is the forward-only post-Phase-1 correction that allows multiple distinct Leads per repository. Authentication and business endpoints begin in later phases.
 
 ## Local sibling layout
 

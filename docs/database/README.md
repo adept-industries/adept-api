@@ -8,4 +8,4 @@ Generate an HTML schema report from the current local PostgreSQL database:
 ./scripts/generate-erd.sh
 ```
 
-Open `docs/database/erd/index.html` in a browser. The generated directory is ignored because it can always be rebuilt. The root `Adept-Complete-Database-Schema.sql` file is a convenient combined snapshot for manual ERD clients; the application itself must continue to use Flyway V1–V7.
+Open `docs/database/erd/index.html` in a browser. The generated directory is ignored because it can always be rebuilt. The root `Adept-Complete-Database-Schema.sql` file is a convenient combined snapshot for manual ERD clients; the application itself must continue to use Flyway V1–V8.

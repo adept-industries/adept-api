@@ -201,31 +201,53 @@ class DatabaseConstraintTest {
     }
 
     @Test
-    void leadAssignmentAcceptsEitherSingleTarget() {
+    void repositoryAcceptsMultipleDistinctLeadMemberships() {
         AssignmentFixture fixture = createAssignmentFixture();
+        UUID coLeadMembershipId =
+            insertLeadMembership(fixture.tenant(), "co-lead@example.com");
 
-        UUID membershipAssignmentId = jdbc.queryForObject("""
-            INSERT INTO repository_lead_assignments (
-                workspace_id, repository_id, lead_membership_id, assigned_by_membership_id
-            ) VALUES (?, ?, ?, ?)
-            RETURNING id
-            """, UUID.class,
-            fixture.tenant().workspaceId(), fixture.tenant().repositoryId(),
-            fixture.leadMembershipId(), fixture.tenant().managerMembershipId());
+        UUID leadAssignmentId = insertMembershipAssignment(fixture);
+        UUID coLeadAssignmentId =
+            insertMembershipAssignment(fixture, coLeadMembershipId);
 
-        assertThat(membershipAssignmentId).isNotNull();
-        jdbc.update("DELETE FROM repository_lead_assignments WHERE id = ?", membershipAssignmentId);
+        assertThat(leadAssignmentId).isNotEqualTo(coLeadAssignmentId);
+        assertThat(assignmentCountForRepository(fixture.tenant().repositoryId())).isEqualTo(2);
+    }
 
-        UUID invitationAssignmentId = jdbc.queryForObject("""
-            INSERT INTO repository_lead_assignments (
-                workspace_id, repository_id, invitation_id, assigned_by_membership_id
-            ) VALUES (?, ?, ?, ?)
-            RETURNING id
-            """, UUID.class,
-            fixture.tenant().workspaceId(), fixture.tenant().repositoryId(),
-            fixture.invitationId(), fixture.tenant().managerMembershipId());
+    @Test
+    void repositoryRejectsDuplicateLeadMembership() {
+        AssignmentFixture fixture = createAssignmentFixture();
+        insertMembershipAssignment(fixture);
 
-        assertThat(invitationAssignmentId).isNotNull();
+        assertThatThrownBy(() -> insertMembershipAssignment(fixture))
+            .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void repositoryAcceptsMultipleDistinctLeadInvitations() {
+        AssignmentFixture fixture = createAssignmentFixture();
+        UUID coLeadInvitationId = insertInvitation(
+            fixture.tenant().workspaceId(),
+            fixture.tenant().managerMembershipId(),
+            "invited-co-lead@example.com",
+            "co-lead-invitation-token-hash"
+        );
+
+        UUID leadInvitationAssignmentId = insertInvitationAssignment(fixture);
+        UUID coLeadInvitationAssignmentId =
+            insertInvitationAssignment(fixture, coLeadInvitationId);
+
+        assertThat(leadInvitationAssignmentId).isNotEqualTo(coLeadInvitationAssignmentId);
+        assertThat(assignmentCountForRepository(fixture.tenant().repositoryId())).isEqualTo(2);
+    }
+
+    @Test
+    void repositoryRejectsDuplicateLeadInvitation() {
+        AssignmentFixture fixture = createAssignmentFixture();
+        insertInvitationAssignment(fixture);
+
+        assertThatThrownBy(() -> insertInvitationAssignment(fixture))
+            .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     @Test
@@ -261,20 +283,26 @@ class DatabaseConstraintTest {
     }
 
     @Test
-    void deletingLeadMembershipTargetDeletesAssignment() {
+    void deletingLeadMembershipTargetDeletesOnlyThatAssignment() {
         AssignmentFixture fixture = createAssignmentFixture();
         UUID assignmentId = insertMembershipAssignment(fixture);
+        UUID coLeadMembershipId =
+            insertLeadMembership(fixture.tenant(), "co-lead@example.com");
+        UUID coLeadAssignmentId =
+            insertMembershipAssignment(fixture, coLeadMembershipId);
 
         assertThat(jdbc.update(
             "DELETE FROM memberships WHERE id = ?", fixture.leadMembershipId()
         )).isOne();
 
         assertThat(rowCount("repository_lead_assignments", assignmentId)).isZero();
+        assertThat(rowCount("repository_lead_assignments", coLeadAssignmentId)).isOne();
     }
 
     @Test
-    void deletingInvitationTargetDeletesAssignment() {
+    void deletingInvitationTargetDeletesOnlyThatAssignment() {
         AssignmentFixture fixture = createAssignmentFixture();
+        UUID membershipAssignmentId = insertMembershipAssignment(fixture);
         UUID assignmentId = insertInvitationAssignment(fixture);
 
         assertThat(jdbc.update(
@@ -282,6 +310,7 @@ class DatabaseConstraintTest {
         )).isOne();
 
         assertThat(rowCount("repository_lead_assignments", assignmentId)).isZero();
+        assertThat(rowCount("repository_lead_assignments", membershipAssignmentId)).isOne();
     }
 
     @Test
@@ -303,6 +332,13 @@ class DatabaseConstraintTest {
     }
 
     private UUID insertMembershipAssignment(AssignmentFixture fixture) {
+        return insertMembershipAssignment(fixture, fixture.leadMembershipId());
+    }
+
+    private UUID insertMembershipAssignment(
+        AssignmentFixture fixture,
+        UUID leadMembershipId
+    ) {
         return jdbc.queryForObject("""
             INSERT INTO repository_lead_assignments (
                 workspace_id, repository_id, lead_membership_id,
@@ -312,11 +348,18 @@ class DatabaseConstraintTest {
             """, UUID.class,
             fixture.tenant().workspaceId(),
             fixture.tenant().repositoryId(),
-            fixture.leadMembershipId(),
+            leadMembershipId,
             fixture.tenant().managerMembershipId());
     }
 
     private UUID insertInvitationAssignment(AssignmentFixture fixture) {
+        return insertInvitationAssignment(fixture, fixture.invitationId());
+    }
+
+    private UUID insertInvitationAssignment(
+        AssignmentFixture fixture,
+        UUID invitationId
+    ) {
         return jdbc.queryForObject("""
             INSERT INTO repository_lead_assignments (
                 workspace_id, repository_id, invitation_id,
@@ -326,7 +369,7 @@ class DatabaseConstraintTest {
             """, UUID.class,
             fixture.tenant().workspaceId(),
             fixture.tenant().repositoryId(),
-            fixture.invitationId(),
+            invitationId,
             fixture.tenant().managerMembershipId());
     }
 
@@ -343,6 +386,15 @@ class DatabaseConstraintTest {
     private int rowCount(String table, UUID id) {
         Integer count = jdbc.queryForObject(
             "SELECT count(*) FROM " + table + " WHERE id = ?", Integer.class, id);
+        return count == null ? 0 : count;
+    }
+
+    private int assignmentCountForRepository(UUID repositoryId) {
+        Integer count = jdbc.queryForObject("""
+            SELECT count(*)
+            FROM repository_lead_assignments
+            WHERE repository_id = ?
+            """, Integer.class, repositoryId);
         return count == null ? 0 : count;
     }
 
@@ -387,26 +439,43 @@ class DatabaseConstraintTest {
 
     private AssignmentFixture createAssignmentFixture() {
         TenantFixture tenant = createTenantFixture();
-        UUID leadUserId = insertUser("lead@example.com");
-        UUID leadMembershipId = jdbc.queryForObject("""
-            INSERT INTO memberships (workspace_id, user_id, role, status)
-            VALUES (?, ?, 'LEAD', 'ACTIVE')
-            RETURNING id
-            """, UUID.class, tenant.workspaceId(), leadUserId);
+        UUID leadMembershipId = insertLeadMembership(tenant, "lead@example.com");
         UUID invitationId = insertInvitation(tenant.workspaceId(), tenant.managerMembershipId());
 
         return new AssignmentFixture(tenant, leadMembershipId, invitationId);
     }
 
+    private UUID insertLeadMembership(TenantFixture tenant, String email) {
+        UUID leadUserId = insertUser(email);
+        return jdbc.queryForObject("""
+            INSERT INTO memberships (workspace_id, user_id, role, status)
+            VALUES (?, ?, 'LEAD', 'ACTIVE')
+            RETURNING id
+            """, UUID.class, tenant.workspaceId(), leadUserId);
+    }
+
     private UUID insertInvitation(UUID workspaceId, UUID managerMembershipId) {
+        return insertInvitation(
+            workspaceId,
+            managerMembershipId,
+            "invited@example.com",
+            "invitation-token-hash"
+        );
+    }
+
+    private UUID insertInvitation(
+        UUID workspaceId,
+        UUID managerMembershipId,
+        String email,
+        String tokenHash
+    ) {
         return jdbc.queryForObject("""
             INSERT INTO workspace_invitations (
                 workspace_id, email, role, token_hash, status,
                 invited_by_membership_id, expires_at
-            ) VALUES (?, 'invited@example.com', 'LEAD', 'invitation-token-hash',
-                      'PENDING', ?, now() + interval '1 day')
+            ) VALUES (?, ?, 'LEAD', ?, 'PENDING', ?, now() + interval '1 day')
             RETURNING id
-            """, UUID.class, workspaceId, managerMembershipId);
+            """, UUID.class, workspaceId, email, tokenHash, managerMembershipId);
     }
 
     private UUID insertRawEvent(TenantFixture tenant, String deliveryId) {

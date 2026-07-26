@@ -102,15 +102,19 @@ class JpaPersistenceDefaultsTest {
 
         User managerUser = user("manager@adept.test", "Manager");
         User leadUser = user("lead@adept.test", "Lead");
+        User coLeadUser = user("co-lead@adept.test", "Co-lead");
         Workspace workspace = workspace();
         entityManager.persist(managerUser);
         entityManager.persist(leadUser);
+        entityManager.persist(coLeadUser);
         entityManager.persist(workspace);
 
         Membership manager = membership(workspace, managerUser, MembershipRole.MANAGER);
         Membership lead = membership(workspace, leadUser, MembershipRole.LEAD);
+        Membership coLead = membership(workspace, coLeadUser, MembershipRole.LEAD);
         entityManager.persist(manager);
         entityManager.persist(lead);
+        entityManager.persist(coLead);
 
         GithubIntegration github = githubIntegration(workspace, manager);
         entityManager.persist(github);
@@ -124,6 +128,13 @@ class JpaPersistenceDefaultsTest {
         assignment.setLeadMembership(lead);
         assignment.setAssignedBy(manager);
         entityManager.persist(assignment);
+
+        RepositoryLeadAssignment coLeadAssignment = new RepositoryLeadAssignment();
+        coLeadAssignment.setWorkspace(workspace);
+        coLeadAssignment.setRepository(repository);
+        coLeadAssignment.setLeadMembership(coLead);
+        coLeadAssignment.setAssignedBy(manager);
+        entityManager.persist(coLeadAssignment);
 
         IntegrationOauthState oauthState = new IntegrationOauthState();
         oauthState.setProvider(ExternalProvider.GITHUB);
@@ -240,6 +251,7 @@ class JpaPersistenceDefaultsTest {
         assertThat(repository.getDefaultBranch()).isEqualTo("main");
         assertThat(repository.getVisibility()).isEqualTo(RepositoryVisibility.PRIVATE);
         assertThat(assignment.getAssignedAt()).isNotNull();
+        assertThat(coLeadAssignment.getAssignedAt()).isNotNull();
         assertThat(oauthState.getRedirectPath()).isEqualTo("/dashboard/integrations");
         assertThat(oauthState.getCreatedAt()).isNotNull();
         assertThat(rawEvent.getReceivedAt()).isNotNull();
