@@ -4,12 +4,14 @@ on:
   workflow_dispatch:
   pull_request:
     paths:
+      - "src/main/resources/db/migration/**"
       - "infra/local/compose.yaml"
       - "Dockerfile"
       - ".github/workflows/integration.yml"
   push:
     branches: [main]
     paths:
+      - "src/main/resources/db/migration/**"
       - "infra/local/compose.yaml"
       - "Dockerfile"
       - ".github/workflows/integration.yml"
@@ -166,7 +168,7 @@ jobs:
           )"
 
           echo "Successful migration count: $migration_count"
-          test "$migration_count" = "7"
+          test "$migration_count" = "8"
 
       - name: Verify migration idempotency after API restart
         shell: bash
@@ -201,7 +203,7 @@ jobs:
           )"
 
           echo "Migration count after API restart: $migration_count"
-          test "$migration_count" = "7"
+          test "$migration_count" = "8"
 
       - name: Show service state and logs on failure
         if: failure()
