@@ -18,6 +18,6 @@ public record LoginRequest(
         String email,
 
         @NotBlank(message = "password must not be blank")
-        @Size(min = 1, max = 128)
+        @Size(max = 128)
         String password
 ) {}
