@@ -87,6 +87,24 @@ class AuthRateLimiterTest {
     }
 
     @Test
+    void actionTokenBucketUsesTheSuppliedPurposeSpecificHash() {
+        MutableClock clock = new MutableClock(Instant.parse("2026-08-06T04:00:00Z"));
+        AppProperties properties = TestAppProperties.create();
+        TokenHasher hasher = new TokenHasher(properties);
+        AuthRateLimiter limiter = new AuthRateLimiter(properties, hasher, clock);
+        String rawToken = "same-raw-token";
+        String verificationHash = hasher.hashVerificationToken(rawToken);
+        String resetHash = hasher.hashResetToken(rawToken);
+
+        for (int attempt = 0; attempt < 10; attempt++) {
+            assertThat(limiter.checkActionTokenHash(verificationHash).allowed()).isTrue();
+            assertThat(limiter.checkActionTokenHash(resetHash).allowed()).isTrue();
+        }
+        assertThat(limiter.checkActionTokenHash(verificationHash).allowed()).isFalse();
+        assertThat(limiter.checkActionTokenHash(resetHash).allowed()).isFalse();
+    }
+
+    @Test
     void forwardedHeadersCannotSelectANewPeerBucket() throws Exception {
         MutableClock clock = new MutableClock(Instant.parse("2026-08-06T04:00:00Z"));
         AuthRateLimiter limiter = limiter(1, 100, clock);

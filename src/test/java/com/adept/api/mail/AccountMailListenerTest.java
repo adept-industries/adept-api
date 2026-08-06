@@ -2,97 +2,149 @@ package com.adept.api.mail;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.time.Duration;
+import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+
 import org.junit.jupiter.api.Test;
-import org.springframework.mail.SimpleMailMessage;
-import org.springframework.mail.MailSendException;
-import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
-import com.adept.api.support.TestAppProperties;
+import com.adept.api.auth.PartCIntegrationTestSupport;
 
-class AccountMailListenerTest {
+class AccountMailListenerTest extends PartCIntegrationTestSupport {
+
+    @Autowired
+    private AccountMailService accountMailService;
+
+    @Autowired
+    private ApplicationEventPublisher eventPublisher;
+
+    @Autowired
+    private PlatformTransactionManager transactionManager;
+
+    @Autowired
+    @Qualifier("accountMailExecutor")
+    private Executor accountMailExecutor;
 
     @Test
-    void verificationLinkUsesFragmentOnConfiguredFrontendOrigin() {
-        CapturingMailSender sender = new CapturingMailSender(false);
-        AccountMailService service = new AccountMailService(sender, TestAppProperties.create());
+    void mailEventDiagnosticStringsRedactRecipientsAndRawTokens() {
+        UUID userId = UUID.randomUUID();
+        String recipient = "private-recipient@example.com";
+        String rawToken = "private-raw-token";
 
-        service.sendVerification(new VerificationMailRequested(
-            java.util.UUID.randomUUID(),
-            "alice@example.com",
-            "RAW_TOKEN",
-            "trace-1"
-        ));
+        assertThat(new VerificationMailRequested(userId, recipient, rawToken, "trace-verify").toString())
+            .contains(userId.toString(), "trace-verify", "recipient=<redacted>", "rawToken=<redacted>")
+            .doesNotContain(recipient, rawToken);
+        assertThat(new PasswordResetMailRequested(userId, recipient, rawToken, "trace-reset").toString())
+            .contains(userId.toString(), "trace-reset", "recipient=<redacted>", "rawToken=<redacted>")
+            .doesNotContain(recipient, rawToken);
+        assertThat(new PasswordChangedMailRequested(userId, recipient, "trace-changed").toString())
+            .contains(userId.toString(), "trace-changed", "recipient=<redacted>")
+            .doesNotContain(recipient);
+    }
 
-        assertThat(sender.lastMessage.getText())
-            .contains("http://localhost:3000/verify-email#token=RAW_TOKEN")
+    @Test
+    void verificationAndResetLinksUseFragmentsOnTheConfiguredFrontendOrigin() {
+        String verificationRecipient = uniqueEmail("mail-verify");
+        String resetRecipient = uniqueEmail("mail-reset");
+
+        accountMailService.sendVerification(new VerificationMailRequested(
+            UUID.randomUUID(), verificationRecipient, "VERIFY_TOKEN", "trace-1"));
+        accountMailService.sendPasswordReset(new PasswordResetMailRequested(
+            UUID.randomUUID(), resetRecipient, "RESET_TOKEN", "trace-2"));
+
+        var verification = mailSender.messages().stream()
+            .filter(message -> message.recipients().contains(verificationRecipient))
+            .findFirst().orElseThrow();
+        var reset = mailSender.messages().stream()
+            .filter(message -> message.recipients().contains(resetRecipient))
+            .findFirst().orElseThrow();
+        assertThat(verification.body())
+            .contains("http://localhost:3000/verify-email#token=VERIFY_TOKEN")
+            .doesNotContain("?token=");
+        assertThat(reset.body())
+            .contains("http://localhost:3000/reset-password#token=RESET_TOKEN")
             .doesNotContain("?token=");
     }
 
     @Test
-    void listenerSwallowsMailFailureAfterCommitPath() {
-        AccountMailService service = new AccountMailService(
-            new CapturingMailSender(true),
-            TestAppProperties.create()
-        );
-        AccountMailListener listener = new AccountMailListener(service);
+    void transactionalMailRunsOnlyAfterCommitAndOnTheNamedExecutor() {
+        String recipient = uniqueEmail("mail-after-commit");
+        TransactionTemplate transaction = new TransactionTemplate(transactionManager);
 
-        listener.onPasswordReset(new PasswordResetMailRequested(
-            java.util.UUID.randomUUID(),
-            "alice@example.com",
-            "RAW_TOKEN",
-            "trace-1"
-        ));
+        transaction.executeWithoutResult(status -> {
+            eventPublisher.publishEvent(new VerificationMailRequested(
+                UUID.randomUUID(), recipient, "RAW_TOKEN", "trace-after-commit"));
+            assertThat(mailSender.messages()).noneMatch(
+                message -> message.recipients().contains(recipient));
+        });
+
+        var delivered = mailSender.await(
+            message -> message.recipients().contains(recipient),
+            Duration.ofSeconds(5)
+        );
+        assertThat(delivered.threadName()).startsWith("account-mail-");
     }
 
-    private static final class CapturingMailSender implements JavaMailSender {
-        private final boolean fail;
-        private SimpleMailMessage lastMessage;
+    @Test
+    void rolledBackTransactionDoesNotSendMail() throws Exception {
+        String recipient = uniqueEmail("mail-rollback");
+        TransactionTemplate transaction = new TransactionTemplate(transactionManager);
 
-        private CapturingMailSender(boolean fail) {
-            this.fail = fail;
-        }
+        transaction.executeWithoutResult(status -> {
+            eventPublisher.publishEvent(new PasswordResetMailRequested(
+                UUID.randomUUID(), recipient, "RAW_TOKEN", "trace-rollback"));
+            status.setRollbackOnly();
+        });
 
-        @Override
-        public void send(SimpleMailMessage simpleMessage) {
-            if (fail) {
-                throw new MailSendException("smtp down");
+        Thread.sleep(200);
+        assertThat(mailSender.messages()).noneMatch(
+            message -> message.recipients().contains(recipient));
+    }
+
+    @Test
+    void saturatedExecutorDiscardsInsteadOfRunningWorkOnTheRequestThread() throws Exception {
+        ThreadPoolTaskExecutor executor = (ThreadPoolTaskExecutor) accountMailExecutor;
+        CountDownLatch running = new CountDownLatch(2);
+        CountDownLatch release = new CountDownLatch(1);
+        Runnable blocker = () -> {
+            running.countDown();
+            try {
+                release.await();
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
             }
-            this.lastMessage = simpleMessage;
+        };
+        executor.execute(blocker);
+        executor.execute(blocker);
+        assertThat(running.await(5, TimeUnit.SECONDS)).isTrue();
+        for (int index = 0; index < 100; index++) {
+            executor.execute(blocker);
         }
+        AtomicBoolean rejectedTaskRan = new AtomicBoolean();
+        String requestThread = Thread.currentThread().getName();
 
-        @Override
-        public void send(SimpleMailMessage... simpleMessages) {
-            send(simpleMessages[0]);
-        }
+        executor.execute(() -> {
+            rejectedTaskRan.set(true);
+            assertThat(Thread.currentThread().getName()).isNotEqualTo(requestThread);
+        });
 
-        @Override
-        public jakarta.mail.internet.MimeMessage createMimeMessage() {
-            throw new UnsupportedOperationException();
+        assertThat(rejectedTaskRan).isFalse();
+        release.countDown();
+        long deadline = System.nanoTime() + Duration.ofSeconds(5).toNanos();
+        while ((executor.getActiveCount() != 0 || executor.getQueueSize() != 0)
+                && System.nanoTime() < deadline) {
+            Thread.sleep(10);
         }
-
-        @Override
-        public jakarta.mail.internet.MimeMessage createMimeMessage(java.io.InputStream contentStream) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public void send(jakarta.mail.internet.MimeMessage mimeMessage) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public void send(jakarta.mail.internet.MimeMessage... mimeMessages) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public void send(org.springframework.mail.javamail.MimeMessagePreparator mimeMessagePreparator) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public void send(org.springframework.mail.javamail.MimeMessagePreparator... mimeMessagePreparators) {
-            throw new UnsupportedOperationException();
-        }
+        assertThat(executor.getActiveCount()).isZero();
+        assertThat(executor.getQueueSize()).isZero();
     }
 }
