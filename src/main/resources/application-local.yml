@@ -9,6 +9,16 @@ spring:
     host: localhost
     port: 1025
 
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
+
+app:
+  refresh-token:
+    cookie-secure: false
+
 logging:
   level:
     # Application debug logs are useful locally; SQL statements remain at INFO.

@@ -1,8 +1,10 @@
 package com.adept.api.config;
 
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.time.Duration;
 import java.util.Base64;
+import java.util.Locale;
 import java.util.Map;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -10,9 +12,12 @@ import org.springframework.validation.annotation.Validated;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.AssertTrue;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Positive;
 
 @Validated
@@ -22,6 +27,7 @@ public record AppProperties(
     @NotNull URI publicApiBaseUrl,
     @NotBlank String emailFrom,
     @Valid @NotNull Jwt jwt,
+    @Valid @NotNull Auth auth,
     @Valid @NotNull RefreshToken refreshToken,
     @NotBlank String tokenHashPepperBase64,
     @Valid @NotNull IntegrationEncryption integrationEncryption,
@@ -29,6 +35,10 @@ public record AppProperties(
     @Valid @NotNull Jira jira,
     @Valid @NotNull Engine engine
 ) {
+    public AppProperties {
+        frontendBaseUrl = normalizeBrowserOrigin(frontendBaseUrl);
+    }
+
     @AssertTrue(message = "app.token-hash-pepper-base64 must decode to at least 32 bytes")
     public boolean isTokenHashPepperValid() {
         return decodesToAtLeast32Bytes(tokenHashPepperBase64);
@@ -55,13 +65,23 @@ public record AppProperties(
 
     public record RefreshToken(
         @NotNull Duration ttl,
-        @NotBlank String cookieName,
+
+        @NotBlank
+        @Pattern(
+            regexp = "^[!#$%&'*+.^_`|~0-9A-Za-z-]+$",
+            message = "must be a legal cookie name"
+        )
+        String cookieName,
+
         boolean cookieSecure,
-        @NotBlank String cookieSameSite
+
+        @NotBlank
+        @Pattern(regexp = "Strict", message = "must be Strict")
+        String cookieSameSite
     ) {
         @AssertTrue(message = "app.refresh-token.ttl must be positive")
         public boolean isTtlValid() {
-            return ttl != null && !ttl.isZero() && !ttl.isNegative();
+            return isPositive(ttl);
         }
     }
 
@@ -78,7 +98,7 @@ public record AppProperties(
         }
 
         @AssertTrue(message = "every integration-encryption key must decode to at least 32 bytes")
-        public boolean areAllKeysValid() {
+        public boolean isAllKeysValid() {
             return keys != null
                 && !keys.isEmpty()
                 && keys.values().stream().allMatch(AppProperties::decodesToAtLeast32Bytes);
@@ -117,6 +137,49 @@ public record AppProperties(
     ) {
     }
 
+    public record Auth(
+        @Min(4) @Max(31) int bcryptCost,
+        @NotNull Duration verificationTokenTtl,
+        @NotNull Duration resetTokenTtl,
+        @Valid @NotNull RateLimit rateLimit
+    ) {
+        @AssertTrue(message = "app.auth.verification-token-ttl must be positive")
+        public boolean isVerificationTokenTtlValid() {
+            return isPositive(verificationTokenTtl);
+        }
+
+        @AssertTrue(message = "app.auth.reset-token-ttl must be positive")
+        public boolean isResetTokenTtlValid() {
+            return isPositive(resetTokenTtl);
+        }
+    }
+
+    public record RateLimit(
+        @Positive int authPeerLimit,
+        @NotNull Duration authPeerWindow,
+        @Positive int loginAccountLimit,
+        @NotNull Duration loginWindow,
+        @Positive int signupEmailLimit,
+        @NotNull Duration signupWindow,
+        @Positive int accountEmailLimit,
+        @NotNull Duration accountEmailWindow,
+        @Positive int actionTokenLimit,
+        @NotNull Duration actionTokenWindow,
+        @Positive int deletionUserLimit,
+        @NotNull Duration deletionUserWindow,
+        @Positive int maximumEntries
+    ) {
+        @AssertTrue(message = "all app.auth.rate-limit windows must be positive")
+        public boolean isWindowsValid() {
+            return isPositive(authPeerWindow)
+                && isPositive(loginWindow)
+                && isPositive(signupWindow)
+                && isPositive(accountEmailWindow)
+                && isPositive(actionTokenWindow)
+                && isPositive(deletionUserWindow);
+        }
+    }
+
     private static boolean allHaveText(String... values) {
         for (String value : values) {
             if (value == null || value.isBlank()) {
@@ -134,6 +197,73 @@ public record AppProperties(
             return Base64.getDecoder().decode(value).length >= 32;
         } catch (IllegalArgumentException exception) {
             return false;
+        }
+    }
+
+    private static boolean isPositive(Duration value) {
+        return value != null && !value.isZero() && !value.isNegative();
+    }
+
+    private static URI normalizeBrowserOrigin(URI value) {
+        if (value == null) {
+            return null;
+        }
+
+        String scheme = value.getScheme();
+        if (scheme == null
+            || (!scheme.equalsIgnoreCase("http")
+                && !scheme.equalsIgnoreCase("https"))) {
+            throw new IllegalArgumentException(
+                "app.frontend-base-url must use http or https"
+            );
+        }
+
+        String rawPath = value.getRawPath();
+
+        if (!value.isAbsolute()
+            || value.getHost() == null
+            || value.getRawUserInfo() != null
+            || value.getRawQuery() != null
+            || value.getRawFragment() != null
+            || !(rawPath == null || rawPath.isEmpty() || rawPath.equals("/"))) {
+            throw new IllegalArgumentException(
+                "app.frontend-base-url must be a browser origin"
+            );
+        }
+
+        String normalizedScheme = scheme.toLowerCase(Locale.ROOT);
+        String normalizedHost = value.getHost().toLowerCase(Locale.ROOT);
+
+        int defaultPort = normalizedScheme.equals("https") ? 443 : 80;
+        int effectivePort = value.getPort() == -1
+            ? defaultPort
+            : value.getPort();
+
+        if (effectivePort < 1 || effectivePort > 65_535) {
+            throw new IllegalArgumentException(
+                "app.frontend-base-url contains an invalid port"
+            );
+        }
+
+        int normalizedPort = effectivePort == defaultPort
+            ? -1
+            : effectivePort;
+
+        try {
+            return new URI(
+                normalizedScheme,
+                null,
+                normalizedHost,
+                normalizedPort,
+                "/",
+                null,
+                null
+            );
+        } catch (URISyntaxException exception) {
+            throw new IllegalArgumentException(
+                "app.frontend-base-url could not be normalized",
+                exception
+            );
         }
     }
 }

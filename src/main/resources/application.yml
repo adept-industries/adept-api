@@ -1,7 +1,7 @@
 server:
   # Embedded Tomcat listens on this container/process port.
   port: 8080
-  forward-headers-strategy: framework
+  forward-headers-strategy: none
   error:
     include-message: never
     include-stacktrace: never
@@ -47,6 +47,9 @@ spring:
     properties:
       mail.smtp.auth: ${SPRING_MAIL_AUTH:false}
       mail.smtp.starttls.enable: ${SPRING_MAIL_STARTTLS:false}
+      mail.smtp.connectiontimeout: 5000
+      mail.smtp.timeout: 5000
+      mail.smtp.writetimeout: 5000
 
 management:
   # Expose only named operational endpoints, not every actuator endpoint.
@@ -64,11 +67,35 @@ management:
           include: "readinessState,db"
       show-details: never
 
+springdoc:
+  api-docs:
+    enabled: ${SPRINGDOC_ENABLED:false}
+  swagger-ui:
+    enabled: ${SPRINGDOC_ENABLED:false}
+
 app:
   # "app" is Adept's own configuration namespace bound to AppProperties.
   frontend-base-url: ${APP_FRONTEND_BASE_URL}
   public-api-base-url: ${APP_PUBLIC_API_BASE_URL:http://localhost:8080}
   email-from: ${APP_EMAIL_FROM}
+  auth:
+    bcrypt-cost: 12
+    verification-token-ttl: PT24H
+    reset-token-ttl: PT1H
+    rate-limit:
+      auth-peer-limit: 30000
+      auth-peer-window: PT15M
+      login-account-limit: 10
+      login-window: PT15M
+      signup-email-limit: 3
+      signup-window: PT1H
+      account-email-limit: 5
+      account-email-window: PT1H
+      action-token-limit: 10
+      action-token-window: PT15M
+      deletion-user-limit: 10
+      deletion-user-window: PT15M
+      maximum-entries: 100000
   jwt:
     # The decoded secret signs access tokens; issuer/audience prevent token mixups.
     secret-base64: ${APP_JWT_SECRET_BASE64}
@@ -79,7 +106,7 @@ app:
     # Refresh tokens last longer and travel only in the named HttpOnly cookie.
     ttl: P7D
     cookie-name: adept_refresh
-    cookie-secure: ${APP_COOKIE_SECURE:false}
+    cookie-secure: ${APP_COOKIE_SECURE:true}
     cookie-same-site: Strict
   token-hash-pepper-base64: ${APP_TOKEN_HASH_PEPPER_BASE64}
   integration-encryption:
