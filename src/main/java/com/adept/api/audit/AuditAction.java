@@ -1,0 +1,9 @@
+package com.adept.api.audit;
+
+public enum AuditAction {
+    ACCOUNT_SIGNUP,
+    EMAIL_VERIFIED,
+    VERIFICATION_EMAIL_REQUESTED,
+    PASSWORD_RESET_REQUESTED,
+    PASSWORD_RESET_COMPLETED
+}
