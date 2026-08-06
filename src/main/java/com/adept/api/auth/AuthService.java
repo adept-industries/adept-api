@@ -152,12 +152,8 @@ public class AuthService {
         String normalizedEmail = normalizeEmail(email);
         rateLimiter.requireAccountEmail(normalizedEmail);
         transactionTemplate.executeWithoutResult(status -> userRepository
-            .findByEmailIgnoreCase(normalizedEmail)
-            .ifPresent(found -> {
-                if (found.getStatus() != UserStatus.ACTIVE || found.getEmailVerifiedAt() != null) {
-                    return;
-                }
-                User user = userRepository.findByIdForUpdate(found.getId()).orElseThrow();
+            .findByEmailIgnoreCaseForUpdate(normalizedEmail)
+            .ifPresent(user -> {
                 if (user.getStatus() != UserStatus.ACTIVE || user.getEmailVerifiedAt() != null) {
                     return;
                 }
@@ -169,12 +165,8 @@ public class AuthService {
         String normalizedEmail = normalizeEmail(email);
         rateLimiter.requireAccountEmail(normalizedEmail);
         transactionTemplate.executeWithoutResult(status -> userRepository
-            .findByEmailIgnoreCase(normalizedEmail)
-            .ifPresent(found -> {
-                if (found.getStatus() != UserStatus.ACTIVE) {
-                    return;
-                }
-                User user = userRepository.findByIdForUpdate(found.getId()).orElseThrow();
+            .findByEmailIgnoreCaseForUpdate(normalizedEmail)
+            .ifPresent(user -> {
                 if (user.getStatus() != UserStatus.ACTIVE) {
                     return;
                 }
