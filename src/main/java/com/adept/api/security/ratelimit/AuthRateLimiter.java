@@ -71,9 +71,9 @@ public final class AuthRateLimiter {
         return check(accountEmail, hashNormalizedEmail(email));
     }
 
-    public RateLimitResult checkActionToken(String rawToken) {
-        String safeValue = rawToken == null ? "" : rawToken;
-        return check(actionToken, tokenHasher.hashVerificationToken(safeValue));
+    public RateLimitResult checkActionTokenHash(String tokenHash) {
+        String safeValue = tokenHash == null ? "missing-token-hash" : tokenHash;
+        return check(actionToken, safeValue);
     }
 
     public RateLimitResult checkDeletion(UUID authenticatedUserId) {
@@ -97,8 +97,8 @@ public final class AuthRateLimiter {
         requireAllowed(checkAccountEmail(email));
     }
 
-    public void requireActionToken(String rawToken) {
-        requireAllowed(checkActionToken(rawToken));
+    public void requireActionTokenHash(String tokenHash) {
+        requireAllowed(checkActionTokenHash(tokenHash));
     }
 
     public void requireDeletion(UUID authenticatedUserId) {

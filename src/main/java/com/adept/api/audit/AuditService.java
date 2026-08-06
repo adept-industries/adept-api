@@ -54,7 +54,7 @@ public class AuditService {
         if (value == null) {
             return "";
         }
-        String stripped = value.replaceAll("[\\p{Cntrl}&&[^\r\n\t]]", "").trim();
+        String stripped = value.replaceAll("\\p{Cntrl}", "").trim();
         return stripped.length() <= MAX_USER_AGENT_LENGTH
             ? stripped
             : stripped.substring(0, MAX_USER_AGENT_LENGTH);

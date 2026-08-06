@@ -109,8 +109,8 @@ public class AuthService {
 
     public void verifyEmail(String rawToken, AccountRequestContext context) {
         requireWellFormedToken(rawToken);
-        rateLimiter.requireActionToken(rawToken);
         String hash = actionTokenService.hash(ActionTokenPurpose.VERIFY_EMAIL, rawToken);
+        rateLimiter.requireActionTokenHash(hash);
         ActionTokenIdentity identity = tokenRepository.findIdentityByTokenHash(hash)
             .orElseThrow(() -> new ApiException(ProblemCode.ACTION_TOKEN_INVALID));
         transactionTemplate.executeWithoutResult(status -> {
@@ -152,12 +152,8 @@ public class AuthService {
         String normalizedEmail = normalizeEmail(email);
         rateLimiter.requireAccountEmail(normalizedEmail);
         transactionTemplate.executeWithoutResult(status -> userRepository
-            .findByEmailIgnoreCase(normalizedEmail)
-            .ifPresent(found -> {
-                if (found.getStatus() != UserStatus.ACTIVE || found.getEmailVerifiedAt() != null) {
-                    return;
-                }
-                User user = userRepository.findByIdForUpdate(found.getId()).orElseThrow();
+            .findByEmailIgnoreCaseForUpdate(normalizedEmail)
+            .ifPresent(user -> {
                 if (user.getStatus() != UserStatus.ACTIVE || user.getEmailVerifiedAt() != null) {
                     return;
                 }
@@ -169,12 +165,8 @@ public class AuthService {
         String normalizedEmail = normalizeEmail(email);
         rateLimiter.requireAccountEmail(normalizedEmail);
         transactionTemplate.executeWithoutResult(status -> userRepository
-            .findByEmailIgnoreCase(normalizedEmail)
-            .ifPresent(found -> {
-                if (found.getStatus() != UserStatus.ACTIVE) {
-                    return;
-                }
-                User user = userRepository.findByIdForUpdate(found.getId()).orElseThrow();
+            .findByEmailIgnoreCaseForUpdate(normalizedEmail)
+            .ifPresent(user -> {
                 if (user.getStatus() != UserStatus.ACTIVE) {
                     return;
                 }
@@ -184,8 +176,8 @@ public class AuthService {
 
     public void resetPassword(String rawToken, String newPassword, AccountRequestContext context) {
         requireWellFormedToken(rawToken);
-        rateLimiter.requireActionToken(rawToken);
         String hash = actionTokenService.hash(ActionTokenPurpose.RESET_PASSWORD, rawToken);
+        rateLimiter.requireActionTokenHash(hash);
         ActionTokenIdentity identity = tokenRepository.findIdentityByTokenHash(hash)
             .orElseThrow(() -> new ApiException(ProblemCode.ACTION_TOKEN_INVALID));
         transactionTemplate.executeWithoutResult(status -> {
