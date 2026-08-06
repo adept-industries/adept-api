@@ -1,0 +1,9 @@
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
+
+app:
+  refresh-token:
+    cookie-secure: false
