@@ -92,7 +92,7 @@ class CsrfIntegrationTest {
         assertThat(pair.cookie().isHttpOnly()).isFalse();
         assertThat(pair.cookie().getDomain()).isNull();
 
-        mockMvc.perform(post("/api/v1/auth/login")
+        mockMvc.perform(post("/api/v1/auth/test-endpoint")
                 .cookie(new Cookie("XSRF-TOKEN", pair.token()))
                 .header("X-XSRF-TOKEN", pair.token())
                 .contentType(MediaType.APPLICATION_JSON)
@@ -105,7 +105,7 @@ class CsrfIntegrationTest {
     void wrongCsrfAndWrongOriginUseStableProblems() throws Exception {
         CsrfPair pair = csrfPair();
 
-        mockMvc.perform(post("/api/v1/auth/login")
+        mockMvc.perform(post("/api/v1/auth/test-endpoint")
                 .cookie(new Cookie("XSRF-TOKEN", pair.token()))
                 .header("X-XSRF-TOKEN", "wrong")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -114,7 +114,7 @@ class CsrfIntegrationTest {
             .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
             .andExpect(content().string(org.hamcrest.Matchers.containsString("CSRF_INVALID")));
 
-        mockMvc.perform(post("/api/v1/auth/login")
+        mockMvc.perform(post("/api/v1/auth/test-endpoint")
                 .header(HttpHeaders.ORIGIN, "https://evil.example")
                 .cookie(new Cookie("XSRF-TOKEN", pair.token()))
                 .header("X-XSRF-TOKEN", pair.token())

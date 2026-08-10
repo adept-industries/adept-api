@@ -9,7 +9,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.adept.api.auth.dto.ActionTokenRequest;
+import com.adept.api.auth.dto.AuthSessionResponse;
 import com.adept.api.auth.dto.EmailRequest;
+import com.adept.api.auth.dto.LoginRequest;
 import com.adept.api.auth.dto.ResetPasswordRequest;
 import com.adept.api.auth.dto.SignupRequest;
 import com.adept.api.auth.dto.SignupResponse;
@@ -36,6 +38,22 @@ public class AuthController {
         this.authService = authService;
         this.refreshCookieService = refreshCookieService;
         this.csrfCookieService = csrfCookieService;
+    }
+
+    @PostMapping("/login")
+    public ResponseEntity<AuthSessionResponse> login(
+            @Valid @RequestBody LoginRequest request,
+            HttpServletRequest servletRequest,
+            HttpServletResponse servletResponse) {
+        LoginResult result = authService.login(
+            request,
+            AccountRequestContext.from(servletRequest)
+        );
+        refreshCookieService.set(servletResponse, result.rawRefreshToken(), result.refreshExpiresAt());
+        csrfCookieService.expire(servletRequest, servletResponse);
+        return ResponseEntity.ok()
+            .header(HttpHeaders.CACHE_CONTROL, "no-store")
+            .body(result.response());
     }
 
     @PostMapping("/signup")

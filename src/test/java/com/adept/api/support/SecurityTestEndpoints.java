@@ -16,7 +16,7 @@ public final class SecurityTestEndpoints {
 
     private final AtomicInteger invocations = new AtomicInteger();
 
-    @PostMapping(path = "/api/v1/auth/login", consumes = MediaType.APPLICATION_JSON_VALUE)
+    @PostMapping(path = "/api/v1/auth/test-endpoint", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<Void> login(@RequestBody Payload payload) {
         invocations.incrementAndGet();
         return ResponseEntity.noContent().build();

@@ -89,7 +89,7 @@ class SecurityConfigTest {
     void malformedUnsupportedAndOversizedBodiesNeverInvokeController() throws Exception {
         String token = csrfToken();
 
-        mockMvc.perform(post("/api/v1/auth/login")
+        mockMvc.perform(post("/api/v1/auth/test-endpoint")
                 .cookie(new Cookie("XSRF-TOKEN", token))
                 .header("X-XSRF-TOKEN", token)
                 .contentType(MediaType.APPLICATION_JSON)
@@ -98,7 +98,7 @@ class SecurityConfigTest {
             .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
             .andExpect(content().string(org.hamcrest.Matchers.containsString("MALFORMED_REQUEST")));
 
-        mockMvc.perform(post("/api/v1/auth/login")
+        mockMvc.perform(post("/api/v1/auth/test-endpoint")
                 .cookie(new Cookie("XSRF-TOKEN", token))
                 .header("X-XSRF-TOKEN", token)
                 .contentType(MediaType.TEXT_PLAIN)
@@ -108,7 +108,7 @@ class SecurityConfigTest {
             .andExpect(content().string(org.hamcrest.Matchers.not(
                 org.hamcrest.Matchers.containsString("rejected-secret"))));
 
-        mockMvc.perform(post("/api/v1/auth/login")
+        mockMvc.perform(post("/api/v1/auth/test-endpoint")
                 .cookie(new Cookie("XSRF-TOKEN", token))
                 .header("X-XSRF-TOKEN", token)
                 .contentType(MediaType.APPLICATION_JSON)
@@ -125,7 +125,7 @@ class SecurityConfigTest {
         String token = csrfToken();
 
         for (int attempt = 0; attempt < 2; attempt++) {
-            mockMvc.perform(post("/api/v1/auth/login")
+            mockMvc.perform(post("/api/v1/auth/test-endpoint")
                     .with(request -> {
                         request.setRemoteAddr("192.0.2.44");
                         return request;
@@ -137,7 +137,7 @@ class SecurityConfigTest {
                 .andExpect(status().isNoContent());
         }
 
-        mockMvc.perform(post("/api/v1/auth/login")
+        mockMvc.perform(post("/api/v1/auth/test-endpoint")
                 .with(request -> {
                     request.setRemoteAddr("192.0.2.44");
                     return request;
