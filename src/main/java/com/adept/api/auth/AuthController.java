@@ -9,16 +9,31 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.adept.api.auth.dto.ActionTokenRequest;
+import com.adept.api.auth.dto.AuthSessionResponse;
 import com.adept.api.auth.dto.EmailRequest;
+import com.adept.api.auth.dto.LoginRequest;
+import com.adept.api.auth.dto.RefreshRequest;
 import com.adept.api.auth.dto.ResetPasswordRequest;
 import com.adept.api.auth.dto.SignupRequest;
 import com.adept.api.auth.dto.SignupResponse;
+import com.adept.api.common.error.ForbiddenException;
+import com.adept.api.common.error.NotFoundException;
+import com.adept.api.common.error.ProblemCode;
+import com.adept.api.common.error.UnauthorizedException;
+import com.adept.api.auth.dto.MeResponse;
+import com.adept.api.security.AuthenticatedPrincipal;
 import com.adept.api.security.CsrfCookieService;
+import com.adept.api.security.CurrentPrincipal;
 import com.adept.api.security.RefreshCookieService;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
+import java.util.Optional;
+import java.util.UUID;
+
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 
 @Validated
 @RestController
@@ -26,16 +41,134 @@ import jakarta.validation.Valid;
 public class AuthController {
 
     private final AuthService authService;
+    private final RefreshTokenService refreshTokenService;
     private final RefreshCookieService refreshCookieService;
     private final CsrfCookieService csrfCookieService;
+    private final CurrentPrincipal currentPrincipal;
 
     public AuthController(
             AuthService authService,
+            RefreshTokenService refreshTokenService,
             RefreshCookieService refreshCookieService,
-            CsrfCookieService csrfCookieService) {
+            CsrfCookieService csrfCookieService,
+            CurrentPrincipal currentPrincipal) {
         this.authService = authService;
+        this.refreshTokenService = refreshTokenService;
         this.refreshCookieService = refreshCookieService;
         this.csrfCookieService = csrfCookieService;
+        this.currentPrincipal = currentPrincipal;
+    }
+
+    @GetMapping("/me")
+    public ResponseEntity<MeResponse> me() {
+        AuthenticatedPrincipal principal = currentPrincipal.require();
+        MeResponse response = authService.getMe(principal);
+        return ResponseEntity.ok()
+            .header(HttpHeaders.CACHE_CONTROL, "no-store")
+            .body(response);
+    }
+
+    @PostMapping("/login")
+    public ResponseEntity<AuthSessionResponse> login(
+            @Valid @RequestBody LoginRequest request,
+            HttpServletRequest servletRequest,
+            HttpServletResponse servletResponse) {
+        LoginResult result = authService.login(
+            request,
+            AccountRequestContext.from(servletRequest)
+        );
+        refreshCookieService.set(servletResponse, result.rawRefreshToken(), result.refreshExpiresAt());
+        csrfCookieService.expire(servletRequest, servletResponse);
+        return ResponseEntity.ok()
+            .header(HttpHeaders.CACHE_CONTROL, "no-store")
+            .body(result.response());
+    }
+
+    @PostMapping("/refresh")
+    public ResponseEntity<AuthSessionResponse> refresh(
+            @RequestBody(required = false) RefreshRequest request,
+            HttpServletRequest servletRequest,
+            HttpServletResponse servletResponse) {
+        Optional<String> rawCookie = refreshCookieService.read(servletRequest);
+        if (rawCookie.isEmpty()) {
+            refreshCookieService.clear(servletResponse);
+            throw new UnauthorizedException(ProblemCode.SESSION_INVALID);
+        }
+
+        RefreshTokenService.RefreshOutcome outcome = refreshTokenService.rotate(
+            rawCookie.get(),
+            request != null ? request.workspaceId() : null,
+            AccountRequestContext.from(servletRequest)
+        );
+
+        if (outcome instanceof RefreshTokenService.RefreshOutcome.Success success) {
+            refreshCookieService.set(servletResponse, success.rawChildRefreshToken(), success.refreshExpiresAt());
+            csrfCookieService.expire(servletRequest, servletResponse);
+            return ResponseEntity.ok()
+                .header(HttpHeaders.CACHE_CONTROL, "no-store")
+                .body(success.response());
+        }
+
+        refreshCookieService.clear(servletResponse);
+
+        if (outcome instanceof RefreshTokenService.RefreshOutcome.ReuseDetected) {
+            throw new UnauthorizedException(ProblemCode.REFRESH_REUSE_DETECTED);
+        } else if (outcome instanceof RefreshTokenService.RefreshOutcome.NoActiveMembership) {
+            throw new ForbiddenException(ProblemCode.NO_ACTIVE_MEMBERSHIP);
+        }
+        throw new UnauthorizedException(ProblemCode.SESSION_INVALID);
+    }
+
+    @PostMapping("/switch-workspace/{workspaceId}")
+    public ResponseEntity<AuthSessionResponse> switchWorkspace(
+            @PathVariable UUID workspaceId,
+            HttpServletRequest servletRequest,
+            HttpServletResponse servletResponse) {
+        Optional<String> rawCookie = refreshCookieService.read(servletRequest);
+        if (rawCookie.isEmpty()) {
+            refreshCookieService.clear(servletResponse);
+            throw new UnauthorizedException(ProblemCode.SESSION_INVALID);
+        }
+
+        RefreshTokenService.SwitchOutcome outcome = refreshTokenService.switchWorkspace(
+            rawCookie.get(),
+            workspaceId,
+            AccountRequestContext.from(servletRequest)
+        );
+
+        if (outcome instanceof RefreshTokenService.SwitchOutcome.Success success) {
+            csrfCookieService.expire(servletRequest, servletResponse);
+            return ResponseEntity.ok()
+                .header(HttpHeaders.CACHE_CONTROL, "no-store")
+                .body(success.response());
+        }
+
+        if (outcome instanceof RefreshTokenService.SwitchOutcome.WorkspaceNotFound) {
+            throw new NotFoundException(ProblemCode.WORKSPACE_NOT_FOUND);
+        }
+
+        refreshCookieService.clear(servletResponse);
+
+        if (outcome instanceof RefreshTokenService.SwitchOutcome.ReuseDetected) {
+            throw new UnauthorizedException(ProblemCode.REFRESH_REUSE_DETECTED);
+        }
+        throw new UnauthorizedException(ProblemCode.SESSION_INVALID);
+    }
+
+    @PostMapping("/logout")
+    public ResponseEntity<Void> logout(
+            HttpServletRequest servletRequest,
+            HttpServletResponse servletResponse) {
+        Optional<String> rawCookie = refreshCookieService.read(servletRequest);
+        if (rawCookie.isPresent()) {
+            refreshTokenService.logout(
+                rawCookie.get(),
+                AccountRequestContext.from(servletRequest)
+            );
+        }
+        refreshCookieService.clear(servletResponse);
+        csrfCookieService.expire(servletRequest, servletResponse);
+        return noStoreNoContent();
     }
 
     @PostMapping("/signup")

@@ -11,6 +11,7 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.access.intercept.AuthorizationFilter;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfFilter;
 
@@ -19,16 +20,18 @@ import com.adept.api.common.web.RequestBodyLimitFilter;
 import com.adept.api.common.web.TraceIdFilter;
 import com.adept.api.security.ApiAccessDeniedHandler;
 import com.adept.api.security.ApiAuthenticationEntryPoint;
+import com.adept.api.security.JwtAuthenticationFilter;
 import com.adept.api.security.OriginValidationFilter;
 import com.adept.api.security.ratelimit.AuthPeerRateLimitFilter;
 import com.adept.api.security.ratelimit.AuthRateLimiter;
 
 @Configuration
 @EnableMethodSecurity
+@SuppressWarnings("unused")
 public class SecurityConfig {
 
     @Bean
-    Clock clock() {
+    public Clock clock() {
         return Clock.systemUTC();
     }
 
@@ -94,6 +97,12 @@ public class SecurityConfig {
     }
 
     @Bean
+    FilterRegistrationBean<JwtAuthenticationFilter> disableJwtServletRegistration(
+            JwtAuthenticationFilter filter) {
+        return disabledRegistration(filter);
+    }
+
+    @Bean
     SecurityFilterChain securityFilterChain(
             HttpSecurity http,
             CookieCsrfTokenRepository csrfTokenRepository,
@@ -102,7 +111,8 @@ public class SecurityConfig {
             TraceIdFilter traceIdFilter,
             RequestBodyLimitFilter bodyLimitFilter,
             OriginValidationFilter originValidationFilter,
-            AuthPeerRateLimitFilter peerRateLimitFilter) throws Exception {
+            AuthPeerRateLimitFilter peerRateLimitFilter,
+            JwtAuthenticationFilter jwtAuthenticationFilter) throws Exception {
         return http
             .sessionManagement(session -> session
                 .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -128,19 +138,21 @@ public class SecurityConfig {
                     "/api/v1/auth/verify-email",
                     "/api/v1/auth/resend-verification",
                     "/api/v1/auth/login",
+                    "/api/v1/auth/test-endpoint",
                     "/api/v1/auth/refresh",
                     "/api/v1/auth/logout",
                     "/api/v1/auth/switch-workspace/*",
                     "/api/v1/auth/forgot-password",
                     "/api/v1/auth/reset-password"
                 ).permitAll()
-                .requestMatchers(HttpMethod.GET, "/api/v1/auth/me").authenticated()
+                .requestMatchers(HttpMethod.GET, "/api/v1/auth/me", "/api/v1/auth/test-me").authenticated()
                 .requestMatchers("/api/v1/workspaces", "/api/v1/workspaces/**").authenticated()
                 .anyRequest().denyAll())
             .addFilterBefore(originValidationFilter, CsrfFilter.class)
             .addFilterBefore(bodyLimitFilter, OriginValidationFilter.class)
             .addFilterBefore(traceIdFilter, RequestBodyLimitFilter.class)
             .addFilterAfter(peerRateLimitFilter, CsrfFilter.class)
+            .addFilterBefore(jwtAuthenticationFilter, AuthorizationFilter.class)
             .build();
     }
 
