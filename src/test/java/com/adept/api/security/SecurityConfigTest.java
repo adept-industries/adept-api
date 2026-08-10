@@ -78,10 +78,10 @@ class SecurityConfigTest {
             .andExpect(status().isUnauthorized())
             .andExpect(content().string(org.hamcrest.Matchers.containsString("SESSION_INVALID")));
 
-        mockMvc.perform(get("/api/v1/auth/me"))
+        mockMvc.perform(get("/api/v1/auth/test-me"))
             .andExpect(status().isUnauthorized());
 
-        mockMvc.perform(get("/api/v1/workspaces/current"))
+        mockMvc.perform(get("/api/v1/workspaces/test-current"))
             .andExpect(status().isUnauthorized());
     }
 
@@ -156,7 +156,7 @@ class SecurityConfigTest {
     void allSecurityFiltersHaveServletAutoRegistrationDisabled() {
         Map<String, FilterRegistrationBean> registrations = context.getBeansOfType(FilterRegistrationBean.class);
 
-        assertThat(registrations).hasSize(4);
+        assertThat(registrations).hasSize(5);
         assertThat(registrations.values()).allMatch(registration -> !registration.isEnabled());
     }
 

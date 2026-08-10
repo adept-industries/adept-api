@@ -19,6 +19,7 @@ import com.adept.api.audit.AuditAction;
 import com.adept.api.audit.AuditService;
 import com.adept.api.auth.dto.AuthSessionResponse;
 import com.adept.api.auth.dto.LoginRequest;
+import com.adept.api.auth.dto.MeResponse;
 import com.adept.api.auth.dto.MembershipSummary;
 import com.adept.api.auth.dto.SignupRequest;
 import com.adept.api.auth.dto.SignupResponse;
@@ -228,7 +229,7 @@ public class AuthService {
             user.setPasswordHash(passwordService.encodeNewPassword(newPassword));
             activeResetTokens.forEach(activeToken -> activeToken.setConsumedAt(now));
             user.setTokenVersion(user.getTokenVersion() + 1);
-            refreshTokenRepository.revokeActiveByUserId(user.getId(), now);
+            refreshTokenRepository.revokeAllForUser(user.getId());
             auditService.record(
                 AuditAction.PASSWORD_RESET_COMPLETED,
                 user,
@@ -367,6 +368,22 @@ public class AuthService {
         return (cause == null ? "" : String.valueOf(cause.getMessage())).toLowerCase(Locale.ROOT);
     }
 
+    public MeResponse getMe(AuthenticatedPrincipal principal) {
+        User user = userRepository.findById(principal.userId())
+            .orElseThrow(() -> new UnauthorizedException(ProblemCode.SESSION_INVALID));
+
+        List<Membership> activeMemberships = activeMembershipService.getActiveWorkspaces(user.getId());
+        Membership currentMembership = activeMembershipService.getActiveMembership(user.getId(), principal.workspaceId()).orElse(null);
+
+        UserSummary userSummary = UserSummary.from(user);
+        MembershipSummary membershipSummary = currentMembership != null ? MembershipSummary.from(currentMembership) : null;
+        List<WorkspaceSummaryResponse> workspaces = activeMemberships.stream()
+            .map(WorkspaceSummaryResponse::from)
+            .toList();
+
+        return new MeResponse(userSummary, membershipSummary, workspaces);
+    }
+
     public LoginResult login(LoginRequest request, AccountRequestContext context) {
         rateLimiter.requireLogin(request.email());
 
@@ -484,18 +501,18 @@ public class AuthService {
         });
 
         if (outcome instanceof LoginOutcome.Failure failure) {
-            if (failure.problemCode() == ProblemCode.INVALID_CREDENTIALS) {
-                throw new UnauthorizedException(ProblemCode.INVALID_CREDENTIALS);
-            } else if (failure.problemCode() == ProblemCode.EMAIL_NOT_VERIFIED) {
-                throw new ForbiddenException(ProblemCode.EMAIL_NOT_VERIFIED);
-            } else if (failure.problemCode() == ProblemCode.NO_ACTIVE_MEMBERSHIP) {
-                throw new ForbiddenException(ProblemCode.NO_ACTIVE_MEMBERSHIP);
+            switch (failure.problemCode()) {
+                case INVALID_CREDENTIALS -> throw new UnauthorizedException(ProblemCode.INVALID_CREDENTIALS);
+                case EMAIL_NOT_VERIFIED, NO_ACTIVE_MEMBERSHIP -> throw new ForbiddenException(failure.problemCode());
+                default -> throw new UnauthorizedException(failure.problemCode());
             }
-            throw new UnauthorizedException(failure.problemCode());
         }
 
-        LoginOutcome.Success success = (LoginOutcome.Success) outcome;
-        return new LoginResult(success.response(), success.rawRefreshToken(), success.refreshExpiresAt());
+        if (outcome instanceof LoginOutcome.Success success) {
+            return new LoginResult(success.response(), success.rawRefreshToken(), success.refreshExpiresAt());
+        }
+
+        throw new IllegalStateException("Unexpected login outcome");
     }
 
     private static final int MAX_USER_AGENT_LENGTH = 512;

@@ -22,19 +22,19 @@ public final class SecurityTestEndpoints {
         return ResponseEntity.noContent().build();
     }
 
-    @GetMapping("/api/v1/auth/me")
+    @GetMapping("/api/v1/auth/test-me")
     public ResponseEntity<Void> me() {
         invocations.incrementAndGet();
         return ResponseEntity.noContent().build();
     }
 
-    @GetMapping("/api/v1/workspaces/current")
+    @GetMapping("/api/v1/workspaces/test-current")
     public ResponseEntity<Void> currentWorkspace() {
         invocations.incrementAndGet();
         return ResponseEntity.noContent().build();
     }
 
-    @PatchMapping(path = "/api/v1/workspaces/current", consumes = MediaType.APPLICATION_JSON_VALUE)
+    @PatchMapping(path = "/api/v1/workspaces/test-current", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<Void> updateWorkspace(@RequestBody Payload payload) {
         invocations.incrementAndGet();
         return ResponseEntity.noContent().build();
