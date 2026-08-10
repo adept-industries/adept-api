@@ -15,7 +15,7 @@ class GlobalExceptionHandlerTest {
     private final GlobalExceptionHandler handler = new GlobalExceptionHandler(new ProblemResponseFactory());
 
     @Test
-    void applicationAndRateLimitFailuresUseStableProblemShape() {
+    void failuresUseStableProblemsWithoutLeakingInternalDetails() {
         MockHttpServletRequest request = request("/api/v1/auth/login?secret=value");
 
         var response = handler.handleRateLimit(new RateLimitException(17), request);
@@ -27,32 +27,26 @@ class GlobalExceptionHandlerTest {
         assertThat(response.getBody().getProperties()).containsEntry("code", "RATE_LIMITED");
         assertThat(response.getBody().getInstance().toString()).isEqualTo("/api/v1/auth/login");
         assertThat(response.getBody().toString()).doesNotContain("secret", "value");
-    }
 
-    @Test
-    void knownDatabaseConstraintDoesNotExposeInternalDetails() {
-        MockHttpServletRequest request = request("/api/v1/auth/signup");
+        MockHttpServletRequest signupRequest = request("/api/v1/auth/signup");
         DataIntegrityViolationException exception = new DataIntegrityViolationException(
             "SQL containing submitted@example.com",
             new RuntimeException("duplicate constraint uq_users_email_lower submitted@example.com"));
 
-        var response = handler.handleDatabaseConflict(exception, request);
+        var conflictResponse = handler.handleDatabaseConflict(exception, signupRequest);
 
-        assertThat(response.getStatusCode().value()).isEqualTo(409);
-        assertThat(response.getBody().getProperties()).containsEntry("code", "EMAIL_ALREADY_EXISTS");
-        assertThat(response.getBody().toString())
+        assertThat(conflictResponse.getStatusCode().value()).isEqualTo(409);
+        assertThat(conflictResponse.getBody().getProperties()).containsEntry("code", "EMAIL_ALREADY_EXISTS");
+        assertThat(conflictResponse.getBody().toString())
             .doesNotContain("uq_users_email_lower", "submitted@example.com", "SQL");
-    }
 
-    @Test
-    void unexpectedErrorReturnsOnlyGenericSafeDetail() {
-        var response = handler.handleUnexpected(
+        var unexpectedResponse = handler.handleUnexpected(
             new IllegalStateException("database password is hunter2"),
             request("/api/v1/workspaces/current"));
 
-        assertThat(response.getStatusCode().value()).isEqualTo(500);
-        assertThat(response.getBody().getProperties()).containsEntry("code", "INTERNAL_ERROR");
-        assertThat(response.getBody().toString()).doesNotContain("hunter2", "IllegalStateException");
+        assertThat(unexpectedResponse.getStatusCode().value()).isEqualTo(500);
+        assertThat(unexpectedResponse.getBody().getProperties()).containsEntry("code", "INTERNAL_ERROR");
+        assertThat(unexpectedResponse.getBody().toString()).doesNotContain("hunter2", "IllegalStateException");
     }
 
     private static MockHttpServletRequest request(String uri) {

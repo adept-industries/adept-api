@@ -103,7 +103,6 @@ public class AuthController {
 
         if (outcome instanceof RefreshTokenService.RefreshOutcome.Success success) {
             refreshCookieService.set(servletResponse, success.rawChildRefreshToken(), success.refreshExpiresAt());
-            csrfCookieService.expire(servletRequest, servletResponse);
             return ResponseEntity.ok()
                 .header(HttpHeaders.CACHE_CONTROL, "no-store")
                 .body(success.response());
@@ -137,7 +136,6 @@ public class AuthController {
         );
 
         if (outcome instanceof RefreshTokenService.SwitchOutcome.Success success) {
-            csrfCookieService.expire(servletRequest, servletResponse);
             return ResponseEntity.ok()
                 .header(HttpHeaders.CACHE_CONTROL, "no-store")
                 .body(success.response());

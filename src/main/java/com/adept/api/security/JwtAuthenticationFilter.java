@@ -1,6 +1,7 @@
 package com.adept.api.security;
 
 import java.io.IOException;
+import java.util.Collections;
 import java.util.List;
 
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -39,19 +40,26 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String path = request.getRequestURI();
         return !("/api/v1/auth/me".equals(path)
             || "/api/v1/auth/test-me".equals(path)
+            || "/api/v1/workspaces".equals(path)
             || path.startsWith("/api/v1/workspaces/"));
     }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
-        String header = request.getHeader("Authorization");
-        if (header == null || header.isBlank()) {
+        List<String> headers = Collections.list(request.getHeaders("Authorization"));
+        if (headers.isEmpty()) {
             chain.doFilter(request, response);
             return;
         }
 
-        if (header.contains(",") || !header.startsWith("Bearer ")) {
+        if (headers.size() != 1) {
+            reject(request, response);
+            return;
+        }
+
+        String header = headers.getFirst();
+        if (header == null || header.isBlank() || header.contains(",") || !header.startsWith("Bearer ")) {
             reject(request, response);
             return;
         }
@@ -62,22 +70,24 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return;
         }
 
+        PrincipalValidationService.ValidatedPrincipal validated;
         try {
             JwtClaims claims = jwtService.parse(token);
-            PrincipalValidationService.ValidatedPrincipal validated = principalValidationService
+            validated = principalValidationService
                 .validate(claims.userId(), claims.membershipId(), claims.workspaceId(), claims.role(), claims.tokenVersion())
                 .orElseThrow(() -> new UnauthorizedException(ProblemCode.SESSION_INVALID));
-
-            UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
-                validated.principal(),
-                null,
-                List.of(new SimpleGrantedAuthority(validated.principal().role().name()))
-            );
-            SecurityContextHolder.getContext().setAuthentication(authentication);
-            chain.doFilter(request, response);
         } catch (RuntimeException exception) {
             reject(request, response);
+            return;
         }
+
+        UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
+            validated.principal(),
+            null,
+            List.of(new SimpleGrantedAuthority(validated.principal().role().name()))
+        );
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+        chain.doFilter(request, response);
     }
 
     private void reject(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {

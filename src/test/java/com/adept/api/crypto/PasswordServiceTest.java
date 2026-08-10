@@ -26,34 +26,28 @@ class PasswordServiceTest {
     }
 
     @Test
-    void missingUserUsesOneDummyHashComparison() {
+    void authenticationCandidatesAlwaysUseOneSafeComparison() {
         RecordingEncoder encoder = new RecordingEncoder(true);
         PasswordService service = new PasswordService(new PasswordPolicy(), encoder);
 
         assertThat(service.matchesAuthenticationCandidate("candidate", null)).isFalse();
         assertThat(encoder.matchCalls).isEqualTo(1);
         assertThat(encoder.lastHash).startsWith("$2a$12$");
-    }
 
-    @Test
-    void authenticationCandidatesDoNotRunCreationPolicyAndCompareExactlyOnce() {
         for (String candidate : new String[] {"short", "password", "x".repeat(73)}) {
-            RecordingEncoder encoder = new RecordingEncoder(false);
-            PasswordService service = new PasswordService(new PasswordPolicy(), encoder);
+            RecordingEncoder candidateEncoder = new RecordingEncoder(false);
+            PasswordService candidateService = new PasswordService(new PasswordPolicy(), candidateEncoder);
 
-            assertThat(service.matchesAuthenticationCandidate(candidate, "real-hash")).isFalse();
-            assertThat(encoder.matchCalls).isEqualTo(1);
+            assertThat(candidateService.matchesAuthenticationCandidate(candidate, "real-hash")).isFalse();
+            assertThat(candidateEncoder.matchCalls).isEqualTo(1);
         }
-    }
 
-    @Test
-    void oversizedCandidateUsesFixedSeventyTwoByteSubstituteAndForcesFailure() {
-        RecordingEncoder encoder = new RecordingEncoder(true);
-        PasswordService service = new PasswordService(new PasswordPolicy(), encoder);
+        RecordingEncoder oversizedEncoder = new RecordingEncoder(true);
+        PasswordService oversizedService = new PasswordService(new PasswordPolicy(), oversizedEncoder);
 
-        assertThat(service.matchesAuthenticationCandidate("x".repeat(73), "real-hash")).isFalse();
-        assertThat(encoder.lastCandidate.getBytes(java.nio.charset.StandardCharsets.UTF_8)).hasSize(72);
-        assertThat(encoder.matchCalls).isEqualTo(1);
+        assertThat(oversizedService.matchesAuthenticationCandidate("x".repeat(73), "real-hash")).isFalse();
+        assertThat(oversizedEncoder.lastCandidate.getBytes(java.nio.charset.StandardCharsets.UTF_8)).hasSize(72);
+        assertThat(oversizedEncoder.matchCalls).isEqualTo(1);
     }
 
     private static final class RecordingEncoder implements PasswordEncoder {

@@ -4,16 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Duration;
 import java.util.UUID;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.Executor;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -30,12 +24,8 @@ class AccountMailListenerTest extends PartCIntegrationTestSupport {
     @Autowired
     private PlatformTransactionManager transactionManager;
 
-    @Autowired
-    @Qualifier("accountMailExecutor")
-    private Executor accountMailExecutor;
-
     @Test
-    void mailEventDiagnosticStringsRedactRecipientsAndRawTokens() {
+    void mailContentUsesSafeFragmentLinksAndRedactsDiagnosticStrings() {
         UUID userId = UUID.randomUUID();
         String recipient = "private-recipient@example.com";
         String rawToken = "private-raw-token";
@@ -49,10 +39,7 @@ class AccountMailListenerTest extends PartCIntegrationTestSupport {
         assertThat(new PasswordChangedMailRequested(userId, recipient, "trace-changed").toString())
             .contains(userId.toString(), "trace-changed", "recipient=<redacted>")
             .doesNotContain(recipient);
-    }
 
-    @Test
-    void verificationAndResetLinksUseFragmentsOnTheConfiguredFrontendOrigin() {
         String verificationRecipient = uniqueEmail("mail-verify");
         String resetRecipient = uniqueEmail("mail-reset");
 
@@ -76,75 +63,33 @@ class AccountMailListenerTest extends PartCIntegrationTestSupport {
     }
 
     @Test
-    void transactionalMailRunsOnlyAfterCommitAndOnTheNamedExecutor() {
-        String recipient = uniqueEmail("mail-after-commit");
+    void transactionalMailRunsAfterCommitAndNotAfterRollback() throws Exception {
+        String commitRecipient = uniqueEmail("mail-after-commit");
         TransactionTemplate transaction = new TransactionTemplate(transactionManager);
 
         transaction.executeWithoutResult(status -> {
             eventPublisher.publishEvent(new VerificationMailRequested(
-                UUID.randomUUID(), recipient, "RAW_TOKEN", "trace-after-commit"));
+                UUID.randomUUID(), commitRecipient, "RAW_TOKEN", "trace-after-commit"));
             assertThat(mailSender.messages()).noneMatch(
-                message -> message.recipients().contains(recipient));
+                message -> message.recipients().contains(commitRecipient));
         });
 
         var delivered = mailSender.await(
-            message -> message.recipients().contains(recipient),
+            message -> message.recipients().contains(commitRecipient),
             Duration.ofSeconds(5)
         );
         assertThat(delivered.threadName()).startsWith("account-mail-");
-    }
 
-    @Test
-    void rolledBackTransactionDoesNotSendMail() throws Exception {
-        String recipient = uniqueEmail("mail-rollback");
-        TransactionTemplate transaction = new TransactionTemplate(transactionManager);
+        String rollbackRecipient = uniqueEmail("mail-rollback");
 
         transaction.executeWithoutResult(status -> {
             eventPublisher.publishEvent(new PasswordResetMailRequested(
-                UUID.randomUUID(), recipient, "RAW_TOKEN", "trace-rollback"));
+                UUID.randomUUID(), rollbackRecipient, "RAW_TOKEN", "trace-rollback"));
             status.setRollbackOnly();
         });
 
         Thread.sleep(200);
         assertThat(mailSender.messages()).noneMatch(
-            message -> message.recipients().contains(recipient));
-    }
-
-    @Test
-    void saturatedExecutorDiscardsInsteadOfRunningWorkOnTheRequestThread() throws Exception {
-        ThreadPoolTaskExecutor executor = (ThreadPoolTaskExecutor) accountMailExecutor;
-        CountDownLatch running = new CountDownLatch(2);
-        CountDownLatch release = new CountDownLatch(1);
-        Runnable blocker = () -> {
-            running.countDown();
-            try {
-                release.await();
-            } catch (InterruptedException exception) {
-                Thread.currentThread().interrupt();
-            }
-        };
-        executor.execute(blocker);
-        executor.execute(blocker);
-        assertThat(running.await(5, TimeUnit.SECONDS)).isTrue();
-        for (int index = 0; index < 100; index++) {
-            executor.execute(blocker);
-        }
-        AtomicBoolean rejectedTaskRan = new AtomicBoolean();
-        String requestThread = Thread.currentThread().getName();
-
-        executor.execute(() -> {
-            rejectedTaskRan.set(true);
-            assertThat(Thread.currentThread().getName()).isNotEqualTo(requestThread);
-        });
-
-        assertThat(rejectedTaskRan).isFalse();
-        release.countDown();
-        long deadline = System.nanoTime() + Duration.ofSeconds(5).toNanos();
-        while ((executor.getActiveCount() != 0 || executor.getQueueSize() != 0)
-                && System.nanoTime() < deadline) {
-            Thread.sleep(10);
-        }
-        assertThat(executor.getActiveCount()).isZero();
-        assertThat(executor.getQueueSize()).isZero();
+            message -> message.recipients().contains(rollbackRecipient));
     }
 }

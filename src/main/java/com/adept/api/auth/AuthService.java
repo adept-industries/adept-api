@@ -53,6 +53,11 @@ import com.adept.api.workspace.WorkspaceRepository;
 import com.adept.api.workspace.WorkspaceSlugService;
 import com.adept.api.workspace.dto.WorkspaceSummaryResponse;
 
+import jakarta.validation.Validator;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+
 @Service
 public class AuthService {
 
@@ -75,6 +80,7 @@ public class AuthService {
     private final AppProperties appProperties;
     private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
+    private final Validator validator;
     private final TransactionTemplate transactionTemplate;
 
     public AuthService(
@@ -95,6 +101,7 @@ public class AuthService {
             AppProperties appProperties,
             ApplicationEventPublisher eventPublisher,
             Clock clock,
+            Validator validator,
             PlatformTransactionManager transactionManager) {
         this.userRepository = userRepository;
         this.workspaceRepository = workspaceRepository;
@@ -113,6 +120,7 @@ public class AuthService {
         this.appProperties = appProperties;
         this.eventPublisher = eventPublisher;
         this.clock = clock;
+        this.validator = validator;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
         this.transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
@@ -390,34 +398,30 @@ public class AuthService {
         String rawEmail = request.email() == null ? "" : request.email().trim();
         String normalizedEmail = rawEmail.toLowerCase(Locale.ROOT);
         String emailHmac = tokenHasher.hashAuditEmail(normalizedEmail);
+        boolean lookupEligible = validator.validate(new LoginEmailLookupCandidate(normalizedEmail)).isEmpty();
 
         LoginOutcome outcome = transactionTemplate.execute(status -> {
-            User user = userRepository.findByEmailIgnoreCase(normalizedEmail).orElse(null);
+            UUID userId = lookupEligible
+                ? userRepository.findIdByEmailIgnoreCase(normalizedEmail).orElse(null)
+                : null;
+            User user = userId == null ? null : userRepository.findByIdForUpdate(userId).orElse(null);
 
             String currentHash = user != null ? user.getPasswordHash() : null;
             boolean passwordMatches = passwordService.matchesAuthenticationCandidate(request.password(), currentHash);
 
             if (user == null || !passwordMatches || user.getStatus() != UserStatus.ACTIVE) {
-                auditService.record(
-                    AuditAction.LOGIN_FAILED,
-                    null,
-                    null,
-                    null,
-                    "USER",
-                    null,
-                    Map.of("reason", "invalid_credentials", "emailHmac", emailHmac),
-                    context.ipAddress(),
-                    context.userAgent()
-                );
+                recordFailedLogin(emailHmac, context);
                 return new LoginOutcome.Failure(ProblemCode.INVALID_CREDENTIALS);
             }
 
             if (user.getEmailVerifiedAt() == null) {
+                recordFailedLogin(emailHmac, context);
                 return new LoginOutcome.Failure(ProblemCode.EMAIL_NOT_VERIFIED);
             }
 
             List<Membership> activeMemberships = activeMembershipService.getActiveWorkspaces(user.getId());
             if (activeMemberships.isEmpty()) {
+                recordFailedLogin(emailHmac, context);
                 return new LoginOutcome.Failure(ProblemCode.NO_ACTIVE_MEMBERSHIP);
             }
 
@@ -517,6 +521,20 @@ public class AuthService {
 
     private static final int MAX_USER_AGENT_LENGTH = 512;
 
+    private void recordFailedLogin(String emailHmac, AccountRequestContext context) {
+        auditService.record(
+            AuditAction.LOGIN_FAILED,
+            null,
+            null,
+            null,
+            "USER",
+            null,
+            Map.of("reason", "invalid_credentials", "emailHmac", emailHmac),
+            context.ipAddress(),
+            context.userAgent()
+        );
+    }
+
     private static String safeUserAgent(String value) {
         if (value == null) {
             return "";
@@ -531,4 +549,8 @@ public class AuthService {
         record Success(AuthSessionResponse response, String rawRefreshToken, Instant refreshExpiresAt) implements LoginOutcome {}
         record Failure(ProblemCode problemCode) implements LoginOutcome {}
     }
+
+    private record LoginEmailLookupCandidate(
+        @NotBlank @Email @Size(max = 320) String value
+    ) {}
 }

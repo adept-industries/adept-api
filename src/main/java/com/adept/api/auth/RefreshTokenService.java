@@ -108,7 +108,7 @@ public class RefreshTokenService {
             }
 
             RefreshToken token = refreshTokenRepository.findByIdForUpdate(tokenId).orElse(null);
-            if (token == null) {
+            if (token == null || !token.getUser().getId().equals(user.getId())) {
                 return new RefreshOutcome.Invalid();
             }
 
@@ -119,25 +119,7 @@ public class RefreshTokenService {
             }
 
             if (token.getRotatedAt() != null) {
-                if (token.getReuseDetectedAt() == null) {
-                    token.setReuseDetectedAt(now);
-                    refreshTokenRepository.save(token);
-                    refreshTokenRepository.revokeFamily(token.getFamilyId());
-                    user.setTokenVersion(user.getTokenVersion() + 1);
-                    userRepository.save(user);
-
-                    auditService.record(
-                        AuditAction.REFRESH_REUSE_DETECTED,
-                        user,
-                        null,
-                        null,
-                        "USER",
-                        user.getId(),
-                        Map.of("familyId", token.getFamilyId().toString()),
-                        context.ipAddress(),
-                        context.userAgent()
-                    );
-                }
+                commitReuseDetection(user, token, now, context);
                 return new RefreshOutcome.ReuseDetected();
             }
 
@@ -158,11 +140,12 @@ public class RefreshTokenService {
 
             Membership selectedMembership = null;
             if (requestedWorkspaceId != null) {
-                selectedMembership = activeMembershipService.getActiveMembership(user.getId(), requestedWorkspaceId).orElse(null);
-                if (selectedMembership == null) {
-                    return new RefreshOutcome.NoActiveMembership();
-                }
-            } else if (activeMemberships.size() == 1) {
+                selectedMembership = activeMemberships.stream()
+                    .filter(membership -> membership.getWorkspace().getId().equals(requestedWorkspaceId))
+                    .findFirst()
+                    .orElse(null);
+            }
+            if (selectedMembership == null && activeMemberships.size() == 1) {
                 selectedMembership = activeMemberships.get(0);
             }
 
@@ -264,7 +247,7 @@ public class RefreshTokenService {
             }
 
             RefreshToken token = refreshTokenRepository.findByIdForUpdate(tokenId).orElse(null);
-            if (token == null) {
+            if (token == null || !token.getUser().getId().equals(user.getId())) {
                 return new SwitchOutcome.Invalid();
             }
 
@@ -275,25 +258,7 @@ public class RefreshTokenService {
             }
 
             if (token.getRotatedAt() != null) {
-                if (token.getReuseDetectedAt() == null) {
-                    token.setReuseDetectedAt(now);
-                    refreshTokenRepository.save(token);
-                    refreshTokenRepository.revokeFamily(token.getFamilyId());
-                    user.setTokenVersion(user.getTokenVersion() + 1);
-                    userRepository.save(user);
-
-                    auditService.record(
-                        AuditAction.REFRESH_REUSE_DETECTED,
-                        user,
-                        null,
-                        null,
-                        "USER",
-                        user.getId(),
-                        Map.of("familyId", token.getFamilyId().toString()),
-                        context.ipAddress(),
-                        context.userAgent()
-                    );
-                }
+                commitReuseDetection(user, token, now, context);
                 return new SwitchOutcome.ReuseDetected();
             }
 
@@ -376,32 +341,18 @@ public class RefreshTokenService {
             }
 
             RefreshToken token = refreshTokenRepository.findByIdForUpdate(tokenId).orElse(null);
-            if (token == null) {
+            if (token == null || !token.getUser().getId().equals(user.getId())) {
                 return;
             }
 
             Instant now = clock.instant();
 
-            if (token.getRotatedAt() != null) {
-                if (token.getReuseDetectedAt() == null) {
-                    token.setReuseDetectedAt(now);
-                    refreshTokenRepository.save(token);
-                    refreshTokenRepository.revokeFamily(token.getFamilyId());
-                    user.setTokenVersion(user.getTokenVersion() + 1);
-                    userRepository.save(user);
+            if (!token.getExpiresAt().isAfter(now)) {
+                return;
+            }
 
-                    auditService.record(
-                        AuditAction.REFRESH_REUSE_DETECTED,
-                        user,
-                        null,
-                        null,
-                        "USER",
-                        user.getId(),
-                        Map.of("familyId", token.getFamilyId().toString()),
-                        context.ipAddress(),
-                        context.userAgent()
-                    );
-                }
+            if (token.getRotatedAt() != null) {
+                commitReuseDetection(user, token, now, context);
                 return;
             }
 
@@ -421,6 +372,40 @@ public class RefreshTokenService {
                 );
             }
         });
+    }
+
+    private void commitReuseDetection(
+            User user,
+            RefreshToken presentedToken,
+            Instant now,
+            AccountRequestContext context) {
+        UUID familyId = presentedToken.getFamilyId();
+        boolean alreadyDetected = refreshTokenRepository.existsByFamilyIdAndReuseDetectedAtIsNotNull(familyId);
+
+        if (!alreadyDetected) {
+            presentedToken.setReuseDetectedAt(now);
+            refreshTokenRepository.save(presentedToken);
+        }
+
+        refreshTokenRepository.revokeFamily(familyId);
+
+        if (alreadyDetected) {
+            return;
+        }
+
+        user.setTokenVersion(user.getTokenVersion() + 1);
+        userRepository.save(user);
+        auditService.record(
+            AuditAction.REFRESH_REUSE_DETECTED,
+            user,
+            null,
+            null,
+            "USER",
+            user.getId(),
+            Map.of("familyId", familyId.toString()),
+            context.ipAddress(),
+            context.userAgent()
+        );
     }
 
     private static String safeUserAgent(String value) {

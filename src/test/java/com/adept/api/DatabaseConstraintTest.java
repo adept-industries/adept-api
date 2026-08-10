@@ -171,7 +171,7 @@ class DatabaseConstraintTest {
     }
 
     @Test
-    void leadAssignmentRejectsBothTargets() {
+    void leadAssignmentRequiresExactlyOneTarget() {
         AssignmentFixture fixture = createAssignmentFixture();
 
         assertThatThrownBy(() -> jdbc.update("""
@@ -184,11 +184,6 @@ class DatabaseConstraintTest {
             fixture.leadMembershipId(), fixture.invitationId(),
             fixture.tenant().managerMembershipId()))
             .isInstanceOf(DataIntegrityViolationException.class);
-    }
-
-    @Test
-    void leadAssignmentRejectsNoTarget() {
-        AssignmentFixture fixture = createAssignmentFixture();
 
         assertThatThrownBy(() -> jdbc.update("""
             INSERT INTO repository_lead_assignments (
@@ -201,7 +196,7 @@ class DatabaseConstraintTest {
     }
 
     @Test
-    void repositoryAcceptsMultipleDistinctLeadMemberships() {
+    void repositoryAcceptsDistinctLeadMembershipsAndRejectsDuplicatePairs() {
         AssignmentFixture fixture = createAssignmentFixture();
         UUID coLeadMembershipId =
             insertLeadMembership(fixture.tenant(), "co-lead@example.com");
@@ -212,19 +207,13 @@ class DatabaseConstraintTest {
 
         assertThat(leadAssignmentId).isNotEqualTo(coLeadAssignmentId);
         assertThat(assignmentCountForRepository(fixture.tenant().repositoryId())).isEqualTo(2);
-    }
-
-    @Test
-    void repositoryRejectsDuplicateLeadMembership() {
-        AssignmentFixture fixture = createAssignmentFixture();
-        insertMembershipAssignment(fixture);
 
         assertThatThrownBy(() -> insertMembershipAssignment(fixture))
             .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     @Test
-    void repositoryAcceptsMultipleDistinctLeadInvitations() {
+    void repositoryAcceptsDistinctLeadInvitationsAndRejectsDuplicatePairs() {
         AssignmentFixture fixture = createAssignmentFixture();
         UUID coLeadInvitationId = insertInvitation(
             fixture.tenant().workspaceId(),
@@ -239,41 +228,26 @@ class DatabaseConstraintTest {
 
         assertThat(leadInvitationAssignmentId).isNotEqualTo(coLeadInvitationAssignmentId);
         assertThat(assignmentCountForRepository(fixture.tenant().repositoryId())).isEqualTo(2);
-    }
-
-    @Test
-    void repositoryRejectsDuplicateLeadInvitation() {
-        AssignmentFixture fixture = createAssignmentFixture();
-        insertInvitationAssignment(fixture);
 
         assertThatThrownBy(() -> insertInvitationAssignment(fixture))
             .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     @Test
-    void duplicateWebhookDeliveryIsRejected() {
+    void eventJobAndPredictionUniquenessConstraintsRejectDuplicates() {
         TenantFixture tenant = createTenantFixture();
-        insertRawEvent(tenant, "duplicate-delivery");
+        UUID rawEventId = insertRawEvent(tenant, "duplicate-delivery");
 
         assertThatThrownBy(() -> insertRawEvent(tenant, "duplicate-delivery"))
             .isInstanceOf(DataIntegrityViolationException.class);
-    }
 
-    @Test
-    void duplicatePredictionForPullRequestAndModelVersionIsRejected() {
-        TenantFixture tenant = createTenantFixture();
         UUID pullRequestId = insertPullRequest(tenant);
         insertRiskPrediction(tenant, pullRequestId, "adept-risk", "1.0.0");
 
         assertThatThrownBy(() ->
             insertRiskPrediction(tenant, pullRequestId, "adept-risk", "1.0.0"))
             .isInstanceOf(DataIntegrityViolationException.class);
-    }
 
-    @Test
-    void processingJobIsUniqueForRawEventAndJobType() {
-        TenantFixture tenant = createTenantFixture();
-        UUID rawEventId = insertRawEvent(tenant, "job-delivery");
         insertProcessingJob(tenant, rawEventId, "PROCESS_GITHUB_EVENT");
 
         assertThat(insertProcessingJob(tenant, rawEventId, "RECALCULATE_METRICS")).isNotNull();
@@ -283,7 +257,7 @@ class DatabaseConstraintTest {
     }
 
     @Test
-    void deletingLeadMembershipTargetDeletesOnlyThatAssignment() {
+    void deletingAssignmentTargetsDeletesOnlyTheirOwnAssignments() {
         AssignmentFixture fixture = createAssignmentFixture();
         UUID assignmentId = insertMembershipAssignment(fixture);
         UUID coLeadMembershipId =
@@ -297,20 +271,15 @@ class DatabaseConstraintTest {
 
         assertThat(rowCount("repository_lead_assignments", assignmentId)).isZero();
         assertThat(rowCount("repository_lead_assignments", coLeadAssignmentId)).isOne();
-    }
 
-    @Test
-    void deletingInvitationTargetDeletesOnlyThatAssignment() {
-        AssignmentFixture fixture = createAssignmentFixture();
-        UUID membershipAssignmentId = insertMembershipAssignment(fixture);
-        UUID assignmentId = insertInvitationAssignment(fixture);
+        UUID invitationAssignmentId = insertInvitationAssignment(fixture);
 
         assertThat(jdbc.update(
             "DELETE FROM workspace_invitations WHERE id = ?", fixture.invitationId()
         )).isOne();
 
-        assertThat(rowCount("repository_lead_assignments", assignmentId)).isZero();
-        assertThat(rowCount("repository_lead_assignments", membershipAssignmentId)).isOne();
+        assertThat(rowCount("repository_lead_assignments", invitationAssignmentId)).isZero();
+        assertThat(rowCount("repository_lead_assignments", coLeadAssignmentId)).isOne();
     }
 
     @Test
