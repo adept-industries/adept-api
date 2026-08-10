@@ -37,7 +37,7 @@ class SessionEndpointsIntegrationTest extends PartCIntegrationTestSupport {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Test
-    void switchWorkspaceSucceedsWithoutBearerAndDoesNotRotateRefreshToken() throws Exception {
+    void switchWorkspaceAcceptsOwnMembershipWithoutRotatingAndHidesUnrelatedTargets() throws Exception {
         String email = uniqueEmail("switch-ws");
         SignupResponse signup = authService.signup(
             new SignupRequest(email, VALID_PASSWORD, "Switch User", "Primary Workspace", "UTC"),
@@ -79,53 +79,27 @@ class SessionEndpointsIntegrationTest extends PartCIntegrationTestSupport {
         List<RefreshToken> tokens = refreshTokenRepository.findAll();
         assertThat(tokens).hasSize(1);
         assertThat(tokens.get(0).getRotatedAt()).isNull();
+        assertThat(switchResult.getResponse().getHeaders(HttpHeaders.SET_COOKIE))
+            .noneMatch(headerValue -> headerValue.startsWith("XSRF-TOKEN="));
 
         Integer auditCount = jdbc.queryForObject(
             "SELECT count(*) FROM audit_logs WHERE action = 'WORKSPACE_SWITCHED'",
             Integer.class
         );
         assertThat(auditCount).isGreaterThanOrEqualTo(1);
-    }
-
-    @Test
-    void switchWorkspaceReturns404ForUnrelatedTarget() throws Exception {
-        String email = uniqueEmail("switch-404");
-        SignupResponse signup = authService.signup(
-            new SignupRequest(email, VALID_PASSWORD, "Unrelated User", "Unrelated Workspace", "UTC"),
-            requestContext()
-        );
-
-        jdbc.update("UPDATE users SET email_verified_at = now() WHERE id = ?", signup.user().id());
-
-        CsrfPair csrf1 = fetchCsrf(mockMvc);
-        MvcResult loginResult = mockMvc.perform(post("/api/v1/auth/login")
-                .header("Origin", FRONTEND_ORIGIN)
-                .header("X-XSRF-TOKEN", csrf1.token())
-                .cookie(csrf1.cookie())
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("""
-                    {
-                        "email": "%s",
-                        "password": "%s"
-                    }
-                    """.formatted(email, VALID_PASSWORD)))
-            .andExpect(status().isOk())
-            .andReturn();
-
-        Cookie refreshCookie = loginResult.getResponse().getCookie("adept_refresh");
 
         UUID randomWorkspaceId = UUID.randomUUID();
-        CsrfPair csrf2 = fetchCsrf(mockMvc);
+        CsrfPair unrelatedCsrf = fetchCsrf(mockMvc);
         mockMvc.perform(post("/api/v1/auth/switch-workspace/" + randomWorkspaceId)
                 .header("Origin", FRONTEND_ORIGIN)
-                .header("X-XSRF-TOKEN", csrf2.token())
-                .cookie(csrf2.cookie(), refreshCookie))
+                .header("X-XSRF-TOKEN", unrelatedCsrf.token())
+                .cookie(unrelatedCsrf.cookie(), refreshCookie))
             .andExpect(status().isNotFound())
             .andExpect(jsonPath("$.code").value("WORKSPACE_NOT_FOUND"));
     }
 
     @Test
-    void logoutRevokesFamilyAndClearsCookieIdempotently() throws Exception {
+    void logoutIsIdempotentAndMalformedCookiesAreCleared() throws Exception {
         String email = uniqueEmail("logout-test");
         SignupResponse signup = authService.signup(
             new SignupRequest(email, VALID_PASSWORD, "Logout User", "Logout Workspace", "UTC"),
@@ -180,6 +154,28 @@ class SessionEndpointsIntegrationTest extends PartCIntegrationTestSupport {
                 .header("X-XSRF-TOKEN", csrf3.token())
                 .cookie(csrf3.cookie()))
             .andExpect(status().isNoContent());
+
+        Cookie malformed = new Cookie("adept_refresh", "malformed-refresh-value");
+
+        CsrfPair refreshCsrf = fetchCsrf(mockMvc);
+        MvcResult refreshResult = mockMvc.perform(post("/api/v1/auth/refresh")
+                .header("Origin", FRONTEND_ORIGIN)
+                .header("X-XSRF-TOKEN", refreshCsrf.token())
+                .cookie(refreshCsrf.cookie(), malformed)
+                .contentType(MediaType.APPLICATION_JSON))
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.code").value("SESSION_INVALID"))
+            .andReturn();
+        assertExactRefreshDeletion(refreshResult);
+
+        CsrfPair logoutCsrf = fetchCsrf(mockMvc);
+        MvcResult malformedLogoutResult = mockMvc.perform(post("/api/v1/auth/logout")
+                .header("Origin", FRONTEND_ORIGIN)
+                .header("X-XSRF-TOKEN", logoutCsrf.token())
+                .cookie(logoutCsrf.cookie(), malformed))
+            .andExpect(status().isNoContent())
+            .andReturn();
+        assertExactRefreshDeletion(malformedLogoutResult);
     }
 
     @Test
@@ -248,5 +244,17 @@ class SessionEndpointsIntegrationTest extends PartCIntegrationTestSupport {
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken))
             .andExpect(status().isUnauthorized())
             .andExpect(jsonPath("$.code").value("SESSION_INVALID"));
+    }
+
+    private static void assertExactRefreshDeletion(MvcResult result) {
+        assertThat(result.getResponse().getHeaders(HttpHeaders.SET_COOKIE))
+            .anySatisfy(headerValue -> assertThat(headerValue)
+                .startsWith("adept_refresh=")
+                .contains("Path=/api/v1/auth")
+                .contains("Max-Age=0")
+                .contains("Secure")
+                .contains("HttpOnly")
+                .contains("SameSite=Strict")
+                .doesNotContain("Domain="));
     }
 }

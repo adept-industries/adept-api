@@ -33,21 +33,18 @@ class RequestBodyLimitFilterTest {
         assertThat(response.getStatus()).isEqualTo(413);
         assertThat(response.getContentAsString()).contains("PAYLOAD_TOO_LARGE");
         assertThat(downstreamWork).isFalse();
-    }
 
-    @Test
-    void exactlySixteenKibibytesPassesTheCountingStream() throws Exception {
-        MockHttpServletRequest request = unknownLengthRequest(
+        MockHttpServletRequest boundaryRequest = unknownLengthRequest(
             "x".repeat(RequestBodyLimitFilter.MAX_BODY_BYTES));
-        AtomicBoolean downstreamWork = new AtomicBoolean();
+        AtomicBoolean boundaryDownstreamWork = new AtomicBoolean();
 
-        filter.doFilter(request, new MockHttpServletResponse(), (wrappedRequest, wrappedResponse) -> {
+        filter.doFilter(boundaryRequest, new MockHttpServletResponse(), (wrappedRequest, wrappedResponse) -> {
             assertThat(wrappedRequest.getInputStream().readAllBytes())
                 .hasSize(RequestBodyLimitFilter.MAX_BODY_BYTES);
-            downstreamWork.set(true);
+            boundaryDownstreamWork.set(true);
         });
 
-        assertThat(downstreamWork).isTrue();
+        assertThat(boundaryDownstreamWork).isTrue();
     }
 
     private static MockHttpServletRequest unknownLengthRequest(String body) {

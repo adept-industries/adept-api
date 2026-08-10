@@ -67,14 +67,14 @@ class JwtAuthenticationIntegrationTest extends PartCIntegrationTestSupport {
     }
 
     @Test
-    void changedTokenVersionRejectsBearerToken() throws Exception {
-        String email = uniqueEmail("jwt-tokenver");
+    void currentDatabaseStateAlwaysInvalidatesStaleBearerClaims() throws Exception {
+        String email = uniqueEmail("jwt-live-state");
         SignupResponse signup = authService.signup(
-            new SignupRequest(email, VALID_PASSWORD, "TokenVer User", "TokenVer Workspace", "UTC"),
+            new SignupRequest(email, VALID_PASSWORD, "Live State User", "Live State Workspace", "UTC"),
             requestContext()
         );
-
         jdbc.update("UPDATE users SET email_verified_at = now() WHERE id = ?", signup.user().id());
+        jdbc.update("UPDATE memberships SET role = 'LEAD' WHERE user_id = ?", signup.user().id());
 
         CsrfPair csrf = fetchCsrf(mockMvc);
         MvcResult loginResult = mockMvc.perform(post("/api/v1/auth/login")
@@ -89,55 +89,33 @@ class JwtAuthenticationIntegrationTest extends PartCIntegrationTestSupport {
                     }
                     """.formatted(email, VALID_PASSWORD)))
             .andExpect(status().isOk())
+            .andExpect(jsonPath("$.currentMembership.role").value("LEAD"))
             .andReturn();
+        String accessToken = objectMapper.readTree(loginResult.getResponse().getContentAsString())
+            .get("accessToken").asText();
 
-        String body = loginResult.getResponse().getContentAsString();
-        String accessToken = objectMapper.readTree(body).get("accessToken").asText();
+        jdbc.update("UPDATE memberships SET role = 'MANAGER' WHERE user_id = ?", signup.user().id());
+        assertSessionInvalid(accessToken);
+        jdbc.update("UPDATE memberships SET role = 'LEAD' WHERE user_id = ?", signup.user().id());
 
-        // Increment user token_version in DB
         jdbc.update("UPDATE users SET token_version = token_version + 1 WHERE id = ?", signup.user().id());
+        assertSessionInvalid(accessToken);
+        jdbc.update("UPDATE users SET token_version = token_version - 1 WHERE id = ?", signup.user().id());
 
-        mockMvc.perform(get("/api/v1/auth/me")
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken))
-            .andExpect(status().isUnauthorized())
-            .andExpect(jsonPath("$.code").value("SESSION_INVALID"));
-    }
+        jdbc.update("UPDATE memberships SET status = 'SUSPENDED' WHERE user_id = ?", signup.user().id());
+        assertSessionInvalid(accessToken);
+        jdbc.update("UPDATE memberships SET status = 'ACTIVE' WHERE user_id = ?", signup.user().id());
 
-    @Test
-    void suspendedMembershipRejectsBearerToken() throws Exception {
-        String email = uniqueEmail("jwt-suspended");
-        SignupResponse signup = authService.signup(
-            new SignupRequest(email, VALID_PASSWORD, "Suspended User", "Suspended Workspace", "UTC"),
-            requestContext()
-        );
+        jdbc.update("UPDATE users SET status = 'DISABLED' WHERE id = ?", signup.user().id());
+        assertSessionInvalid(accessToken);
+        jdbc.update("UPDATE users SET status = 'ACTIVE' WHERE id = ?", signup.user().id());
 
+        jdbc.update("UPDATE users SET email_verified_at = NULL WHERE id = ?", signup.user().id());
+        assertSessionInvalid(accessToken);
         jdbc.update("UPDATE users SET email_verified_at = now() WHERE id = ?", signup.user().id());
 
-        CsrfPair csrf = fetchCsrf(mockMvc);
-        MvcResult loginResult = mockMvc.perform(post("/api/v1/auth/login")
-                .header("Origin", FRONTEND_ORIGIN)
-                .header("X-XSRF-TOKEN", csrf.token())
-                .cookie(csrf.cookie())
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("""
-                    {
-                        "email": "%s",
-                        "password": "%s"
-                    }
-                    """.formatted(email, VALID_PASSWORD)))
-            .andExpect(status().isOk())
-            .andReturn();
-
-        String body = loginResult.getResponse().getContentAsString();
-        String accessToken = objectMapper.readTree(body).get("accessToken").asText();
-
-        // Suspend membership in DB
-        jdbc.update("UPDATE memberships SET status = 'SUSPENDED' WHERE user_id = ?", signup.user().id());
-
-        mockMvc.perform(get("/api/v1/auth/me")
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken))
-            .andExpect(status().isUnauthorized())
-            .andExpect(jsonPath("$.code").value("SESSION_INVALID"));
+        jdbc.update("UPDATE workspaces SET status = 'DELETING' WHERE id = ?", signup.workspace().id());
+        assertSessionInvalid(accessToken);
     }
 
     @Test
@@ -181,6 +159,13 @@ class JwtAuthenticationIntegrationTest extends PartCIntegrationTestSupport {
     void malformedOrInvalidTokenIsRejectedOnMeEndpoint() throws Exception {
         mockMvc.perform(get("/api/v1/auth/me")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer invalid.jwt.token"))
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.code").value("SESSION_INVALID"));
+    }
+
+    private void assertSessionInvalid(String accessToken) throws Exception {
+        mockMvc.perform(get("/api/v1/auth/me")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken))
             .andExpect(status().isUnauthorized())
             .andExpect(jsonPath("$.code").value("SESSION_INVALID"));
     }

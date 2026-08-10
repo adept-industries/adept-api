@@ -30,4 +30,6 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, UUID
     int revokeAllForUser(@Param("userId") UUID userId);
 
     List<RefreshToken> findAllByFamilyId(UUID familyId);
+
+    boolean existsByFamilyIdAndReuseDetectedAtIsNotNull(UUID familyId);
 }

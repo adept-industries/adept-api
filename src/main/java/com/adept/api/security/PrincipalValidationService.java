@@ -67,6 +67,10 @@ public class PrincipalValidationService {
             return Optional.empty();
         }
 
+        if (membership.getRole() != claimedRole) {
+            return Optional.empty();
+        }
+
         AuthenticatedPrincipal principal = new AuthenticatedPrincipal(
             membership.getUser().getId(),
             membership.getId(),

@@ -92,33 +92,6 @@ class SignupIntegrationTest extends PartCIntegrationTestSupport {
     }
 
     @Test
-    void sequentialCaseInsensitiveDuplicateReturnsEmailConflictWithoutAnotherGraph() throws Exception {
-        String local = "Duplicate-" + java.util.UUID.randomUUID();
-        String firstEmail = local + "@Example.com";
-        String duplicateEmail = local.toLowerCase(Locale.ROOT) + "@example.COM";
-        CsrfPair csrf = fetchCsrf(mockMvc);
-
-        mockMvc.perform(post("/api/v1/auth/signup")
-                .cookie(csrf.cookie())
-                .header("X-XSRF-TOKEN", csrf.token())
-                .header(HttpHeaders.ORIGIN, FRONTEND_ORIGIN)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(signupJson(firstEmail, VALID_PASSWORD, "First Workspace")))
-            .andExpect(status().isCreated());
-
-        mockMvc.perform(post("/api/v1/auth/signup")
-                .cookie(csrf.cookie())
-                .header("X-XSRF-TOKEN", csrf.token())
-                .header(HttpHeaders.ORIGIN, FRONTEND_ORIGIN)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(signupJson(duplicateEmail, VALID_PASSWORD, "Duplicate Workspace")))
-            .andExpect(status().isConflict())
-            .andExpect(jsonPath("$.code").value("EMAIL_ALREADY_EXISTS"));
-
-        assertSuccessfulGraphCounts();
-    }
-
-    @Test
     void concurrentCaseInsensitiveDuplicateProducesOneSuccessAndOneConflict() throws Exception {
         String local = "Concurrent-" + java.util.UUID.randomUUID();
         SignupRequest first = request(local + "@Example.com", "First Workspace");

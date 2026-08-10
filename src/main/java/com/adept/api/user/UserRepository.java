@@ -20,6 +20,9 @@ public interface UserRepository extends JpaRepository<User, UUID> {
         @Param("email") String email
     );
 
+    @Query("select u.id from User u where lower(u.email) = lower(:email)")
+    Optional<UUID> findIdByEmailIgnoreCase(@Param("email") String email);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
         select u

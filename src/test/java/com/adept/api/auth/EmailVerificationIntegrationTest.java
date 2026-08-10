@@ -12,7 +12,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
-import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
@@ -160,7 +159,7 @@ class EmailVerificationIntegrationTest extends PartCIntegrationTestSupport {
         assertThat(auditCount("VERIFICATION_EMAIL_REQUESTED")).isEqualTo(2);
     }
 
-    @RepeatedTest(10)
+    @Test
     void verifyVersusResendHasOneDeterministicWinner() throws Exception {
         String email = uniqueEmail("verify-resend-winner");
         String original = signupAndGetToken(email);

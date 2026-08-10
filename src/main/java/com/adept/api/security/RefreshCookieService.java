@@ -9,8 +9,6 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.stereotype.Service;
 
-import com.adept.api.common.error.ProblemCode;
-import com.adept.api.common.error.UnauthorizedException;
 import com.adept.api.config.AppProperties;
 import com.adept.api.crypto.SecureTokenGenerator;
 
@@ -54,7 +52,7 @@ public final class RefreshCookieService {
                 continue;
             }
             if (found != null || !SecureTokenGenerator.isWellFormed(cookie.getValue())) {
-                throw new UnauthorizedException(ProblemCode.SESSION_INVALID);
+                return Optional.empty();
             }
             found = cookie.getValue();
         }

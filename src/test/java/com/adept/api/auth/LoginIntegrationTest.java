@@ -39,7 +39,7 @@ class LoginIntegrationTest extends PartCIntegrationTestSupport {
 
         CsrfPair csrf = fetchCsrf(mockMvc);
 
-        mockMvc.perform(post("/api/v1/auth/login")
+        MvcResult result = mockMvc.perform(post("/api/v1/auth/login")
                 .header("Origin", FRONTEND_ORIGIN)
                 .header("X-XSRF-TOKEN", csrf.token())
                 .cookie(csrf.cookie())
@@ -51,11 +51,48 @@ class LoginIntegrationTest extends PartCIntegrationTestSupport {
                     }
                     """.formatted(email, VALID_PASSWORD)))
             .andExpect(status().isForbidden())
-            .andExpect(jsonPath("$.code").value("EMAIL_NOT_VERIFIED"));
+            .andExpect(jsonPath("$.code").value("EMAIL_NOT_VERIFIED"))
+            .andReturn();
+
+        assertThat(result.getResponse().getCookie("adept_refresh")).isNull();
+        assertThat(jdbc.queryForObject(
+            "SELECT count(*) FROM refresh_tokens WHERE user_id = ?",
+            Integer.class,
+            signup.user().id()
+        )).isZero();
+        assertThat(jdbc.queryForObject(
+            "SELECT count(*) FROM audit_logs WHERE action = 'LOGIN_FAILED'",
+            Integer.class
+        )).isOne();
     }
 
     @Test
-    void loginWithInvalidCredentialsUnknownEmailOrWrongPasswordOrDisabledUserReturnIdentical401() throws Exception {
+    void allInvalidCredentialFormsReturnOneSafeFailure() throws Exception {
+        for (LoginRequest candidate : List.of(
+            new LoginRequest("not-an-email", VALID_PASSWORD),
+            new LoginRequest("x".repeat(321) + "@example.com", VALID_PASSWORD),
+            new LoginRequest(uniqueEmail("short-password"), "short"),
+            new LoginRequest(uniqueEmail("blocked-password"), "password"),
+            new LoginRequest(uniqueEmail("oversized-password"), "x".repeat(73)),
+            new LoginRequest("", "")
+        )) {
+            CsrfPair candidateCsrf = fetchCsrf(mockMvc);
+            mockMvc.perform(post("/api/v1/auth/login")
+                    .header("Origin", FRONTEND_ORIGIN)
+                    .header("X-XSRF-TOKEN", candidateCsrf.token())
+                    .cookie(candidateCsrf.cookie())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""
+                        {
+                            "email": "%s",
+                            "password": "%s"
+                        }
+                        """.formatted(candidate.email(), candidate.password())))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("INVALID_CREDENTIALS"))
+                .andExpect(jsonPath("$.detail").value("The email or password is incorrect."));
+        }
+
         String email = uniqueEmail("login-disabled");
         SignupResponse signup = authService.signup(
             new SignupRequest(email, VALID_PASSWORD, "Disabled User", "Disabled Workspace", "UTC"),
@@ -139,34 +176,7 @@ class LoginIntegrationTest extends PartCIntegrationTestSupport {
     }
 
     @Test
-    void staleRefreshCookieDoesNotBlockLogin() throws Exception {
-        String email = uniqueEmail("login-stale-cookie");
-        SignupResponse signup = authService.signup(
-            new SignupRequest(email, VALID_PASSWORD, "Stale Cookie User", "Stale Workspace", "UTC"),
-            requestContext()
-        );
-        jdbc.update("UPDATE users SET email_verified_at = now() WHERE id = ?", signup.user().id());
-
-        CsrfPair csrf = fetchCsrf(mockMvc);
-        Cookie staleCookie = new Cookie("adept_refresh", "stale-expired-garbage-cookie");
-
-        mockMvc.perform(post("/api/v1/auth/login")
-                .header("Origin", FRONTEND_ORIGIN)
-                .header("X-XSRF-TOKEN", csrf.token())
-                .cookie(csrf.cookie(), staleCookie)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("""
-                    {
-                        "email": "%s",
-                        "password": "%s"
-                    }
-                    """.formatted(email, VALID_PASSWORD)))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.accessToken").isNotEmpty());
-    }
-
-    @Test
-    void loginWithVerifiedSingleWorkspaceUserReturnsSessionAndSetsCookie() throws Exception {
+    void verifiedLoginReplacesAStaleCookieWithACompleteSession() throws Exception {
         String email = uniqueEmail("login-verified");
         SignupResponse signup = authService.signup(
             new SignupRequest(email, VALID_PASSWORD, "Verified User", "Single Workspace", "UTC"),
@@ -176,11 +186,12 @@ class LoginIntegrationTest extends PartCIntegrationTestSupport {
         jdbc.update("UPDATE users SET email_verified_at = now() WHERE id = ?", signup.user().id());
 
         CsrfPair csrf = fetchCsrf(mockMvc);
+        Cookie staleCookie = new Cookie("adept_refresh", "stale-expired-garbage-cookie");
 
         MvcResult result = mockMvc.perform(post("/api/v1/auth/login")
                 .header("Origin", FRONTEND_ORIGIN)
                 .header("X-XSRF-TOKEN", csrf.token())
-                .cookie(csrf.cookie())
+                .cookie(csrf.cookie(), staleCookie)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                     {

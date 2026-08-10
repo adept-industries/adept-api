@@ -4,8 +4,6 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
@@ -57,26 +55,27 @@ class CsrfIntegrationTest {
     @Autowired
     private CsrfCookieService csrfCookieService;
 
-    @ParameterizedTest
-    @ValueSource(strings = {
-        "/api/v1/auth/signup",
-        "/api/v1/auth/verify-email",
-        "/api/v1/auth/resend-verification",
-        "/api/v1/auth/login",
-        "/api/v1/auth/refresh",
-        "/api/v1/auth/logout",
-        "/api/v1/auth/switch-workspace/10000000-0000-0000-0000-000000000001",
-        "/api/v1/auth/forgot-password",
-        "/api/v1/auth/reset-password"
-    })
-    void everyUnsafeAuthRouteRejectsMissingCsrf(String path) throws Exception {
-        mockMvc.perform(post(path)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{}"))
-            .andExpect(status().isForbidden())
-            .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
-            .andExpect(content().string(org.hamcrest.Matchers.containsString("CSRF_INVALID")))
-            .andExpect(header().string(HttpHeaders.CACHE_CONTROL, org.hamcrest.Matchers.containsString("no-store")));
+    @Test
+    void everyUnsafeAuthRouteRejectsMissingCsrf() throws Exception {
+        for (String path : new String[] {
+            "/api/v1/auth/signup",
+            "/api/v1/auth/verify-email",
+            "/api/v1/auth/resend-verification",
+            "/api/v1/auth/login",
+            "/api/v1/auth/refresh",
+            "/api/v1/auth/logout",
+            "/api/v1/auth/switch-workspace/10000000-0000-0000-0000-000000000001",
+            "/api/v1/auth/forgot-password",
+            "/api/v1/auth/reset-password"
+        }) {
+            mockMvc.perform(post(path)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{}"))
+                .andExpect(status().isForbidden())
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("CSRF_INVALID")))
+                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, org.hamcrest.Matchers.containsString("no-store")));
+        }
     }
 
     @Test

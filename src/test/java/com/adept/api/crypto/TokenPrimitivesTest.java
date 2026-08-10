@@ -1,17 +1,18 @@
 package com.adept.api.crypto;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.HashSet;
 import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
-class SecureTokenGeneratorTest {
+class TokenPrimitivesTest {
 
     @Test
-    void generatesUniqueThirtyTwoByteBase64UrlTokensWithoutPadding() {
+    void randomTokensAreWellFormedAndHashesAreDeterministicAndDomainSeparated() {
         SecureTokenGenerator generator = new SecureTokenGenerator();
         Set<String> generated = new HashSet<>();
 
@@ -23,12 +24,18 @@ class SecureTokenGeneratorTest {
             generated.add(token);
         }
         assertThat(generated).hasSize(500);
-    }
-
-    @Test
-    void rejectsWrongTokenTransportShapes() {
         assertThat(SecureTokenGenerator.isWellFormed(null)).isFalse();
         assertThat(SecureTokenGenerator.isWellFormed("abc")).isFalse();
         assertThat(SecureTokenGenerator.isWellFormed("A".repeat(42) + "=")).isFalse();
+
+        TokenHasher hasher = new TokenHasher(new byte[32]);
+        String first = hasher.hashRefreshToken("raw-token");
+
+        assertThat(first).matches("^[0-9a-f]{64}$");
+        assertThat(hasher.hashRefreshToken("raw-token")).isEqualTo(first);
+        assertThat(hasher.hashRefreshToken("another-token")).isNotEqualTo(first);
+        assertThat(Arrays.stream(TokenHasher.Domain.values())
+            .map(domain -> hasher.hash(domain, "same-value")))
+            .doesNotHaveDuplicates();
     }
 }
