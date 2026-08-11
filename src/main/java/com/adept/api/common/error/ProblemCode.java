@@ -25,6 +25,7 @@ public enum ProblemCode {
     REAUTHENTICATION_FAILED(HttpStatus.FORBIDDEN, "Reauthentication failed", "The current password is incorrect."),
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "Unexpected error", "An unexpected error occurred."),
     ENDPOINT_NOT_FOUND(HttpStatus.NOT_FOUND, "Endpoint not found", "The requested endpoint does not exist."),
+    REPOSITORY_NOT_FOUND(HttpStatus.NOT_FOUND, "Repository not found", "The repository was not found or is not accessible."),
     METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "Method not allowed", "The HTTP method is not supported for this endpoint.");
 
     private static final String TYPE_BASE = "https://adept.local/problems/";
