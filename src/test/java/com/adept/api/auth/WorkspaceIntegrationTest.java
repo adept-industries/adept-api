@@ -1,4 +1,4 @@
-package com.adept.api.workspace;
+package com.adept.api.auth;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -6,8 +6,6 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
-import com.adept.api.auth.AuthService;
-import com.adept.api.auth.PartCIntegrationTestSupport;
 import com.adept.api.auth.dto.SignupRequest;
 import com.adept.api.auth.dto.SignupResponse;
 import com.adept.api.common.domain.WorkspaceStatus;
@@ -179,7 +177,7 @@ class WorkspaceIntegrationTest extends PartCIntegrationTestSupport {
         );
         assertThat(deletionAuditCount).isGreaterThanOrEqualTo(1);
 
-        // 8. DELETE /api/v1/workspaces/current - already deleting (409 Conflict)
+        // 8. Subsequent requests to deleting workspace are rejected (401 Unauthorized because workspace status != ACTIVE)
         CsrfPair csrfDelete2 = fetchCsrf(mockMvc);
         mockMvc.perform(delete("/api/v1/workspaces/current")
                 .header("Origin", FRONTEND_ORIGIN)
@@ -193,7 +191,7 @@ class WorkspaceIntegrationTest extends PartCIntegrationTestSupport {
                         "password": "%s"
                     }
                     """.formatted(currentSlug, VALID_PASSWORD)))
-            .andExpect(status().isConflict())
+            .andExpect(status().isUnauthorized())
             .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON));
     }
 }

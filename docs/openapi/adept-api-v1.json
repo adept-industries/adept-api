@@ -1,0 +1,1004 @@
+{
+  "openapi" : "3.1.0",
+  "info" : {
+    "title" : "Adept API",
+    "description" : "Adept Industries Phase 2 OpenAPI Specification",
+    "version" : "v1"
+  },
+  "servers" : [ {
+    "url" : "http://localhost",
+    "description" : "Generated server url"
+  } ],
+  "paths" : {
+    "/api/v1/auth/verify-email" : {
+      "post" : {
+        "tags" : [ "auth-controller" ],
+        "summary" : "Verify Email Address",
+        "operationId" : "verifyEmail",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ActionTokenRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "headers" : {
+              "Cache-Control" : {
+                "description" : "Disables client caching for sensitive auth endpoints",
+                "schema" : {
+                  "type" : "string",
+                  "example" : "no-store"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "csrfHeader" : [ ]
+        } ]
+      }
+    },
+    "/api/v1/auth/test-endpoint" : {
+      "post" : {
+        "tags" : [ "security-test-endpoints" ],
+        "operationId" : "login",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/Payload"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/switch-workspace/{workspaceId}" : {
+      "post" : {
+        "tags" : [ "auth-controller" ],
+        "summary" : "Switch Active Workspace",
+        "operationId" : "switchWorkspace",
+        "parameters" : [ {
+          "name" : "workspaceId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "headers" : {
+              "Set-Cookie" : {
+                "description" : "Sets session HTTP cookies (adept_refresh, XSRF-TOKEN)",
+                "schema" : {
+                  "type" : "string",
+                  "example" : "XSRF-TOKEN=...; Path=/; Secure; SameSite=Strict"
+                }
+              },
+              "Cache-Control" : {
+                "description" : "Disables client caching for sensitive auth endpoints",
+                "schema" : {
+                  "type" : "string",
+                  "example" : "no-store"
+                }
+              }
+            },
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AuthSessionResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "refreshCookie" : [ ],
+          "csrfHeader" : [ ]
+        } ]
+      }
+    },
+    "/api/v1/auth/signup" : {
+      "post" : {
+        "tags" : [ "auth-controller" ],
+        "summary" : "Account Signup",
+        "operationId" : "signup",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/SignupRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "headers" : {
+              "Cache-Control" : {
+                "description" : "Disables client caching for sensitive auth endpoints",
+                "schema" : {
+                  "type" : "string",
+                  "example" : "no-store"
+                }
+              }
+            },
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/SignupResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "csrfHeader" : [ ]
+        } ]
+      }
+    },
+    "/api/v1/auth/reset-password" : {
+      "post" : {
+        "tags" : [ "auth-controller" ],
+        "summary" : "Complete Password Reset",
+        "operationId" : "resetPassword",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ResetPasswordRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "headers" : {
+              "Cache-Control" : {
+                "description" : "Disables client caching for sensitive auth endpoints",
+                "schema" : {
+                  "type" : "string",
+                  "example" : "no-store"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "csrfHeader" : [ ]
+        } ]
+      }
+    },
+    "/api/v1/auth/resend-verification" : {
+      "post" : {
+        "tags" : [ "auth-controller" ],
+        "summary" : "Resend Email Verification",
+        "operationId" : "resendVerification",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/EmailRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "headers" : {
+              "Cache-Control" : {
+                "description" : "Disables client caching for sensitive auth endpoints",
+                "schema" : {
+                  "type" : "string",
+                  "example" : "no-store"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "csrfHeader" : [ ]
+        } ]
+      }
+    },
+    "/api/v1/auth/refresh" : {
+      "post" : {
+        "tags" : [ "auth-controller" ],
+        "summary" : "Refresh Access Token",
+        "operationId" : "refreshSession",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/RefreshRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "headers" : {
+              "Set-Cookie" : {
+                "description" : "Sets session HTTP cookies (adept_refresh, XSRF-TOKEN)",
+                "schema" : {
+                  "type" : "string",
+                  "example" : "XSRF-TOKEN=...; Path=/; Secure; SameSite=Strict"
+                }
+              },
+              "Cache-Control" : {
+                "description" : "Disables client caching for sensitive auth endpoints",
+                "schema" : {
+                  "type" : "string",
+                  "example" : "no-store"
+                }
+              }
+            },
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AuthSessionResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "refreshCookie" : [ ],
+          "csrfHeader" : [ ]
+        } ]
+      }
+    },
+    "/api/v1/auth/logout" : {
+      "post" : {
+        "tags" : [ "auth-controller" ],
+        "summary" : "Revoke Current Refresh Session",
+        "operationId" : "logoutSession",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "headers" : {
+              "Set-Cookie" : {
+                "description" : "Sets session HTTP cookies (adept_refresh, XSRF-TOKEN)",
+                "schema" : {
+                  "type" : "string",
+                  "example" : "XSRF-TOKEN=...; Path=/; Secure; SameSite=Strict"
+                }
+              },
+              "Cache-Control" : {
+                "description" : "Disables client caching for sensitive auth endpoints",
+                "schema" : {
+                  "type" : "string",
+                  "example" : "no-store"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "refreshCookie" : [ ],
+          "csrfHeader" : [ ]
+        } ]
+      }
+    },
+    "/api/v1/auth/login" : {
+      "post" : {
+        "tags" : [ "auth-controller" ],
+        "summary" : "Account Login",
+        "operationId" : "login_1",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "headers" : {
+              "Set-Cookie" : {
+                "description" : "Sets session HTTP cookies (adept_refresh, XSRF-TOKEN)",
+                "schema" : {
+                  "type" : "string",
+                  "example" : "XSRF-TOKEN=...; Path=/; Secure; SameSite=Strict"
+                }
+              },
+              "Cache-Control" : {
+                "description" : "Disables client caching for sensitive auth endpoints",
+                "schema" : {
+                  "type" : "string",
+                  "example" : "no-store"
+                }
+              }
+            },
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AuthSessionResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "csrfHeader" : [ ]
+        } ]
+      }
+    },
+    "/api/v1/auth/forgot-password" : {
+      "post" : {
+        "tags" : [ "auth-controller" ],
+        "summary" : "Request Password Reset",
+        "operationId" : "forgotPassword",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/EmailRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "headers" : {
+              "Cache-Control" : {
+                "description" : "Disables client caching for sensitive auth endpoints",
+                "schema" : {
+                  "type" : "string",
+                  "example" : "no-store"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "csrfHeader" : [ ]
+        } ]
+      }
+    },
+    "/api/v1/workspaces/test-current" : {
+      "get" : {
+        "tags" : [ "security-test-endpoints" ],
+        "operationId" : "currentWorkspace",
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        }
+      },
+      "patch" : {
+        "tags" : [ "security-test-endpoints" ],
+        "operationId" : "updateWorkspace",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/Payload"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/current" : {
+      "get" : {
+        "tags" : [ "workspace-controller" ],
+        "summary" : "Get Current Workspace Details",
+        "operationId" : "getCurrentWorkspace",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/CurrentWorkspaceResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      },
+      "delete" : {
+        "tags" : [ "workspace-controller" ],
+        "summary" : "Request Workspace Deletion",
+        "operationId" : "deleteCurrentWorkspace",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/DeleteWorkspaceRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/WorkspaceDeletionResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ],
+          "csrfHeader" : [ ]
+        } ]
+      },
+      "patch" : {
+        "tags" : [ "workspace-controller" ],
+        "summary" : "Update Current Workspace Settings",
+        "operationId" : "updateCurrentWorkspace",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/UpdateWorkspaceRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/CurrentWorkspaceResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ],
+          "csrfHeader" : [ ]
+        } ]
+      }
+    },
+    "/api/v1/workspaces" : {
+      "get" : {
+        "tags" : [ "workspace-controller" ],
+        "summary" : "List Accessible Workspaces",
+        "operationId" : "listWorkspaces",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/WorkspaceSummaryResponse"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/api/v1/auth/test-me" : {
+      "get" : {
+        "tags" : [ "security-test-endpoints" ],
+        "operationId" : "me",
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/me" : {
+      "get" : {
+        "tags" : [ "auth-controller" ],
+        "summary" : "Get Current Identity Context",
+        "operationId" : "getCurrentUser",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/MeResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/api/v1/auth/csrf" : {
+      "get" : {
+        "tags" : [ "csrf-controller" ],
+        "summary" : "Get CSRF Token",
+        "operationId" : "getCsrfToken",
+        "parameters" : [ {
+          "name" : "csrfToken",
+          "in" : "query",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/CsrfToken"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "headers" : {
+              "Set-Cookie" : {
+                "description" : "Sets session HTTP cookies (adept_refresh, XSRF-TOKEN)",
+                "schema" : {
+                  "type" : "string",
+                  "example" : "XSRF-TOKEN=...; Path=/; Secure; SameSite=Strict"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ ]
+      }
+    },
+    "/actuator/info" : {
+      "get" : {
+        "tags" : [ "security-test-endpoints" ],
+        "operationId" : "actuatorInfo",
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        }
+      }
+    },
+    "/actuator/health/readiness" : {
+      "get" : {
+        "tags" : [ "security-test-endpoints" ],
+        "operationId" : "readiness",
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/unlisted" : {
+      "get" : {
+        "tags" : [ "security-test-endpoints" ],
+        "operationId" : "unlisted",
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        }
+      },
+      "put" : {
+        "tags" : [ "security-test-endpoints" ],
+        "operationId" : "unlisted_2",
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        }
+      },
+      "post" : {
+        "tags" : [ "security-test-endpoints" ],
+        "operationId" : "unlisted_1",
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        }
+      },
+      "delete" : {
+        "tags" : [ "security-test-endpoints" ],
+        "operationId" : "unlisted_3",
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        }
+      },
+      "options" : {
+        "tags" : [ "security-test-endpoints" ],
+        "operationId" : "unlisted_6",
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        }
+      },
+      "head" : {
+        "tags" : [ "security-test-endpoints" ],
+        "operationId" : "unlisted_5",
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        }
+      },
+      "patch" : {
+        "tags" : [ "security-test-endpoints" ],
+        "operationId" : "unlisted_4",
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        }
+      }
+    }
+  },
+  "components" : {
+    "schemas" : {
+      "ActionTokenRequest" : {
+        "type" : "object",
+        "properties" : {
+          "token" : {
+            "type" : "string",
+            "minLength" : 1
+          }
+        },
+        "required" : [ "token" ]
+      },
+      "Payload" : {
+        "type" : "object",
+        "properties" : {
+          "value" : {
+            "type" : "string"
+          }
+        }
+      },
+      "AuthSessionResponse" : {
+        "type" : "object",
+        "properties" : {
+          "accessToken" : {
+            "type" : "string"
+          },
+          "expiresInSeconds" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "workspaceSelectionRequired" : {
+            "type" : "boolean"
+          },
+          "user" : {
+            "$ref" : "#/components/schemas/UserSummary"
+          },
+          "currentMembership" : {
+            "$ref" : "#/components/schemas/MembershipSummary"
+          },
+          "workspaces" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/WorkspaceSummaryResponse"
+            }
+          }
+        }
+      },
+      "MembershipSummary" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "workspaceId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "workspaceName" : {
+            "type" : "string"
+          },
+          "workspaceSlug" : {
+            "type" : "string"
+          },
+          "timezone" : {
+            "type" : "string"
+          },
+          "role" : {
+            "type" : "string",
+            "enum" : [ "MANAGER", "LEAD" ]
+          }
+        }
+      },
+      "UserSummary" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "email" : {
+            "type" : "string"
+          },
+          "displayName" : {
+            "type" : "string"
+          },
+          "emailVerified" : {
+            "type" : "boolean"
+          }
+        }
+      },
+      "WorkspaceSummaryResponse" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "slug" : {
+            "type" : "string"
+          },
+          "timezone" : {
+            "type" : "string"
+          },
+          "role" : {
+            "type" : "string",
+            "enum" : [ "MANAGER", "LEAD" ]
+          }
+        }
+      },
+      "SignupRequest" : {
+        "type" : "object",
+        "properties" : {
+          "email" : {
+            "type" : "string",
+            "format" : "email",
+            "maxLength" : 320,
+            "minLength" : 0
+          },
+          "password" : {
+            "type" : "string",
+            "minLength" : 1
+          },
+          "displayName" : {
+            "type" : "string",
+            "maxLength" : 160,
+            "minLength" : 0
+          },
+          "workspaceName" : {
+            "type" : "string",
+            "maxLength" : 160,
+            "minLength" : 0
+          },
+          "timezone" : {
+            "type" : "string",
+            "minLength" : 1
+          }
+        },
+        "required" : [ "displayName", "email", "password", "timezone", "workspaceName" ]
+      },
+      "SignupResponse" : {
+        "type" : "object",
+        "properties" : {
+          "user" : {
+            "$ref" : "#/components/schemas/UserSummary"
+          },
+          "workspace" : {
+            "$ref" : "#/components/schemas/WorkspaceSummaryResponse"
+          },
+          "emailVerificationRequired" : {
+            "type" : "boolean"
+          }
+        }
+      },
+      "ResetPasswordRequest" : {
+        "type" : "object",
+        "properties" : {
+          "token" : {
+            "type" : "string",
+            "minLength" : 1
+          },
+          "newPassword" : {
+            "type" : "string",
+            "minLength" : 1
+          }
+        },
+        "required" : [ "newPassword", "token" ]
+      },
+      "EmailRequest" : {
+        "type" : "object",
+        "properties" : {
+          "email" : {
+            "type" : "string",
+            "format" : "email",
+            "maxLength" : 320,
+            "minLength" : 0
+          }
+        },
+        "required" : [ "email" ]
+      },
+      "RefreshRequest" : {
+        "type" : "object",
+        "properties" : {
+          "workspaceId" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        }
+      },
+      "LoginRequest" : {
+        "type" : "object",
+        "properties" : {
+          "email" : {
+            "type" : "string"
+          },
+          "password" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "email", "password" ]
+      },
+      "UpdateWorkspaceRequest" : {
+        "type" : "object",
+        "properties" : {
+          "namePresent" : {
+            "type" : "boolean"
+          },
+          "timezonePresent" : {
+            "type" : "boolean"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "timezone" : {
+            "type" : "string"
+          }
+        }
+      },
+      "CurrentWorkspaceResponse" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "slug" : {
+            "type" : "string"
+          },
+          "timezone" : {
+            "type" : "string"
+          },
+          "role" : {
+            "type" : "string",
+            "enum" : [ "MANAGER", "LEAD" ]
+          },
+          "membershipId" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        }
+      },
+      "MeResponse" : {
+        "type" : "object",
+        "properties" : {
+          "user" : {
+            "$ref" : "#/components/schemas/UserSummary"
+          },
+          "currentMembership" : {
+            "$ref" : "#/components/schemas/MembershipSummary"
+          },
+          "workspaces" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/WorkspaceSummaryResponse"
+            }
+          }
+        }
+      },
+      "CsrfToken" : {
+        "type" : "object",
+        "properties" : {
+          "token" : {
+            "type" : "string"
+          },
+          "parameterName" : {
+            "type" : "string"
+          },
+          "headerName" : {
+            "type" : "string"
+          }
+        }
+      },
+      "DeleteWorkspaceRequest" : {
+        "type" : "object",
+        "properties" : {
+          "confirmationSlug" : {
+            "type" : "string",
+            "minLength" : 1
+          },
+          "password" : {
+            "type" : "string",
+            "minLength" : 1
+          }
+        },
+        "required" : [ "confirmationSlug", "password" ]
+      },
+      "WorkspaceDeletionResponse" : {
+        "type" : "object",
+        "properties" : {
+          "workspaceId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "status" : {
+            "type" : "string",
+            "enum" : [ "ACTIVE", "DELETING", "DELETED" ]
+          }
+        }
+      }
+    },
+    "securitySchemes" : {
+      "bearerAuth" : {
+        "type" : "http",
+        "description" : "HTTP Bearer JWT Access Token",
+        "scheme" : "bearer",
+        "bearerFormat" : "JWT"
+      },
+      "refreshCookie" : {
+        "type" : "apiKey",
+        "description" : "Refresh session token in HttpOnly cookie",
+        "name" : "adept_refresh",
+        "in" : "cookie"
+      },
+      "csrfHeader" : {
+        "type" : "apiKey",
+        "description" : "CSRF token in HTTP header",
+        "name" : "X-XSRF-TOKEN",
+        "in" : "header"
+      }
+    }
+  }
+}

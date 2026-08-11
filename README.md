@@ -1,12 +1,16 @@
 # Adept API
 
-The Adept API is the Java backend and the only owner of the shared PostgreSQL schema.
+The Adept API is the Java backend and sole owner of the shared PostgreSQL database schema.
 
-## Current status
+## Overview & Current Status
 
-The Phase 1 API/database foundation is implemented: Spring Boot 4.1 on Java 25, Flyway V1–V8, Hibernate validation, PostgreSQL 18, Testcontainers tests, health endpoints, and a Java 25 container image. V8 is the forward-only post-Phase-1 correction that allows multiple distinct Leads per repository. Authentication and business endpoints begin in later phases.
+Phase 2 authentication, session management, workspace switching, workspace management, and OpenAPI contract generation are fully implemented:
+- **Framework & Runtime**: Spring Boot 4.1 on Java 25, Flyway V1–V8, Hibernate validation, PostgreSQL 18.
+- **Authentication**: JWT access tokens, HttpOnly refresh cookies (`adept_refresh`), CSRF protection (`XSRF-TOKEN` / `X-XSRF-TOKEN`), BCrypt password hashing.
+- **Workspace Management**: Multi-workspace membership support, workspace switching, PATCH workspace settings, and controlled workspace deletion flow (`DELETE /api/v1/workspaces/current`).
+- **OpenAPI**: Contracts configured via `springdoc-openapi` and exported deterministically to `docs/openapi/adept-api-v1.json`.
 
-## Local sibling layout
+## Local Sibling Layout
 
 ```text
 adept-local/
@@ -26,9 +30,9 @@ docker compose --env-file .env \
   up -d postgres mailpit
 ```
 
-PostgreSQL is published on port 5432 by default. Mailpit SMTP is on 1025 and its browser inbox is at <http://localhost:8025>.
+PostgreSQL is published on port 5432 by default. Mailpit SMTP runs on port 1025 and its web inbox UI is at <http://localhost:8025>.
 
-## Run the API on the host
+## Run the API locally
 
 ```bash
 cd adept-api
@@ -38,26 +42,42 @@ set +a
 ./mvnw spring-boot:run -Dspring-boot.run.profiles=local
 ```
 
-Health: <http://localhost:8080/actuator/health>
+Health endpoint: <http://localhost:8080/actuator/health>
 
-## Test
+## Authentication, CSRF & Workspace Flow
 
-Docker must be running because integration tests use disposable PostgreSQL 18 Testcontainers databases.
+### 1. CSRF Bootstrap & Unsafe Requests
+- Request `GET /api/v1/auth/csrf` to bootstrap the `XSRF-TOKEN` cookie.
+- Pass the token value in header `X-XSRF-TOKEN` for all state-changing HTTP operations (`POST`, `PUT`, `PATCH`, `DELETE`).
+
+### 2. Bearer Access Tokens
+- Authenticated requests must present `Authorization: Bearer <accessToken>`.
+- JWT access tokens expire in 15 minutes. Use `POST /api/v1/auth/refresh` with `adept_refresh` HttpOnly cookie to obtain a fresh access token.
+
+### 3. Workspace Selection & Switching Rules
+- Users belonging to multiple workspaces receive `workspaceSelectionRequired: true` during login.
+- Switch active workspace context via `POST /api/v1/auth/switch-workspace/{workspaceId}` (requires `adept_refresh` cookie & `X-XSRF-TOKEN` header).
+- View accessible workspaces via `GET /api/v1/workspaces` and current workspace via `GET /api/v1/workspaces/current`.
+- Controlled workspace deletion (`DELETE /api/v1/workspaces/current`) requires Manager role, BCrypt password reauthentication, exact confirmation slug matching, and enqueues a `DELETE_WORKSPACE` background worker job.
+
+## OpenAPI Contract Generation
+
+To export the OpenAPI specification deterministically to `docs/openapi/adept-api-v1.json`:
 
 ```bash
-./mvnw -B clean verify
+./scripts/export-openapi.sh
 ```
 
-## Build the API image
+The script fetches `/v3/api-docs` from a running server or executes a Spring context generation test, formats the JSON deterministically with `jq --sort-keys`, and outputs `docs/openapi/adept-api-v1.json`.
 
-From `adept-local`:
+## Testing
+
+Integration tests require Docker running for PostgreSQL Testcontainers:
 
 ```bash
-docker compose --env-file .env \
-  -f adept-api/infra/local/compose.yaml \
-  --profile full build api
+./mvnw clean verify
 ```
 
-## Database ownership
+## Database Ownership
 
-Flyway files under `src/main/resources/db/migration` are the schema source of truth. Hibernate uses `ddl-auto: validate`; do not change it to schema creation/update. Never edit an already-shared migration. Generate the local ERD with `./scripts/generate-erd.sh`.
+Flyway files under `src/main/resources/db/migration` are the schema source of truth. Hibernate uses `ddl-auto: validate`. Never edit an already-shared migration. Generate local ERD with `./scripts/generate-erd.sh`.
