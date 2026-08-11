@@ -84,6 +84,28 @@ class RepositoryScopeServiceTest {
     }
 
     @Test
+    void twoDistinctLeadsAssignedToSameRepositoryCanBothAccessIt() {
+        UUID lead1MemId = UUID.randomUUID();
+        UUID lead2MemId = UUID.randomUUID();
+
+        AuthenticatedPrincipal lead1 = new AuthenticatedPrincipal(UUID.randomUUID(), lead1MemId, workspaceId, MembershipRole.LEAD, 1);
+        AuthenticatedPrincipal lead2 = new AuthenticatedPrincipal(UUID.randomUUID(), lead2MemId, workspaceId, MembershipRole.LEAD, 1);
+
+        when(gitRepositoryRepository.findByIdAndWorkspaceId(repositoryId, workspaceId))
+            .thenReturn(Optional.of(activeRepo));
+        when(repositoryLeadAssignmentRepository.existsByRepositoryIdAndLeadMembershipId(repositoryId, lead1MemId))
+            .thenReturn(true);
+        when(repositoryLeadAssignmentRepository.existsByRepositoryIdAndLeadMembershipId(repositoryId, lead2MemId))
+            .thenReturn(true);
+
+        GitRepository res1 = repositoryScopeService.requireReadableRepository(lead1, repositoryId);
+        GitRepository res2 = repositoryScopeService.requireReadableRepository(lead2, repositoryId);
+
+        assertThat(res1).isEqualTo(activeRepo);
+        assertThat(res2).isEqualTo(activeRepo);
+    }
+
+    @Test
     void leadCannotReadUnassignedRepository() {
         when(gitRepositoryRepository.findByIdAndWorkspaceId(repositoryId, workspaceId))
             .thenReturn(Optional.of(activeRepo));
