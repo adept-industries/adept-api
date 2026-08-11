@@ -1,1004 +1,2706 @@
 {
-  "openapi" : "3.1.0",
-  "info" : {
-    "title" : "Adept API",
-    "description" : "Adept Industries Phase 2 OpenAPI Specification",
-    "version" : "v1"
-  },
-  "servers" : [ {
-    "url" : "http://localhost",
-    "description" : "Generated server url"
-  } ],
-  "paths" : {
-    "/api/v1/auth/verify-email" : {
-      "post" : {
-        "tags" : [ "auth-controller" ],
-        "summary" : "Verify Email Address",
-        "operationId" : "verifyEmail",
-        "requestBody" : {
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "$ref" : "#/components/schemas/ActionTokenRequest"
-              }
-            }
+  "components": {
+    "schemas": {
+      "ActionTokenRequest": {
+        "properties": {
+          "token": {
+            "minLength": 1,
+            "type": "string",
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "token"
+        ],
+        "type": "object"
+      },
+      "AuthSessionResponse": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/AuthenticatedSessionResponse"
           },
-          "required" : true
-        },
-        "responses" : {
-          "200" : {
-            "description" : "OK",
-            "headers" : {
-              "Cache-Control" : {
-                "description" : "Disables client caching for sensitive auth endpoints",
-                "schema" : {
-                  "type" : "string",
-                  "example" : "no-store"
-                }
-              }
-            }
+          {
+            "$ref": "#/components/schemas/WorkspaceSelectionSessionResponse"
           }
-        },
-        "security" : [ {
-          "csrfHeader" : [ ]
-        } ]
-      }
-    },
-    "/api/v1/auth/test-endpoint" : {
-      "post" : {
-        "tags" : [ "security-test-endpoints" ],
-        "operationId" : "login",
-        "requestBody" : {
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "$ref" : "#/components/schemas/Payload"
-              }
-            }
+        ]
+      },
+      "AuthenticatedSessionResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "accessToken": {
+            "description": "Memory-only Bearer JWT.",
+            "type": "string"
           },
-          "required" : true
-        },
-        "responses" : {
-          "200" : {
-            "description" : "OK"
-          }
-        }
-      }
-    },
-    "/api/v1/auth/switch-workspace/{workspaceId}" : {
-      "post" : {
-        "tags" : [ "auth-controller" ],
-        "summary" : "Switch Active Workspace",
-        "operationId" : "switchWorkspace",
-        "parameters" : [ {
-          "name" : "workspaceId",
-          "in" : "path",
-          "required" : true,
-          "schema" : {
-            "type" : "string",
-            "format" : "uuid"
-          }
-        } ],
-        "responses" : {
-          "200" : {
-            "description" : "OK",
-            "headers" : {
-              "Set-Cookie" : {
-                "description" : "Sets session HTTP cookies (adept_refresh, XSRF-TOKEN)",
-                "schema" : {
-                  "type" : "string",
-                  "example" : "XSRF-TOKEN=...; Path=/; Secure; SameSite=Strict"
-                }
-              },
-              "Cache-Control" : {
-                "description" : "Disables client caching for sensitive auth endpoints",
-                "schema" : {
-                  "type" : "string",
-                  "example" : "no-store"
-                }
-              }
+          "currentMembership": {
+            "$ref": "#/components/schemas/MembershipSummary"
+          },
+          "expiresInSeconds": {
+            "format": "int32",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "user": {
+            "$ref": "#/components/schemas/UserSummary"
+          },
+          "workspaceSelectionRequired": {
+            "enum": [
+              false
+            ],
+            "type": "boolean"
+          },
+          "workspaces": {
+            "items": {
+              "$ref": "#/components/schemas/WorkspaceSummaryResponse"
             },
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/AuthSessionResponse"
-                }
-              }
-            }
+            "type": "array"
           }
         },
-        "security" : [ {
-          "refreshCookie" : [ ],
-          "csrfHeader" : [ ]
-        } ]
-      }
-    },
-    "/api/v1/auth/signup" : {
-      "post" : {
-        "tags" : [ "auth-controller" ],
-        "summary" : "Account Signup",
-        "operationId" : "signup",
-        "requestBody" : {
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "$ref" : "#/components/schemas/SignupRequest"
-              }
-            }
+        "required": [
+          "accessToken",
+          "currentMembership",
+          "expiresInSeconds",
+          "user",
+          "workspaceSelectionRequired",
+          "workspaces"
+        ],
+        "type": "object"
+      },
+      "CurrentWorkspaceResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": "string"
           },
-          "required" : true
+          "membershipId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "MANAGER",
+              "LEAD"
+            ],
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "timezone": {
+            "type": "string"
+          }
         },
-        "responses" : {
-          "200" : {
-            "description" : "OK",
-            "headers" : {
-              "Cache-Control" : {
-                "description" : "Disables client caching for sensitive auth endpoints",
-                "schema" : {
-                  "type" : "string",
-                  "example" : "no-store"
-                }
-              }
+        "required": [
+          "id",
+          "membershipId",
+          "name",
+          "role",
+          "slug",
+          "timezone"
+        ],
+        "type": "object"
+      },
+      "DeleteWorkspaceRequest": {
+        "properties": {
+          "confirmationSlug": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "password": {
+            "minLength": 1,
+            "type": "string",
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "confirmationSlug",
+          "password"
+        ],
+        "type": "object"
+      },
+      "EmailRequest": {
+        "properties": {
+          "email": {
+            "format": "email",
+            "maxLength": 320,
+            "minLength": 0,
+            "type": "string"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "type": "object"
+      },
+      "FieldError": {
+        "additionalProperties": false,
+        "properties": {
+          "field": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "message"
+        ],
+        "type": "object"
+      },
+      "LoginRequest": {
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string",
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ],
+        "type": "object"
+      },
+      "MeResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "currentMembership": {
+            "$ref": "#/components/schemas/MembershipSummary"
+          },
+          "user": {
+            "$ref": "#/components/schemas/UserSummary"
+          },
+          "workspaces": {
+            "items": {
+              "$ref": "#/components/schemas/WorkspaceSummaryResponse"
             },
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/SignupResponse"
-                }
-              }
-            }
+            "type": "array"
           }
         },
-        "security" : [ {
-          "csrfHeader" : [ ]
-        } ]
-      }
-    },
-    "/api/v1/auth/reset-password" : {
-      "post" : {
-        "tags" : [ "auth-controller" ],
-        "summary" : "Complete Password Reset",
-        "operationId" : "resetPassword",
-        "requestBody" : {
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "$ref" : "#/components/schemas/ResetPasswordRequest"
-              }
-            }
+        "required": [
+          "currentMembership",
+          "user",
+          "workspaces"
+        ],
+        "type": "object"
+      },
+      "MembershipSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": "string"
           },
-          "required" : true
-        },
-        "responses" : {
-          "200" : {
-            "description" : "OK",
-            "headers" : {
-              "Cache-Control" : {
-                "description" : "Disables client caching for sensitive auth endpoints",
-                "schema" : {
-                  "type" : "string",
-                  "example" : "no-store"
-                }
-              }
-            }
-          }
-        },
-        "security" : [ {
-          "csrfHeader" : [ ]
-        } ]
-      }
-    },
-    "/api/v1/auth/resend-verification" : {
-      "post" : {
-        "tags" : [ "auth-controller" ],
-        "summary" : "Resend Email Verification",
-        "operationId" : "resendVerification",
-        "requestBody" : {
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "$ref" : "#/components/schemas/EmailRequest"
-              }
-            }
+          "role": {
+            "enum": [
+              "MANAGER",
+              "LEAD"
+            ],
+            "type": "string"
           },
-          "required" : true
-        },
-        "responses" : {
-          "200" : {
-            "description" : "OK",
-            "headers" : {
-              "Cache-Control" : {
-                "description" : "Disables client caching for sensitive auth endpoints",
-                "schema" : {
-                  "type" : "string",
-                  "example" : "no-store"
-                }
-              }
-            }
+          "timezone": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "workspaceName": {
+            "type": "string"
+          },
+          "workspaceSlug": {
+            "type": "string"
           }
         },
-        "security" : [ {
-          "csrfHeader" : [ ]
-        } ]
-      }
-    },
-    "/api/v1/auth/refresh" : {
-      "post" : {
-        "tags" : [ "auth-controller" ],
-        "summary" : "Refresh Access Token",
-        "operationId" : "refreshSession",
-        "requestBody" : {
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "$ref" : "#/components/schemas/RefreshRequest"
-              }
-            }
-          }
-        },
-        "responses" : {
-          "200" : {
-            "description" : "OK",
-            "headers" : {
-              "Set-Cookie" : {
-                "description" : "Sets session HTTP cookies (adept_refresh, XSRF-TOKEN)",
-                "schema" : {
-                  "type" : "string",
-                  "example" : "XSRF-TOKEN=...; Path=/; Secure; SameSite=Strict"
-                }
-              },
-              "Cache-Control" : {
-                "description" : "Disables client caching for sensitive auth endpoints",
-                "schema" : {
-                  "type" : "string",
-                  "example" : "no-store"
-                }
-              }
+        "required": [
+          "id",
+          "role",
+          "timezone",
+          "workspaceId",
+          "workspaceName",
+          "workspaceSlug"
+        ],
+        "type": "object"
+      },
+      "ProblemDetail": {
+        "additionalProperties": false,
+        "description": "RFC 9457 problem response with stable Adept fields.",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "fieldErrors": {
+            "items": {
+              "$ref": "#/components/schemas/FieldError"
             },
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/AuthSessionResponse"
-                }
-              }
-            }
-          }
-        },
-        "security" : [ {
-          "refreshCookie" : [ ],
-          "csrfHeader" : [ ]
-        } ]
-      }
-    },
-    "/api/v1/auth/logout" : {
-      "post" : {
-        "tags" : [ "auth-controller" ],
-        "summary" : "Revoke Current Refresh Session",
-        "operationId" : "logoutSession",
-        "responses" : {
-          "200" : {
-            "description" : "OK",
-            "headers" : {
-              "Set-Cookie" : {
-                "description" : "Sets session HTTP cookies (adept_refresh, XSRF-TOKEN)",
-                "schema" : {
-                  "type" : "string",
-                  "example" : "XSRF-TOKEN=...; Path=/; Secure; SameSite=Strict"
-                }
-              },
-              "Cache-Control" : {
-                "description" : "Disables client caching for sensitive auth endpoints",
-                "schema" : {
-                  "type" : "string",
-                  "example" : "no-store"
-                }
-              }
-            }
-          }
-        },
-        "security" : [ {
-          "refreshCookie" : [ ],
-          "csrfHeader" : [ ]
-        } ]
-      }
-    },
-    "/api/v1/auth/login" : {
-      "post" : {
-        "tags" : [ "auth-controller" ],
-        "summary" : "Account Login",
-        "operationId" : "login_1",
-        "requestBody" : {
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "$ref" : "#/components/schemas/LoginRequest"
-              }
-            }
+            "type": "array"
           },
-          "required" : true
+          "instance": {
+            "format": "uri",
+            "type": "string"
+          },
+          "status": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "title": {
+            "type": "string"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "type": {
+            "format": "uri",
+            "type": "string"
+          }
         },
-        "responses" : {
-          "200" : {
-            "description" : "OK",
-            "headers" : {
-              "Set-Cookie" : {
-                "description" : "Sets session HTTP cookies (adept_refresh, XSRF-TOKEN)",
-                "schema" : {
-                  "type" : "string",
-                  "example" : "XSRF-TOKEN=...; Path=/; Secure; SameSite=Strict"
-                }
-              },
-              "Cache-Control" : {
-                "description" : "Disables client caching for sensitive auth endpoints",
-                "schema" : {
-                  "type" : "string",
-                  "example" : "no-store"
-                }
-              }
+        "required": [
+          "code",
+          "detail",
+          "instance",
+          "status",
+          "title",
+          "traceId",
+          "type"
+        ],
+        "type": "object"
+      },
+      "RefreshRequest": {
+        "properties": {
+          "workspaceId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ResetPasswordRequest": {
+        "properties": {
+          "newPassword": {
+            "minLength": 1,
+            "type": "string",
+            "writeOnly": true
+          },
+          "token": {
+            "minLength": 1,
+            "type": "string",
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "newPassword",
+          "token"
+        ],
+        "type": "object"
+      },
+      "SignupRequest": {
+        "properties": {
+          "displayName": {
+            "maxLength": 160,
+            "minLength": 0,
+            "type": "string"
+          },
+          "email": {
+            "format": "email",
+            "maxLength": 320,
+            "minLength": 0,
+            "type": "string"
+          },
+          "password": {
+            "minLength": 1,
+            "type": "string",
+            "writeOnly": true
+          },
+          "timezone": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "workspaceName": {
+            "maxLength": 160,
+            "minLength": 0,
+            "type": "string"
+          }
+        },
+        "required": [
+          "displayName",
+          "email",
+          "password",
+          "timezone",
+          "workspaceName"
+        ],
+        "type": "object"
+      },
+      "SignupResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "emailVerificationRequired": {
+            "type": "boolean"
+          },
+          "user": {
+            "$ref": "#/components/schemas/UserSummary"
+          },
+          "workspace": {
+            "$ref": "#/components/schemas/WorkspaceSummaryResponse"
+          }
+        },
+        "required": [
+          "emailVerificationRequired",
+          "user",
+          "workspace"
+        ],
+        "type": "object"
+      },
+      "UpdateWorkspaceRequest": {
+        "additionalProperties": false,
+        "description": "Presence-aware patch. At least one of name or timezone is required; explicit null is invalid.",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "timezone": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "UserSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "displayName": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "emailVerified": {
+            "type": "boolean"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "displayName",
+          "email",
+          "emailVerified",
+          "id"
+        ],
+        "type": "object"
+      },
+      "WorkspaceDeletionResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "enum": [
+              "ACTIVE",
+              "DELETING",
+              "DELETED"
+            ],
+            "type": "string"
+          },
+          "workspaceId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "WorkspaceSelectionSessionResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/UserSummary"
+          },
+          "workspaceSelectionRequired": {
+            "enum": [
+              true
+            ],
+            "type": "boolean"
+          },
+          "workspaces": {
+            "items": {
+              "$ref": "#/components/schemas/WorkspaceSummaryResponse"
             },
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/AuthSessionResponse"
-                }
-              }
-            }
+            "type": "array"
           }
         },
-        "security" : [ {
-          "csrfHeader" : [ ]
-        } ]
-      }
-    },
-    "/api/v1/auth/forgot-password" : {
-      "post" : {
-        "tags" : [ "auth-controller" ],
-        "summary" : "Request Password Reset",
-        "operationId" : "forgotPassword",
-        "requestBody" : {
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "$ref" : "#/components/schemas/EmailRequest"
-              }
-            }
+        "required": [
+          "user",
+          "workspaceSelectionRequired",
+          "workspaces"
+        ],
+        "type": "object"
+      },
+      "WorkspaceSummaryResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": "string"
           },
-          "required" : true
-        },
-        "responses" : {
-          "200" : {
-            "description" : "OK",
-            "headers" : {
-              "Cache-Control" : {
-                "description" : "Disables client caching for sensitive auth endpoints",
-                "schema" : {
-                  "type" : "string",
-                  "example" : "no-store"
-                }
-              }
-            }
-          }
-        },
-        "security" : [ {
-          "csrfHeader" : [ ]
-        } ]
-      }
-    },
-    "/api/v1/workspaces/test-current" : {
-      "get" : {
-        "tags" : [ "security-test-endpoints" ],
-        "operationId" : "currentWorkspace",
-        "responses" : {
-          "200" : {
-            "description" : "OK"
-          }
-        }
-      },
-      "patch" : {
-        "tags" : [ "security-test-endpoints" ],
-        "operationId" : "updateWorkspace",
-        "requestBody" : {
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "$ref" : "#/components/schemas/Payload"
-              }
-            }
+          "name": {
+            "type": "string"
           },
-          "required" : true
-        },
-        "responses" : {
-          "200" : {
-            "description" : "OK"
-          }
-        }
-      }
-    },
-    "/api/v1/workspaces/current" : {
-      "get" : {
-        "tags" : [ "workspace-controller" ],
-        "summary" : "Get Current Workspace Details",
-        "operationId" : "getCurrentWorkspace",
-        "responses" : {
-          "200" : {
-            "description" : "OK",
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/CurrentWorkspaceResponse"
-                }
-              }
-            }
-          }
-        },
-        "security" : [ {
-          "bearerAuth" : [ ]
-        } ]
-      },
-      "delete" : {
-        "tags" : [ "workspace-controller" ],
-        "summary" : "Request Workspace Deletion",
-        "operationId" : "deleteCurrentWorkspace",
-        "requestBody" : {
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "$ref" : "#/components/schemas/DeleteWorkspaceRequest"
-              }
-            }
+          "role": {
+            "enum": [
+              "MANAGER",
+              "LEAD"
+            ],
+            "type": "string"
           },
-          "required" : true
-        },
-        "responses" : {
-          "200" : {
-            "description" : "OK",
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/WorkspaceDeletionResponse"
-                }
-              }
-            }
-          }
-        },
-        "security" : [ {
-          "bearerAuth" : [ ],
-          "csrfHeader" : [ ]
-        } ]
-      },
-      "patch" : {
-        "tags" : [ "workspace-controller" ],
-        "summary" : "Update Current Workspace Settings",
-        "operationId" : "updateCurrentWorkspace",
-        "requestBody" : {
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "$ref" : "#/components/schemas/UpdateWorkspaceRequest"
-              }
-            }
+          "slug": {
+            "type": "string"
           },
-          "required" : true
-        },
-        "responses" : {
-          "200" : {
-            "description" : "OK",
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/CurrentWorkspaceResponse"
-                }
-              }
-            }
+          "timezone": {
+            "type": "string"
           }
         },
-        "security" : [ {
-          "bearerAuth" : [ ],
-          "csrfHeader" : [ ]
-        } ]
+        "required": [
+          "id",
+          "name",
+          "role",
+          "slug",
+          "timezone"
+        ],
+        "type": "object"
       }
     },
-    "/api/v1/workspaces" : {
-      "get" : {
-        "tags" : [ "workspace-controller" ],
-        "summary" : "List Accessible Workspaces",
-        "operationId" : "listWorkspaces",
-        "responses" : {
-          "200" : {
-            "description" : "OK",
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "type" : "array",
-                  "items" : {
-                    "$ref" : "#/components/schemas/WorkspaceSummaryResponse"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "security" : [ {
-          "bearerAuth" : [ ]
-        } ]
-      }
-    },
-    "/api/v1/auth/test-me" : {
-      "get" : {
-        "tags" : [ "security-test-endpoints" ],
-        "operationId" : "me",
-        "responses" : {
-          "200" : {
-            "description" : "OK"
-          }
-        }
-      }
-    },
-    "/api/v1/auth/me" : {
-      "get" : {
-        "tags" : [ "auth-controller" ],
-        "summary" : "Get Current Identity Context",
-        "operationId" : "getCurrentUser",
-        "responses" : {
-          "200" : {
-            "description" : "OK",
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/MeResponse"
-                }
-              }
-            }
-          }
-        },
-        "security" : [ {
-          "bearerAuth" : [ ]
-        } ]
-      }
-    },
-    "/api/v1/auth/csrf" : {
-      "get" : {
-        "tags" : [ "csrf-controller" ],
-        "summary" : "Get CSRF Token",
-        "operationId" : "getCsrfToken",
-        "parameters" : [ {
-          "name" : "csrfToken",
-          "in" : "query",
-          "required" : true,
-          "schema" : {
-            "$ref" : "#/components/schemas/CsrfToken"
-          }
-        } ],
-        "responses" : {
-          "200" : {
-            "description" : "OK",
-            "headers" : {
-              "Set-Cookie" : {
-                "description" : "Sets session HTTP cookies (adept_refresh, XSRF-TOKEN)",
-                "schema" : {
-                  "type" : "string",
-                  "example" : "XSRF-TOKEN=...; Path=/; Secure; SameSite=Strict"
-                }
-              }
-            }
-          }
-        },
-        "security" : [ ]
-      }
-    },
-    "/actuator/info" : {
-      "get" : {
-        "tags" : [ "security-test-endpoints" ],
-        "operationId" : "actuatorInfo",
-        "responses" : {
-          "200" : {
-            "description" : "OK"
-          }
-        }
-      }
-    },
-    "/actuator/health/readiness" : {
-      "get" : {
-        "tags" : [ "security-test-endpoints" ],
-        "operationId" : "readiness",
-        "responses" : {
-          "200" : {
-            "description" : "OK"
-          }
-        }
-      }
-    },
-    "/api/v1/unlisted" : {
-      "get" : {
-        "tags" : [ "security-test-endpoints" ],
-        "operationId" : "unlisted",
-        "responses" : {
-          "200" : {
-            "description" : "OK"
-          }
-        }
+    "securitySchemes": {
+      "bearerAuth": {
+        "bearerFormat": "JWT",
+        "description": "HTTP Bearer JWT access token.",
+        "scheme": "bearer",
+        "type": "http"
       },
-      "put" : {
-        "tags" : [ "security-test-endpoints" ],
-        "operationId" : "unlisted_2",
-        "responses" : {
-          "200" : {
-            "description" : "OK"
-          }
-        }
+      "csrfHeader": {
+        "description": "CSRF header whose value must match the paired readable XSRF-TOKEN cookie.",
+        "in": "header",
+        "name": "X-XSRF-TOKEN",
+        "type": "apiKey"
       },
-      "post" : {
-        "tags" : [ "security-test-endpoints" ],
-        "operationId" : "unlisted_1",
-        "responses" : {
-          "200" : {
-            "description" : "OK"
-          }
-        }
-      },
-      "delete" : {
-        "tags" : [ "security-test-endpoints" ],
-        "operationId" : "unlisted_3",
-        "responses" : {
-          "200" : {
-            "description" : "OK"
-          }
-        }
-      },
-      "options" : {
-        "tags" : [ "security-test-endpoints" ],
-        "operationId" : "unlisted_6",
-        "responses" : {
-          "200" : {
-            "description" : "OK"
-          }
-        }
-      },
-      "head" : {
-        "tags" : [ "security-test-endpoints" ],
-        "operationId" : "unlisted_5",
-        "responses" : {
-          "200" : {
-            "description" : "OK"
-          }
-        }
-      },
-      "patch" : {
-        "tags" : [ "security-test-endpoints" ],
-        "operationId" : "unlisted_4",
-        "responses" : {
-          "200" : {
-            "description" : "OK"
-          }
-        }
+      "refreshCookie": {
+        "description": "HttpOnly refresh-session cookie. The cookie is required for refresh and workspace switching.",
+        "in": "cookie",
+        "name": "adept_refresh",
+        "type": "apiKey"
       }
     }
   },
-  "components" : {
-    "schemas" : {
-      "ActionTokenRequest" : {
-        "type" : "object",
-        "properties" : {
-          "token" : {
-            "type" : "string",
-            "minLength" : 1
-          }
-        },
-        "required" : [ "token" ]
-      },
-      "Payload" : {
-        "type" : "object",
-        "properties" : {
-          "value" : {
-            "type" : "string"
-          }
-        }
-      },
-      "AuthSessionResponse" : {
-        "type" : "object",
-        "properties" : {
-          "accessToken" : {
-            "type" : "string"
-          },
-          "expiresInSeconds" : {
-            "type" : "integer",
-            "format" : "int32"
-          },
-          "workspaceSelectionRequired" : {
-            "type" : "boolean"
-          },
-          "user" : {
-            "$ref" : "#/components/schemas/UserSummary"
-          },
-          "currentMembership" : {
-            "$ref" : "#/components/schemas/MembershipSummary"
-          },
-          "workspaces" : {
-            "type" : "array",
-            "items" : {
-              "$ref" : "#/components/schemas/WorkspaceSummaryResponse"
+  "info": {
+    "description": "Adept Industries Phase 2 API contract.",
+    "title": "Adept API",
+    "version": "v1"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/v1/auth/csrf": {
+      "get": {
+        "description": "Returns 204 and emits the readable XSRF-TOKEN cookie used with the X-XSRF-TOKEN header.",
+        "operationId": "getCsrfToken",
+        "responses": {
+          "204": {
+            "description": "CSRF cookie issued",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              },
+              "Set-Cookie": {
+                "description": "Sets the readable XSRF-TOKEN cookie.",
+                "schema": {
+                  "type": "string"
+                }
+              }
             }
           }
-        }
-      },
-      "MembershipSummary" : {
-        "type" : "object",
-        "properties" : {
-          "id" : {
-            "type" : "string",
-            "format" : "uuid"
-          },
-          "workspaceId" : {
-            "type" : "string",
-            "format" : "uuid"
-          },
-          "workspaceName" : {
-            "type" : "string"
-          },
-          "workspaceSlug" : {
-            "type" : "string"
-          },
-          "timezone" : {
-            "type" : "string"
-          },
-          "role" : {
-            "type" : "string",
-            "enum" : [ "MANAGER", "LEAD" ]
-          }
-        }
-      },
-      "UserSummary" : {
-        "type" : "object",
-        "properties" : {
-          "id" : {
-            "type" : "string",
-            "format" : "uuid"
-          },
-          "email" : {
-            "type" : "string"
-          },
-          "displayName" : {
-            "type" : "string"
-          },
-          "emailVerified" : {
-            "type" : "boolean"
-          }
-        }
-      },
-      "WorkspaceSummaryResponse" : {
-        "type" : "object",
-        "properties" : {
-          "id" : {
-            "type" : "string",
-            "format" : "uuid"
-          },
-          "name" : {
-            "type" : "string"
-          },
-          "slug" : {
-            "type" : "string"
-          },
-          "timezone" : {
-            "type" : "string"
-          },
-          "role" : {
-            "type" : "string",
-            "enum" : [ "MANAGER", "LEAD" ]
-          }
-        }
-      },
-      "SignupRequest" : {
-        "type" : "object",
-        "properties" : {
-          "email" : {
-            "type" : "string",
-            "format" : "email",
-            "maxLength" : 320,
-            "minLength" : 0
-          },
-          "password" : {
-            "type" : "string",
-            "minLength" : 1
-          },
-          "displayName" : {
-            "type" : "string",
-            "maxLength" : 160,
-            "minLength" : 0
-          },
-          "workspaceName" : {
-            "type" : "string",
-            "maxLength" : 160,
-            "minLength" : 0
-          },
-          "timezone" : {
-            "type" : "string",
-            "minLength" : 1
-          }
         },
-        "required" : [ "displayName", "email", "password", "timezone", "workspaceName" ]
-      },
-      "SignupResponse" : {
-        "type" : "object",
-        "properties" : {
-          "user" : {
-            "$ref" : "#/components/schemas/UserSummary"
-          },
-          "workspace" : {
-            "$ref" : "#/components/schemas/WorkspaceSummaryResponse"
-          },
-          "emailVerificationRequired" : {
-            "type" : "boolean"
-          }
-        }
-      },
-      "ResetPasswordRequest" : {
-        "type" : "object",
-        "properties" : {
-          "token" : {
-            "type" : "string",
-            "minLength" : 1
-          },
-          "newPassword" : {
-            "type" : "string",
-            "minLength" : 1
-          }
-        },
-        "required" : [ "newPassword", "token" ]
-      },
-      "EmailRequest" : {
-        "type" : "object",
-        "properties" : {
-          "email" : {
-            "type" : "string",
-            "format" : "email",
-            "maxLength" : 320,
-            "minLength" : 0
-          }
-        },
-        "required" : [ "email" ]
-      },
-      "RefreshRequest" : {
-        "type" : "object",
-        "properties" : {
-          "workspaceId" : {
-            "type" : "string",
-            "format" : "uuid"
-          }
-        }
-      },
-      "LoginRequest" : {
-        "type" : "object",
-        "properties" : {
-          "email" : {
-            "type" : "string"
-          },
-          "password" : {
-            "type" : "string"
-          }
-        },
-        "required" : [ "email", "password" ]
-      },
-      "UpdateWorkspaceRequest" : {
-        "type" : "object",
-        "properties" : {
-          "namePresent" : {
-            "type" : "boolean"
-          },
-          "timezonePresent" : {
-            "type" : "boolean"
-          },
-          "name" : {
-            "type" : "string"
-          },
-          "timezone" : {
-            "type" : "string"
-          }
-        }
-      },
-      "CurrentWorkspaceResponse" : {
-        "type" : "object",
-        "properties" : {
-          "id" : {
-            "type" : "string",
-            "format" : "uuid"
-          },
-          "name" : {
-            "type" : "string"
-          },
-          "slug" : {
-            "type" : "string"
-          },
-          "timezone" : {
-            "type" : "string"
-          },
-          "role" : {
-            "type" : "string",
-            "enum" : [ "MANAGER", "LEAD" ]
-          },
-          "membershipId" : {
-            "type" : "string",
-            "format" : "uuid"
-          }
-        }
-      },
-      "MeResponse" : {
-        "type" : "object",
-        "properties" : {
-          "user" : {
-            "$ref" : "#/components/schemas/UserSummary"
-          },
-          "currentMembership" : {
-            "$ref" : "#/components/schemas/MembershipSummary"
-          },
-          "workspaces" : {
-            "type" : "array",
-            "items" : {
-              "$ref" : "#/components/schemas/WorkspaceSummaryResponse"
-            }
-          }
-        }
-      },
-      "CsrfToken" : {
-        "type" : "object",
-        "properties" : {
-          "token" : {
-            "type" : "string"
-          },
-          "parameterName" : {
-            "type" : "string"
-          },
-          "headerName" : {
-            "type" : "string"
-          }
-        }
-      },
-      "DeleteWorkspaceRequest" : {
-        "type" : "object",
-        "properties" : {
-          "confirmationSlug" : {
-            "type" : "string",
-            "minLength" : 1
-          },
-          "password" : {
-            "type" : "string",
-            "minLength" : 1
-          }
-        },
-        "required" : [ "confirmationSlug", "password" ]
-      },
-      "WorkspaceDeletionResponse" : {
-        "type" : "object",
-        "properties" : {
-          "workspaceId" : {
-            "type" : "string",
-            "format" : "uuid"
-          },
-          "status" : {
-            "type" : "string",
-            "enum" : [ "ACTIVE", "DELETING", "DELETED" ]
-          }
-        }
+        "security": [],
+        "summary": "Bootstrap CSRF protection",
+        "tags": [
+          "csrf-controller"
+        ]
       }
     },
-    "securitySchemes" : {
-      "bearerAuth" : {
-        "type" : "http",
-        "description" : "HTTP Bearer JWT Access Token",
-        "scheme" : "bearer",
-        "bearerFormat" : "JWT"
+    "/api/v1/auth/forgot-password": {
+      "post": {
+        "operationId": "forgotPassword",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Request accepted",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Validation failed or the request was malformed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "CSRF, origin, membership, or role authorization failed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request body exceeded the 16 KiB limit",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request body used an unsupported media type",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "A request rate limit was exceeded",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              },
+              "Retry-After": {
+                "description": "Seconds until the request may be retried.",
+                "schema": {
+                  "format": "int64",
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "csrfHeader": []
+          }
+        ],
+        "summary": "Request a password reset",
+        "tags": [
+          "auth-controller"
+        ]
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "operationId": "login",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthSessionResponse"
+                }
+              }
+            },
+            "description": "Session created",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              },
+              "Set-Cookie": {
+                "description": "Sets or clears adept_refresh and rotates or expires XSRF-TOKEN as described by the operation.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Validation failed or the request was malformed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              },
+              "Set-Cookie": {
+                "description": "Sets or clears adept_refresh and rotates or expires XSRF-TOKEN as described by the operation.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Authentication or session validation failed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              },
+              "Set-Cookie": {
+                "description": "Sets or clears adept_refresh and rotates or expires XSRF-TOKEN as described by the operation.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "CSRF, origin, membership, or role authorization failed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              },
+              "Set-Cookie": {
+                "description": "Sets or clears adept_refresh and rotates or expires XSRF-TOKEN as described by the operation.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request body exceeded the 16 KiB limit",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              },
+              "Set-Cookie": {
+                "description": "Sets or clears adept_refresh and rotates or expires XSRF-TOKEN as described by the operation.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request body used an unsupported media type",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              },
+              "Set-Cookie": {
+                "description": "Sets or clears adept_refresh and rotates or expires XSRF-TOKEN as described by the operation.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "A request rate limit was exceeded",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              },
+              "Retry-After": {
+                "description": "Seconds until the request may be retried.",
+                "schema": {
+                  "format": "int64",
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "Set-Cookie": {
+                "description": "Sets or clears adept_refresh and rotates or expires XSRF-TOKEN as described by the operation.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "csrfHeader": []
+          }
+        ],
+        "summary": "Create a browser session",
+        "tags": [
+          "auth-controller"
+        ]
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "description": "Idempotently clears session cookies. A valid adept_refresh cookie is revoked when present; a missing cookie still returns 204.",
+        "operationId": "logoutSession",
+        "responses": {
+          "204": {
+            "description": "Session cookies cleared",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              },
+              "Set-Cookie": {
+                "description": "Sets or clears adept_refresh and rotates or expires XSRF-TOKEN as described by the operation.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "CSRF, origin, membership, or role authorization failed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              },
+              "Set-Cookie": {
+                "description": "Sets or clears adept_refresh and rotates or expires XSRF-TOKEN as described by the operation.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "A request rate limit was exceeded",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              },
+              "Retry-After": {
+                "description": "Seconds until the request may be retried.",
+                "schema": {
+                  "format": "int64",
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "Set-Cookie": {
+                "description": "Sets or clears adept_refresh and rotates or expires XSRF-TOKEN as described by the operation.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "csrfHeader": []
+          }
+        ],
+        "summary": "End the browser session",
+        "tags": [
+          "auth-controller"
+        ]
+      }
+    },
+    "/api/v1/auth/me": {
+      "get": {
+        "operationId": "getCurrentUser",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeResponse"
+                }
+              }
+            },
+            "description": "Current identity returned",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Authentication or session validation failed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "CSRF, origin, membership, or role authorization failed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Get the current identity context",
+        "tags": [
+          "auth-controller"
+        ]
+      }
+    },
+    "/api/v1/auth/refresh": {
+      "post": {
+        "operationId": "refreshSession",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthSessionResponse"
+                }
+              }
+            },
+            "description": "Session refreshed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              },
+              "Set-Cookie": {
+                "description": "Rotates or clears the HttpOnly adept_refresh cookie.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Validation failed or the request was malformed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              },
+              "Set-Cookie": {
+                "description": "Rotates or clears the HttpOnly adept_refresh cookie.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Authentication or session validation failed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              },
+              "Set-Cookie": {
+                "description": "Rotates or clears the HttpOnly adept_refresh cookie.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "CSRF, origin, membership, or role authorization failed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              },
+              "Set-Cookie": {
+                "description": "Rotates or clears the HttpOnly adept_refresh cookie.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request body exceeded the 16 KiB limit",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              },
+              "Set-Cookie": {
+                "description": "Rotates or clears the HttpOnly adept_refresh cookie.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request body used an unsupported media type",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              },
+              "Set-Cookie": {
+                "description": "Rotates or clears the HttpOnly adept_refresh cookie.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "A request rate limit was exceeded",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              },
+              "Retry-After": {
+                "description": "Seconds until the request may be retried.",
+                "schema": {
+                  "format": "int64",
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "Set-Cookie": {
+                "description": "Rotates or clears the HttpOnly adept_refresh cookie.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "csrfHeader": [],
+            "refreshCookie": []
+          }
+        ],
+        "summary": "Rotate the refresh token and issue session state",
+        "tags": [
+          "auth-controller"
+        ]
+      }
+    },
+    "/api/v1/auth/resend-verification": {
+      "post": {
+        "operationId": "resendVerification",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Request accepted",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Validation failed or the request was malformed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "CSRF, origin, membership, or role authorization failed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request body exceeded the 16 KiB limit",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request body used an unsupported media type",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "A request rate limit was exceeded",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              },
+              "Retry-After": {
+                "description": "Seconds until the request may be retried.",
+                "schema": {
+                  "format": "int64",
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "csrfHeader": []
+          }
+        ],
+        "summary": "Request another verification email",
+        "tags": [
+          "auth-controller"
+        ]
+      }
+    },
+    "/api/v1/auth/reset-password": {
+      "post": {
+        "operationId": "resetPassword",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetPasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Password reset and session cookies cleared",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              },
+              "Set-Cookie": {
+                "description": "Sets or clears adept_refresh and rotates or expires XSRF-TOKEN as described by the operation.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Validation failed or the request was malformed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              },
+              "Set-Cookie": {
+                "description": "Sets or clears adept_refresh and rotates or expires XSRF-TOKEN as described by the operation.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "CSRF, origin, membership, or role authorization failed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              },
+              "Set-Cookie": {
+                "description": "Sets or clears adept_refresh and rotates or expires XSRF-TOKEN as described by the operation.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request body exceeded the 16 KiB limit",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              },
+              "Set-Cookie": {
+                "description": "Sets or clears adept_refresh and rotates or expires XSRF-TOKEN as described by the operation.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request body used an unsupported media type",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              },
+              "Set-Cookie": {
+                "description": "Sets or clears adept_refresh and rotates or expires XSRF-TOKEN as described by the operation.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "A request rate limit was exceeded",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              },
+              "Retry-After": {
+                "description": "Seconds until the request may be retried.",
+                "schema": {
+                  "format": "int64",
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "Set-Cookie": {
+                "description": "Sets or clears adept_refresh and rotates or expires XSRF-TOKEN as described by the operation.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "csrfHeader": []
+          }
+        ],
+        "summary": "Reset a password",
+        "tags": [
+          "auth-controller"
+        ]
+      }
+    },
+    "/api/v1/auth/signup": {
+      "post": {
+        "operationId": "signup",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignupResponse"
+                }
+              }
+            },
+            "description": "Account created",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Validation failed or the request was malformed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "CSRF, origin, membership, or role authorization failed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The requested state conflicts with current state",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request body exceeded the 16 KiB limit",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request body used an unsupported media type",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "A request rate limit was exceeded",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              },
+              "Retry-After": {
+                "description": "Seconds until the request may be retried.",
+                "schema": {
+                  "format": "int64",
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "csrfHeader": []
+          }
+        ],
+        "summary": "Create an account and workspace",
+        "tags": [
+          "auth-controller"
+        ]
+      }
+    },
+    "/api/v1/auth/switch-workspace/{workspaceId}": {
+      "post": {
+        "operationId": "switchWorkspace",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspaceId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthSessionResponse"
+                }
+              }
+            },
+            "description": "Workspace selected",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Validation failed or the request was malformed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Authentication or session validation failed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              },
+              "Set-Cookie": {
+                "description": "May clear the adept_refresh cookie after invalid session state.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "CSRF, origin, membership, or role authorization failed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The scoped resource was not found",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "A request rate limit was exceeded",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              },
+              "Retry-After": {
+                "description": "Seconds until the request may be retried.",
+                "schema": {
+                  "format": "int64",
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "csrfHeader": [],
+            "refreshCookie": []
+          }
+        ],
+        "summary": "Switch the active workspace",
+        "tags": [
+          "auth-controller"
+        ]
+      }
+    },
+    "/api/v1/auth/verify-email": {
+      "post": {
+        "operationId": "verifyEmail",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ActionTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Email verified",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Validation failed or the request was malformed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "CSRF, origin, membership, or role authorization failed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request body exceeded the 16 KiB limit",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request body used an unsupported media type",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "A request rate limit was exceeded",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              },
+              "Retry-After": {
+                "description": "Seconds until the request may be retried.",
+                "schema": {
+                  "format": "int64",
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "csrfHeader": []
+          }
+        ],
+        "summary": "Verify an email address",
+        "tags": [
+          "auth-controller"
+        ]
+      }
+    },
+    "/api/v1/workspaces": {
+      "get": {
+        "operationId": "listWorkspaces",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/WorkspaceSummaryResponse"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Accessible workspaces returned",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Authentication or session validation failed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "CSRF, origin, membership, or role authorization failed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "List active workspace memberships",
+        "tags": [
+          "workspace-controller"
+        ]
+      }
+    },
+    "/api/v1/workspaces/current": {
+      "delete": {
+        "description": "Marks the workspace DELETING, suspends integrations, and queues one pending DELETE_WORKSPACE job. The deletion worker is intentionally deferred beyond Phase 2.",
+        "operationId": "deleteCurrentWorkspace",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteWorkspaceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceDeletionResponse"
+                }
+              }
+            },
+            "description": "Deletion requested",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Validation failed or the request was malformed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Authentication or session validation failed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "CSRF, origin, membership, or role authorization failed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The requested state conflicts with current state",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request body exceeded the 16 KiB limit",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request body used an unsupported media type",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "A request rate limit was exceeded",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              },
+              "Retry-After": {
+                "description": "Seconds until the request may be retried.",
+                "schema": {
+                  "format": "int64",
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+            "csrfHeader": []
+          }
+        ],
+        "summary": "Request current workspace deletion",
+        "tags": [
+          "workspace-controller"
+        ]
       },
-      "refreshCookie" : {
-        "type" : "apiKey",
-        "description" : "Refresh session token in HttpOnly cookie",
-        "name" : "adept_refresh",
-        "in" : "cookie"
+      "get": {
+        "operationId": "getCurrentWorkspace",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurrentWorkspaceResponse"
+                }
+              }
+            },
+            "description": "Current workspace returned",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Authentication or session validation failed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "CSRF, origin, membership, or role authorization failed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Get the current workspace",
+        "tags": [
+          "workspace-controller"
+        ]
       },
-      "csrfHeader" : {
-        "type" : "apiKey",
-        "description" : "CSRF token in HTTP header",
-        "name" : "X-XSRF-TOKEN",
-        "in" : "header"
+      "patch": {
+        "operationId": "updateCurrentWorkspace",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateWorkspaceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurrentWorkspaceResponse"
+                }
+              }
+            },
+            "description": "Workspace updated",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Validation failed or the request was malformed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Authentication or session validation failed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "CSRF, origin, membership, or role authorization failed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The requested state conflicts with current state",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request body exceeded the 16 KiB limit",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request body used an unsupported media type",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive Phase 2 responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+            "csrfHeader": []
+          }
+        ],
+        "summary": "Update current workspace settings",
+        "tags": [
+          "workspace-controller"
+        ]
       }
     }
-  }
+  },
+  "servers": [
+    {
+      "description": "Generated server url",
+      "url": "http://localhost"
+    }
+  ]
 }

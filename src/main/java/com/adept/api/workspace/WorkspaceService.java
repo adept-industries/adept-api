@@ -206,16 +206,20 @@ public class WorkspaceService {
         workspace.setStatus(WorkspaceStatus.DELETING);
         workspaceRepository.save(workspace);
 
-        List<GithubIntegration> githubIntegrations = githubIntegrationRepository.findAllByWorkspaceIdAndStatus(workspace.getId(), IntegrationStatus.ACTIVE);
+        List<GithubIntegration> githubIntegrations = githubIntegrationRepository.findAllByWorkspaceIdForUpdate(workspace.getId());
         for (GithubIntegration gh : githubIntegrations) {
-            gh.setStatus(IntegrationStatus.SUSPENDED);
-            gh.setSuspendedAt(Instant.now());
+            if (gh.getStatus() == IntegrationStatus.ACTIVE) {
+                gh.setStatus(IntegrationStatus.SUSPENDED);
+                gh.setSuspendedAt(Instant.now());
+            }
         }
         githubIntegrationRepository.saveAll(githubIntegrations);
 
-        List<JiraIntegration> jiraIntegrations = jiraIntegrationRepository.findAllByWorkspaceIdAndStatus(workspace.getId(), IntegrationStatus.ACTIVE);
+        List<JiraIntegration> jiraIntegrations = jiraIntegrationRepository.findAllByWorkspaceIdForUpdate(workspace.getId());
         for (JiraIntegration jira : jiraIntegrations) {
-            jira.setStatus(IntegrationStatus.SUSPENDED);
+            if (jira.getStatus() == IntegrationStatus.ACTIVE) {
+                jira.setStatus(IntegrationStatus.SUSPENDED);
+            }
         }
         jiraIntegrationRepository.saveAll(jiraIntegrations);
 
