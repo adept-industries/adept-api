@@ -8,6 +8,8 @@ import com.adept.api.common.error.ProblemCode;
 import com.fasterxml.jackson.annotation.JsonSetter;
 import com.fasterxml.jackson.annotation.Nulls;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 public class UpdateWorkspaceRequest {
 
     private String name;
@@ -40,6 +42,7 @@ public class UpdateWorkspaceRequest {
         return name;
     }
 
+    @Schema(hidden = true)
     public boolean isNamePresent() {
         return namePresent;
     }
@@ -54,6 +57,7 @@ public class UpdateWorkspaceRequest {
         return timezone;
     }
 
+    @Schema(hidden = true)
     public boolean isTimezonePresent() {
         return timezonePresent;
     }

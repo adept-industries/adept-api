@@ -47,20 +47,40 @@ Health endpoint: <http://localhost:8080/actuator/health>
 ## Authentication, CSRF & Workspace Flow
 
 ### 1. CSRF Bootstrap & Unsafe Requests
+
 - Request `GET /api/v1/auth/csrf` to bootstrap the `XSRF-TOKEN` cookie.
 - Pass the token value in header `X-XSRF-TOKEN` for all state-changing HTTP operations (`POST`, `PUT`, `PATCH`, `DELETE`).
 
-### 2. Bearer Access Tokens
-- Authenticated requests must present `Authorization: Bearer <accessToken>`.
-- JWT access tokens expire in 15 minutes. Use `POST /api/v1/auth/refresh` with `adept_refresh` HttpOnly cookie to obtain a fresh access token.
+### 2. Account Lifecycle
 
-### 3. Workspace Selection & Switching Rules
+1. Create an account and its first workspace with `POST /api/v1/auth/signup`.
+2. Copy the one-time token from Mailpit and submit it to `POST /api/v1/auth/verify-email`.
+3. Use `POST /api/v1/auth/resend-verification` when another verification email is needed.
+4. Sign in with `POST /api/v1/auth/login`.
+5. Use `POST /api/v1/auth/forgot-password` and `POST /api/v1/auth/reset-password` for password recovery.
+6. Rotate the browser session with `POST /api/v1/auth/refresh` and end it with `POST /api/v1/auth/logout`.
+
+Verification, resend, password-reset, login, refresh, and logout requests must use the current CSRF cookie/header pair. Responses from resend and forgot-password are deliberately generic.
+
+### 3. Access and Refresh Tokens
+
+- Authenticated requests present `Authorization: Bearer <accessToken>`.
+- Access JWTs expire in 15 minutes and must be held only in frontend memory, never local storage or a persistent cookie.
+- The seven-day `adept_refresh` token is stored in the `HttpOnly`, `Secure`, `SameSite=Strict` cookie. Browser JavaScript cannot read it.
+- `POST /api/v1/auth/refresh` rotates the refresh token and returns a new memory-only access token when a workspace can be selected.
+- Authentication and workspace responses use `Cache-Control: no-store`.
+
+### 4. Workspace Selection & Switching Rules
+
 - Users belonging to multiple workspaces receive `workspaceSelectionRequired: true` during login.
 - Switch active workspace context via `POST /api/v1/auth/switch-workspace/{workspaceId}` (requires `adept_refresh` cookie & `X-XSRF-TOKEN` header).
 - View accessible workspaces via `GET /api/v1/workspaces` and current workspace via `GET /api/v1/workspaces/current`.
-- Controlled workspace deletion (`DELETE /api/v1/workspaces/current`) requires Manager role, BCrypt password reauthentication, exact confirmation slug matching, and enqueues a `DELETE_WORKSPACE` background worker job.
+- Controlled workspace deletion (`DELETE /api/v1/workspaces/current`) requires Manager role, BCrypt password reauthentication, and exact confirmation-slug matching.
+- A successful deletion request marks the workspace `DELETING`, suspends its active integrations, and enqueues one pending `DELETE_WORKSPACE` job. Phase 2 does not include the job handler, so it does not hard-delete the workspace.
 
 ## OpenAPI Contract Generation
+
+With the API running under the `local` profile, Swagger UI is available at <http://localhost:8080/swagger-ui/index.html> and the live JSON document is at <http://localhost:8080/v3/api-docs>.
 
 To export the OpenAPI specification deterministically to `docs/openapi/adept-api-v1.json`:
 
@@ -68,7 +88,7 @@ To export the OpenAPI specification deterministically to `docs/openapi/adept-api
 ./scripts/export-openapi.sh
 ```
 
-The script fetches `/v3/api-docs` from a running server or executes a Spring context generation test, formats the JSON deterministically with `jq --sort-keys`, and outputs `docs/openapi/adept-api-v1.json`.
+The script fetches `/v3/api-docs` from a running server or executes a Spring context generation test, validates and sorts the JSON in a temporary file, and atomically replaces `docs/openapi/adept-api-v1.json`. `OpenApiContractTest` compares live test output with that committed file, so contract drift fails CI.
 
 ## Testing
 
@@ -81,3 +101,5 @@ Integration tests require Docker running for PostgreSQL Testcontainers:
 ## Database Ownership
 
 Flyway files under `src/main/resources/db/migration` are the schema source of truth. Hibernate uses `ddl-auto: validate`. Never edit an already-shared migration. Generate local ERD with `./scripts/generate-erd.sh`.
+
+Phase 2 adds no schema migration. Its only prerequisite schema change is the already-completed V8 migration, and the migration inventory must remain V1–V8.

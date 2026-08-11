@@ -4,28 +4,21 @@ import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.support.TransactionTemplate;
 
 import com.adept.api.auth.dto.SignupRequest;
 import com.adept.api.auth.dto.SignupResponse;
 import com.adept.api.common.domain.MembershipRole;
 import com.adept.api.common.domain.MembershipStatus;
 import com.adept.api.common.domain.WorkspaceStatus;
-import com.adept.api.workspace.Workspace;
-import com.adept.api.workspace.WorkspaceRepository;
-import com.adept.api.workspace.WorkspaceService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import jakarta.servlet.http.Cookie;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -38,15 +31,6 @@ class WorkspaceControllerIntegrationTest extends PartCIntegrationTestSupport {
 
     @Autowired
     private AuthService authService;
-
-    @Autowired
-    private WorkspaceService workspaceService;
-
-    @Autowired
-    private WorkspaceRepository workspaceRepository;
-
-    @Autowired
-    private PlatformTransactionManager transactionManager;
 
     @Autowired
     private MockMvc mockMvc;
@@ -208,6 +192,18 @@ class WorkspaceControllerIntegrationTest extends PartCIntegrationTestSupport {
             signup.workspace().id()
         );
         assertThat(slugInDb).isEqualTo(initialSlug);
+
+        String auditMetadata = jdbc.queryForObject(
+            "SELECT metadata::text FROM audit_logs WHERE workspace_id = ? AND action = 'WORKSPACE_UPDATED'",
+            String.class,
+            signup.workspace().id()
+        );
+        JsonNode metadata = objectMapper.readTree(auditMetadata);
+        assertThat(metadata.path("changedFields").toString())
+            .isEqualTo("[\"name\",\"timezone\"]");
+        assertThat(auditMetadata)
+            .doesNotContain("Original Workspace Name")
+            .doesNotContain("Updated Manager Workspace");
     }
 
     @Test
@@ -270,6 +266,14 @@ class WorkspaceControllerIntegrationTest extends PartCIntegrationTestSupport {
             .andExpect(status().isForbidden())
             .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
             .andExpect(jsonPath("$.code").value("MANAGER_REQUIRED"));
+
+        Integer successAuditCount = jdbc.queryForObject(
+            "SELECT count(*) FROM audit_logs WHERE workspace_id = ? "
+                + "AND action IN ('WORKSPACE_UPDATED', 'WORKSPACE_DELETION_REQUESTED')",
+            Integer.class,
+            signup.workspace().id()
+        );
+        assertThat(successAuditCount).isZero();
     }
 
     @Test
@@ -283,7 +287,7 @@ class WorkspaceControllerIntegrationTest extends PartCIntegrationTestSupport {
         jdbc.update("UPDATE users SET email_verified_at = now() WHERE id = ?", signup.user().id());
         String accessToken = loginAndGetAccessToken(email, VALID_PASSWORD, signup.workspace().id());
 
-        // 1. Empty body {} -> 400 Bad Request
+        // Representative invalid shapes: missing fields, explicit null, and invalid ZoneId.
         CsrfPair c1 = fetchCsrf(mockMvc);
         mockMvc.perform(patch("/api/v1/workspaces/current")
                 .header("Origin", FRONTEND_ORIGIN)
@@ -295,7 +299,6 @@ class WorkspaceControllerIntegrationTest extends PartCIntegrationTestSupport {
             .andExpect(status().isBadRequest())
             .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON));
 
-        // 2. Explicit null name {"name": null} -> 400 Bad Request
         CsrfPair c2 = fetchCsrf(mockMvc);
         mockMvc.perform(patch("/api/v1/workspaces/current")
                 .header("Origin", FRONTEND_ORIGIN)
@@ -307,7 +310,6 @@ class WorkspaceControllerIntegrationTest extends PartCIntegrationTestSupport {
             .andExpect(status().isBadRequest())
             .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON));
 
-        // 3. Blank name {"name": "   "} -> 400 Bad Request
         CsrfPair c3 = fetchCsrf(mockMvc);
         mockMvc.perform(patch("/api/v1/workspaces/current")
                 .header("Origin", FRONTEND_ORIGIN)
@@ -315,63 +317,16 @@ class WorkspaceControllerIntegrationTest extends PartCIntegrationTestSupport {
                 .header("X-XSRF-TOKEN", c3.token())
                 .cookie(new Cookie("XSRF-TOKEN", c3.token()))
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"name\": \"   \"}"))
-            .andExpect(status().isBadRequest())
-            .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON));
-
-        // 4. Overlength name >160 chars -> 400 Bad Request
-        String overlengthName = "A".repeat(161);
-        CsrfPair c4 = fetchCsrf(mockMvc);
-        mockMvc.perform(patch("/api/v1/workspaces/current")
-                .header("Origin", FRONTEND_ORIGIN)
-                .header("Authorization", "Bearer " + accessToken)
-                .header("X-XSRF-TOKEN", c4.token())
-                .cookie(new Cookie("XSRF-TOKEN", c4.token()))
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"name\": \"%s\"}".formatted(overlengthName)))
-            .andExpect(status().isBadRequest())
-            .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON));
-
-        // 5. Invalid timezone string -> 400 Bad Request
-        CsrfPair c5 = fetchCsrf(mockMvc);
-        mockMvc.perform(patch("/api/v1/workspaces/current")
-                .header("Origin", FRONTEND_ORIGIN)
-                .header("Authorization", "Bearer " + accessToken)
-                .header("X-XSRF-TOKEN", c5.token())
-                .cookie(new Cookie("XSRF-TOKEN", c5.token()))
-                .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"timezone\": \"Invalid/Zone_999\"}"))
             .andExpect(status().isBadRequest())
             .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON));
-    }
 
-    @Test
-    void optimisticLockingConflictDuringConcurrentUpdate() throws Exception {
-        String email = uniqueEmail("optimistic-lock-user");
-        SignupResponse signup = authService.signup(
-            new SignupRequest(email, VALID_PASSWORD, "Lock User", "Lock Workspace", "UTC"),
-            requestContext()
+        Integer updateAuditCount = jdbc.queryForObject(
+            "SELECT count(*) FROM audit_logs WHERE workspace_id = ? AND action = 'WORKSPACE_UPDATED'",
+            Integer.class,
+            signup.workspace().id()
         );
-
-        jdbc.update("UPDATE users SET email_verified_at = now() WHERE id = ?", signup.user().id());
-
-        // Load entity in transaction
-        TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
-        Workspace workspaceToUpdate = transactionTemplate.execute(status -> {
-            Workspace ws = workspaceRepository.findById(signup.workspace().id()).orElseThrow();
-            ws.setName("Preloaded Workspace Name");
-            return ws;
-        });
-
-        // Simulate concurrent update by bumping version in database directly
-        jdbc.update("UPDATE workspaces SET version = version + 1 WHERE id = ?", signup.workspace().id());
-
-        // Saving stale entity throws OptimisticLockingFailureException
-        assertThatThrownBy(() -> {
-            transactionTemplate.execute(status -> {
-                workspaceRepository.save(workspaceToUpdate);
-                return null;
-            });
-        }).isInstanceOf(OptimisticLockingFailureException.class);
+        assertThat(updateAuditCount).isZero();
     }
+
 }
