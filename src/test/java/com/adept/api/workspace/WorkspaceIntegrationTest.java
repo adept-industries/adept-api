@@ -10,12 +10,14 @@ import com.adept.api.auth.AuthService;
 import com.adept.api.auth.PartCIntegrationTestSupport;
 import com.adept.api.auth.dto.SignupRequest;
 import com.adept.api.auth.dto.SignupResponse;
+import com.adept.api.common.domain.WorkspaceStatus;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import jakarta.servlet.http.Cookie;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -134,6 +136,64 @@ class WorkspaceIntegrationTest extends PartCIntegrationTestSupport {
                     }
                     """))
             .andExpect(status().isBadRequest())
+            .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON));
+
+        // 7. DELETE /api/v1/workspaces/current - success (202 Accepted)
+        String currentSlug = signup.workspace().slug();
+        CsrfPair csrfDelete1 = fetchCsrf(mockMvc);
+        mockMvc.perform(delete("/api/v1/workspaces/current")
+                .header("Origin", FRONTEND_ORIGIN)
+                .header("Authorization", "Bearer " + accessToken)
+                .header("X-XSRF-TOKEN", csrfDelete1.token())
+                .cookie(new Cookie("XSRF-TOKEN", csrfDelete1.token()))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                        "confirmationSlug": "%s",
+                        "password": "%s"
+                    }
+                    """.formatted(currentSlug, VALID_PASSWORD)))
+            .andExpect(status().isAccepted())
+            .andExpect(jsonPath("$.workspaceId").value(signup.workspace().id().toString()))
+            .andExpect(jsonPath("$.status").value("DELETING"));
+
+        // Verify workspace status in DB
+        String statusInDb = jdbc.queryForObject(
+            "SELECT status FROM workspaces WHERE id = ?",
+            String.class,
+            signup.workspace().id()
+        );
+        assertThat(statusInDb).isEqualTo(WorkspaceStatus.DELETING.name());
+
+        // Verify processing job created in DB
+        int jobCount = jdbc.queryForObject(
+            "SELECT count(*) FROM processing_jobs WHERE job_type = 'DELETE_WORKSPACE'",
+            Integer.class
+        );
+        assertThat(jobCount).isGreaterThanOrEqualTo(1);
+
+        // Verify audit log recorded
+        int deletionAuditCount = jdbc.queryForObject(
+            "SELECT count(*) FROM audit_logs WHERE action = 'WORKSPACE_DELETION_REQUESTED'",
+            Integer.class
+        );
+        assertThat(deletionAuditCount).isGreaterThanOrEqualTo(1);
+
+        // 8. DELETE /api/v1/workspaces/current - already deleting (409 Conflict)
+        CsrfPair csrfDelete2 = fetchCsrf(mockMvc);
+        mockMvc.perform(delete("/api/v1/workspaces/current")
+                .header("Origin", FRONTEND_ORIGIN)
+                .header("Authorization", "Bearer " + accessToken)
+                .header("X-XSRF-TOKEN", csrfDelete2.token())
+                .cookie(new Cookie("XSRF-TOKEN", csrfDelete2.token()))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                        "confirmationSlug": "%s",
+                        "password": "%s"
+                    }
+                    """.formatted(currentSlug, VALID_PASSWORD)))
+            .andExpect(status().isConflict())
             .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON));
     }
 }
