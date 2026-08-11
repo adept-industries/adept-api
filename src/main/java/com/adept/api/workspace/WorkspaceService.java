@@ -1,0 +1,254 @@
+package com.adept.api.workspace;
+
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.adept.api.audit.AuditAction;
+import com.adept.api.audit.AuditService;
+import com.adept.api.auth.AccountRequestContext;
+import com.adept.api.common.domain.IntegrationStatus;
+import com.adept.api.common.domain.MembershipRole;
+import com.adept.api.common.domain.MembershipStatus;
+import com.adept.api.common.domain.ProcessingJobStatus;
+import com.adept.api.common.domain.ProcessingJobType;
+import com.adept.api.common.domain.UserStatus;
+import com.adept.api.common.domain.WorkspaceStatus;
+import com.adept.api.common.error.ApiException;
+import com.adept.api.common.error.ConflictException;
+import com.adept.api.common.error.ForbiddenException;
+import com.adept.api.common.error.NotFoundException;
+import com.adept.api.common.error.ProblemCode;
+import com.adept.api.common.error.UnauthorizedException;
+import com.adept.api.crypto.PasswordService;
+import com.adept.api.integration.github.GithubIntegration;
+import com.adept.api.integration.github.GithubIntegrationRepository;
+import com.adept.api.integration.jira.JiraIntegration;
+import com.adept.api.integration.jira.JiraIntegrationRepository;
+import com.adept.api.job.ProcessingJob;
+import com.adept.api.job.ProcessingJobRepository;
+import com.adept.api.security.AuthenticatedPrincipal;
+import com.adept.api.security.ratelimit.AuthRateLimiter;
+import com.adept.api.user.User;
+import com.adept.api.user.UserRepository;
+import com.adept.api.workspace.dto.CurrentWorkspaceResponse;
+import com.adept.api.workspace.dto.DeleteWorkspaceRequest;
+import com.adept.api.workspace.dto.UpdateWorkspaceRequest;
+import com.adept.api.workspace.dto.WorkspaceDeletionResponse;
+import com.adept.api.workspace.dto.WorkspaceSummaryResponse;
+
+@Service
+@Transactional
+public class WorkspaceService {
+
+    private final MembershipRepository membershipRepository;
+    private final WorkspaceRepository workspaceRepository;
+    private final UserRepository userRepository;
+    private final GithubIntegrationRepository githubIntegrationRepository;
+    private final JiraIntegrationRepository jiraIntegrationRepository;
+    private final ProcessingJobRepository processingJobRepository;
+    private final WorkspaceAuthorizationService workspaceAuthorizationService;
+    private final AuthRateLimiter authRateLimiter;
+    private final PasswordService passwordService;
+    private final AuditService auditService;
+
+    public WorkspaceService(
+            MembershipRepository membershipRepository,
+            WorkspaceRepository workspaceRepository,
+            UserRepository userRepository,
+            GithubIntegrationRepository githubIntegrationRepository,
+            JiraIntegrationRepository jiraIntegrationRepository,
+            ProcessingJobRepository processingJobRepository,
+            WorkspaceAuthorizationService workspaceAuthorizationService,
+            AuthRateLimiter authRateLimiter,
+            PasswordService passwordService,
+            AuditService auditService) {
+        this.membershipRepository = membershipRepository;
+        this.workspaceRepository = workspaceRepository;
+        this.userRepository = userRepository;
+        this.githubIntegrationRepository = githubIntegrationRepository;
+        this.jiraIntegrationRepository = jiraIntegrationRepository;
+        this.processingJobRepository = processingJobRepository;
+        this.workspaceAuthorizationService = workspaceAuthorizationService;
+        this.authRateLimiter = authRateLimiter;
+        this.passwordService = passwordService;
+        this.auditService = auditService;
+    }
+
+    @Transactional(readOnly = true)
+    public List<WorkspaceSummaryResponse> getWorkspaces(AuthenticatedPrincipal principal) {
+        if (principal == null || principal.userId() == null) {
+            throw new ForbiddenException(ProblemCode.NO_ACTIVE_MEMBERSHIP);
+        }
+
+        List<Membership> activeMemberships = membershipRepository.findAllActiveWithWorkspaceByUserId(principal.userId());
+        return activeMemberships.stream()
+            .map(WorkspaceSummaryResponse::from)
+            .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public CurrentWorkspaceResponse getCurrentWorkspace(AuthenticatedPrincipal principal) {
+        Membership membership = revalidateActiveMembership(principal);
+        return CurrentWorkspaceResponse.from(membership);
+    }
+
+    public CurrentWorkspaceResponse updateCurrentWorkspace(
+            AuthenticatedPrincipal principal,
+            UpdateWorkspaceRequest request,
+            AccountRequestContext context) {
+        workspaceAuthorizationService.requireManager(principal);
+
+        if (request == null) {
+            throw new ForbiddenException(ProblemCode.NO_ACTIVE_MEMBERSHIP);
+        }
+        request.validate();
+
+        Membership membership = revalidateActiveMembership(principal);
+        Workspace workspace = membership.getWorkspace();
+
+        List<String> changedFields = new ArrayList<>();
+
+        if (request.isNamePresent()) {
+            String newName = request.getName().trim();
+            if (!newName.equals(workspace.getName())) {
+                workspace.setName(newName);
+                changedFields.add("name");
+            }
+        }
+
+        if (request.isTimezonePresent()) {
+            String newTimezone = request.getTimezone().trim();
+            if (!newTimezone.equals(workspace.getTimezone())) {
+                workspace.setTimezone(newTimezone);
+                changedFields.add("timezone");
+            }
+        }
+
+        workspace = workspaceRepository.saveAndFlush(workspace);
+
+        if (!changedFields.isEmpty()) {
+            auditService.record(
+                AuditAction.WORKSPACE_UPDATED,
+                membership.getUser(),
+                membership,
+                workspace,
+                "WORKSPACE",
+                workspace.getId(),
+                Map.of("changedFields", changedFields),
+                context != null ? context.ipAddress() : null,
+                context != null ? context.userAgent() : null
+            );
+        }
+
+        return CurrentWorkspaceResponse.from(membership);
+    }
+
+    public WorkspaceDeletionResponse deleteCurrentWorkspace(
+            AuthenticatedPrincipal principal,
+            DeleteWorkspaceRequest request,
+            AccountRequestContext context) {
+        workspaceAuthorizationService.requireManager(principal);
+
+        if (principal == null || principal.userId() == null) {
+            throw new ForbiddenException(ProblemCode.MANAGER_REQUIRED);
+        }
+
+        authRateLimiter.requireDeletion(principal.userId());
+
+        if (request == null || request.confirmationSlug() == null || request.confirmationSlug().isBlank()
+                || request.password() == null || request.password().isBlank()) {
+            throw new ApiException(ProblemCode.VALIDATION_FAILED, "Confirmation slug and password are required.");
+        }
+
+        // Strict PESSIMISTIC_WRITE lock order: User -> Membership -> Workspace
+        User user = userRepository.findByIdForUpdate(principal.userId())
+            .orElseThrow(() -> new UnauthorizedException(ProblemCode.SESSION_INVALID));
+
+        Membership membership = membershipRepository.findByIdForUpdate(principal.membershipId())
+            .orElseThrow(() -> new ForbiddenException(ProblemCode.MANAGER_REQUIRED));
+
+        Workspace workspace = workspaceRepository.findByIdForUpdate(principal.workspaceId())
+            .orElseThrow(() -> new NotFoundException(ProblemCode.WORKSPACE_NOT_FOUND));
+
+        // Revalidate locked snapshot
+        if (user.getStatus() != UserStatus.ACTIVE || user.getEmailVerifiedAt() == null
+                || user.getTokenVersion() != principal.tokenVersion()) {
+            throw new UnauthorizedException(ProblemCode.SESSION_INVALID);
+        }
+
+        if (membership.getStatus() != MembershipStatus.ACTIVE || membership.getRole() != MembershipRole.MANAGER
+                || !membership.getUser().getId().equals(user.getId())
+                || !membership.getWorkspace().getId().equals(workspace.getId())) {
+            throw new ForbiddenException(ProblemCode.MANAGER_REQUIRED);
+        }
+
+        if (workspace.getStatus() == WorkspaceStatus.DELETING) {
+            throw new ConflictException(ProblemCode.WORKSPACE_DELETION_ALREADY_REQUESTED);
+        }
+
+        if (workspace.getStatus() != WorkspaceStatus.ACTIVE) {
+            throw new ConflictException(ProblemCode.WORKSPACE_CONFLICT);
+        }
+
+        if (!workspace.getSlug().equals(request.confirmationSlug())) {
+            throw new ApiException(ProblemCode.VALIDATION_FAILED, "Confirmation slug does not match workspace slug.");
+        }
+
+        if (!passwordService.matchesAuthenticationCandidate(request.password(), user.getPasswordHash())) {
+            throw new ForbiddenException(ProblemCode.REAUTHENTICATION_FAILED);
+        }
+
+        workspace.setStatus(WorkspaceStatus.DELETING);
+        workspaceRepository.save(workspace);
+
+        List<GithubIntegration> githubIntegrations = githubIntegrationRepository.findAllByWorkspaceIdAndStatus(workspace.getId(), IntegrationStatus.ACTIVE);
+        for (GithubIntegration gh : githubIntegrations) {
+            gh.setStatus(IntegrationStatus.SUSPENDED);
+            gh.setSuspendedAt(Instant.now());
+        }
+        githubIntegrationRepository.saveAll(githubIntegrations);
+
+        List<JiraIntegration> jiraIntegrations = jiraIntegrationRepository.findAllByWorkspaceIdAndStatus(workspace.getId(), IntegrationStatus.ACTIVE);
+        for (JiraIntegration jira : jiraIntegrations) {
+            jira.setStatus(IntegrationStatus.SUSPENDED);
+        }
+        jiraIntegrationRepository.saveAll(jiraIntegrations);
+
+        ProcessingJob job = new ProcessingJob();
+        job.setWorkspace(null);
+        job.setRepository(null);
+        job.setRawEvent(null);
+        job.setJobType(ProcessingJobType.DELETE_WORKSPACE);
+        job.setPayload(Map.of("workspaceId", workspace.getId().toString()));
+        job.setStatus(ProcessingJobStatus.PENDING);
+        processingJobRepository.save(job);
+
+        auditService.record(
+            AuditAction.WORKSPACE_DELETION_REQUESTED,
+            user,
+            membership,
+            workspace,
+            "WORKSPACE",
+            workspace.getId(),
+            Map.of("workspaceId", workspace.getId().toString()),
+            context != null ? context.ipAddress() : null,
+            context != null ? context.userAgent() : null
+        );
+
+        return new WorkspaceDeletionResponse(workspace.getId(), WorkspaceStatus.DELETING);
+    }
+
+    private Membership revalidateActiveMembership(AuthenticatedPrincipal principal) {
+        if (principal == null || principal.userId() == null || principal.workspaceId() == null) {
+            throw new ForbiddenException(ProblemCode.NO_ACTIVE_MEMBERSHIP);
+        }
+
+        return membershipRepository.findActiveByUserIdAndWorkspaceId(principal.userId(), principal.workspaceId())
+            .orElseThrow(() -> new ForbiddenException(ProblemCode.NO_ACTIVE_MEMBERSHIP));
+    }
+}
