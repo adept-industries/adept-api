@@ -2,16 +2,33 @@ name: Full-stack integration
 
 on:
   workflow_dispatch:
+    inputs:
+      engine_ref:
+        description: Engine branch, tag, or commit to test
+        required: false
+        default: main
+        type: string
+      frontend_ref:
+        description: Frontend branch, tag, or commit to test
+        required: false
+        default: main
+        type: string
   pull_request:
     paths:
-      - "src/main/resources/db/migration/**"
+      - "src/**"
+      - "docs/openapi/**"
+      - "pom.xml"
+      - "scripts/**"
       - "infra/local/compose.yaml"
       - "Dockerfile"
       - ".github/workflows/integration.yml"
   push:
     branches: [main]
     paths:
-      - "src/main/resources/db/migration/**"
+      - "src/**"
+      - "docs/openapi/**"
+      - "pom.xml"
+      - "scripts/**"
       - "infra/local/compose.yaml"
       - "Dockerfile"
       - ".github/workflows/integration.yml"
@@ -23,6 +40,8 @@ jobs:
   full-stack:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      COMPOSE_PROJECT_NAME: adept-phase2-integration
 
     steps:
       - name: Check out API
@@ -34,13 +53,30 @@ jobs:
         uses: actions/checkout@v6
         with:
           repository: adept-industries/adept-engine
+          ref: ${{ inputs.engine_ref || 'main' }}
           path: adept-engine
 
       - name: Check out frontend
         uses: actions/checkout@v6
         with:
           repository: adept-industries/adept-frontend
+          ref: ${{ inputs.frontend_ref || 'main' }}
           path: adept-frontend
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: adept-frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: adept-frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: adept-frontend
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        working-directory: adept-frontend
+        run: npx playwright install --with-deps chromium
 
       - name: Create test-only environment
         shell: bash
@@ -97,67 +133,47 @@ jobs:
             -f adept-api/infra/local/compose.yaml \
             --profile full up -d --build --wait --wait-timeout 180
 
-      - name: Wait for API, engine, and frontend
+      - name: Wait for API
+        run: |
+          curl --fail --silent --show-error \
+            --retry 60 --retry-delay 2 --retry-max-time 120 \
+            --retry-connrefused --retry-all-errors \
+            http://localhost:8080/actuator/health/readiness >/dev/null
+
+      - name: Wait for Mailpit
+        run: |
+          curl --fail --silent --show-error \
+            --retry 60 --retry-delay 2 --retry-max-time 120 \
+            --retry-connrefused --retry-all-errors \
+            http://localhost:8025/api/v1/info >/dev/null
+
+      - name: Wait for frontend
+        run: |
+          curl --fail --silent --show-error \
+            --retry 60 --retry-delay 2 --retry-max-time 120 \
+            --retry-connrefused --retry-all-errors \
+            http://localhost:3000/ >/dev/null
+
+      - name: Verify engine readiness and schema version
+        run: |
+          docker compose --env-file .env \
+            -f adept-api/infra/local/compose.yaml \
+            exec -T engine-api \
+            python -c 'import json, urllib.request; payload = json.load(urllib.request.urlopen("http://localhost:8000/ready", timeout=3)); assert payload == {"status": "READY", "schemaVersion": "8"}, payload'
+
+      - name: Verify PostgreSQL 18 and eight Flyway migrations
         shell: bash
         run: |
-          for attempt in {1..90}; do
-            api_ok=false
-            engine_ok=false
-            frontend_ok=false
-
-            curl -fsS http://localhost:8080/actuator/health/readiness >/dev/null 2>&1 && api_ok=true
-            curl -fsS http://localhost:3000/ >/dev/null 2>&1 && frontend_ok=true
-
+          postgres_version_number="$(
             docker compose --env-file .env \
               -f adept-api/infra/local/compose.yaml \
-              exec -T engine-api \
-              python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/ready', timeout=3).close()" \
-              >/dev/null 2>&1 && engine_ok=true
-
-            if $api_ok && $engine_ok && $frontend_ok; then
-              echo "All services healthy after attempt $attempt"
-              exit 0
-            fi
-
-            sleep 2
-          done
-
-          echo "Timed out waiting for services"
-
-          docker compose --env-file .env \
-            -f adept-api/infra/local/compose.yaml \
-            --profile full ps
-
-          docker compose --env-file .env \
-            -f adept-api/infra/local/compose.yaml \
-            --profile full logs --no-color --tail 100
-
-          exit 1
-
-      - name: Verify public host endpoints
-        run: |
-          curl -fsS http://localhost:8080/actuator/health
-          curl -fsS http://localhost:3000/
-          curl -fsS http://localhost:8025/
-
-      - name: Verify internal engine endpoints
-        run: |
-          docker compose --env-file .env \
-            -f adept-api/infra/local/compose.yaml \
-            exec -T engine-api \
-            python -c "import urllib.request; print(urllib.request.urlopen('http://localhost:8000/health', timeout=3).read().decode())"
-
-          docker compose --env-file .env \
-            -f adept-api/infra/local/compose.yaml \
-            exec -T engine-api \
-            python -c "import urllib.request; print(urllib.request.urlopen('http://localhost:8000/ready', timeout=3).read().decode())"
-
-      - name: Verify PostgreSQL and Flyway
-        run: |
-          docker compose --env-file .env \
-            -f adept-api/infra/local/compose.yaml \
-            exec -T postgres sh -c \
-            'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -c "SHOW server_version;"'
+              exec -T postgres sh -c \
+              'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "SHOW server_version_num;"' \
+              | tr -d '[:space:]'
+          )"
+          postgres_major="$((postgres_version_number / 10000))"
+          echo "PostgreSQL major version: $postgres_major"
+          test "$postgres_major" = "18"
 
           migration_count="$(
             docker compose --env-file .env \
@@ -166,7 +182,6 @@ jobs:
               'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "SELECT count(*) FROM flyway_schema_history WHERE success;"' \
               | tr -d '[:space:]'
           )"
-
           echo "Successful migration count: $migration_count"
           test "$migration_count" = "8"
 
@@ -178,21 +193,15 @@ jobs:
             --profile full restart api
 
           api_ready=false
-
           for attempt in {1..60}; do
             if curl -fsS http://localhost:8080/actuator/health/readiness >/dev/null 2>&1; then
               echo "API became ready after restart on attempt $attempt"
               api_ready=true
               break
             fi
-
             sleep 2
           done
-
-          if ! $api_ready; then
-            echo "API did not become ready after restart"
-            exit 1
-          fi
+          test "$api_ready" = "true"
 
           migration_count="$(
             docker compose --env-file .env \
@@ -201,11 +210,29 @@ jobs:
               'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "SELECT count(*) FROM flyway_schema_history WHERE success;"' \
               | tr -d '[:space:]'
           )"
-
           echo "Migration count after API restart: $migration_count"
           test "$migration_count" = "8"
 
-      - name: Show service state and logs on failure
+      - name: Compare committed OpenAPI contracts
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          cmp --silent \
+            adept-api/docs/openapi/adept-api-v1.json \
+            adept-frontend/openapi/adept-api-v1.json
+          echo "API and frontend OpenAPI contracts match"
+
+      - name: Check generated frontend API types
+        working-directory: adept-frontend
+        run: npm run api:check
+
+      - name: Run browser acceptance
+        working-directory: adept-frontend
+        env:
+          PLAYWRIGHT_BASE_URL: http://localhost:3000
+          CI: "true"
+        run: npx playwright test
+
+      - name: Show service state and safe logs on failure
         if: failure()
         run: |
           docker compose --env-file .env \
@@ -214,7 +241,8 @@ jobs:
 
           docker compose --env-file .env \
             -f adept-api/infra/local/compose.yaml \
-            --profile full logs --no-color --tail 200
+            --profile full logs --no-color --tail 200 \
+            api engine-api engine-worker frontend postgres
 
       - name: Stop and remove disposable CI stack
         if: always()
