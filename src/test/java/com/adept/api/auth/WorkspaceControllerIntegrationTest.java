@@ -157,6 +157,49 @@ class WorkspaceControllerIntegrationTest extends PartCIntegrationTestSupport {
     }
 
     @Test
+    void managerCanCreateAnotherWorkspace() throws Exception {
+        String email = uniqueEmail("workspace-creator");
+        SignupResponse signup = authService.signup(
+            new SignupRequest(email, VALID_PASSWORD, "Workspace Creator", "First Workspace", "UTC"),
+            requestContext()
+        );
+        jdbc.update("UPDATE users SET email_verified_at = now() WHERE id = ?", signup.user().id());
+        String accessToken = loginAndGetAccessToken(email, VALID_PASSWORD, signup.workspace().id());
+        CsrfPair csrf = fetchCsrf(mockMvc);
+
+        MvcResult result = mockMvc.perform(post("/api/v1/workspaces")
+                .header("Origin", FRONTEND_ORIGIN)
+                .header("Authorization", "Bearer " + accessToken)
+                .header("X-XSRF-TOKEN", csrf.token())
+                .cookie(csrf.cookie())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                        "name": "Client Workspace",
+                        "timezone": "Asia/Colombo"
+                    }
+                    """))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.name").value("Client Workspace"))
+            .andExpect(jsonPath("$.timezone").value("Asia/Colombo"))
+            .andExpect(jsonPath("$.role").value("MANAGER"))
+            .andReturn();
+
+        UUID workspaceId = UUID.fromString(
+            objectMapper.readTree(result.getResponse().getContentAsString()).path("id").asText()
+        );
+        assertThat(jdbc.queryForObject("""
+            SELECT count(*)
+            FROM memberships
+            WHERE workspace_id = ? AND user_id = ? AND role = 'MANAGER' AND status = 'ACTIVE'
+            """, Integer.class, workspaceId, signup.user().id())).isEqualTo(1);
+        assertThat(jdbc.queryForObject("""
+            SELECT count(*) FROM audit_logs
+            WHERE workspace_id = ? AND action = 'WORKSPACE_CREATED'
+            """, Integer.class, workspaceId)).isEqualTo(1);
+    }
+
+    @Test
     void managerCanUpdateNameAndTimezoneAndSlugRemainsUnchanged() throws Exception {
         String email = uniqueEmail("manager-patch-user");
         SignupResponse signup = authService.signup(
@@ -207,7 +250,7 @@ class WorkspaceControllerIntegrationTest extends PartCIntegrationTestSupport {
     }
 
     @Test
-    void leadReceives403ManagerRequiredOnPatchOrDelete() throws Exception {
+    void leadReceives403ManagerRequiredOnCreatePatchOrDelete() throws Exception {
         String managerEmail = uniqueEmail("ws-owner");
         SignupResponse signup = authService.signup(
             new SignupRequest(managerEmail, VALID_PASSWORD, "Workspace Owner", "Team Workspace", "UTC"),
@@ -232,7 +275,25 @@ class WorkspaceControllerIntegrationTest extends PartCIntegrationTestSupport {
 
         String leadAccessToken = loginAndGetAccessToken(leadEmail, VALID_PASSWORD, signup.workspace().id());
 
-        // 1. Lead PATCH -> 403 MANAGER_REQUIRED
+        // 1. Lead CREATE -> 403 MANAGER_REQUIRED
+        CsrfPair createCsrf = fetchCsrf(mockMvc);
+        mockMvc.perform(post("/api/v1/workspaces")
+                .header("Origin", FRONTEND_ORIGIN)
+                .header("Authorization", "Bearer " + leadAccessToken)
+                .header("X-XSRF-TOKEN", createCsrf.token())
+                .cookie(new Cookie("XSRF-TOKEN", createCsrf.token()))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                        "name": "Unauthorized Lead Workspace",
+                        "timezone": "UTC"
+                    }
+                    """))
+            .andExpect(status().isForbidden())
+            .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+            .andExpect(jsonPath("$.code").value("MANAGER_REQUIRED"));
+
+        // 2. Lead PATCH -> 403 MANAGER_REQUIRED
         CsrfPair patchCsrf = fetchCsrf(mockMvc);
         mockMvc.perform(patch("/api/v1/workspaces/current")
                 .header("Origin", FRONTEND_ORIGIN)
@@ -249,7 +310,7 @@ class WorkspaceControllerIntegrationTest extends PartCIntegrationTestSupport {
             .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
             .andExpect(jsonPath("$.code").value("MANAGER_REQUIRED"));
 
-        // 2. Lead DELETE -> 403 MANAGER_REQUIRED
+        // 3. Lead DELETE -> 403 MANAGER_REQUIRED
         CsrfPair deleteCsrf = fetchCsrf(mockMvc);
         mockMvc.perform(delete("/api/v1/workspaces/current")
                 .header("Origin", FRONTEND_ORIGIN)

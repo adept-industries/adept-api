@@ -4,10 +4,11 @@ The Adept API is the Java backend and sole owner of the shared PostgreSQL databa
 
 ## Overview & Current Status
 
-Phase 2 authentication, session management, workspace switching, workspace management, and OpenAPI contract generation are fully implemented:
-- **Framework & Runtime**: Spring Boot 4.1 on Java 25, Flyway V1–V8, Hibernate validation, PostgreSQL 18.
+Phase 2 authentication, session management, workspace switching, workspace management, project grouping, and OpenAPI contract generation are fully implemented:
+- **Framework & Runtime**: Spring Boot 4.1 on Java 25, Flyway V1–V9, Hibernate validation, PostgreSQL 18.
 - **Authentication**: JWT access tokens, HttpOnly refresh cookies (`adept_refresh`), CSRF protection (`XSRF-TOKEN` / `X-XSRF-TOKEN`), BCrypt password hashing.
-- **Workspace Management**: Multi-workspace membership support, workspace switching, PATCH workspace settings, and controlled workspace deletion flow (`DELETE /api/v1/workspaces/current`).
+- **Workspace Management**: Managers can create additional tenant workspaces, switch between memberships, update workspace settings, and request controlled workspace deletion.
+- **Projects**: Projects group repositories inside one workspace. Managers manage projects and repository links; Leads see only projects containing repositories assigned to them.
 - **OpenAPI**: Contracts configured via `springdoc-openapi` and exported deterministically to `docs/openapi/adept-api-v1.json`.
 
 ## Local Sibling Layout
@@ -75,6 +76,8 @@ Verification, resend, password-reset, login, refresh, and logout requests must u
 - Users belonging to multiple workspaces receive `workspaceSelectionRequired: true` during login.
 - Switch active workspace context via `POST /api/v1/auth/switch-workspace/{workspaceId}` (requires `adept_refresh` cookie & `X-XSRF-TOKEN` header).
 - View accessible workspaces via `GET /api/v1/workspaces` and current workspace via `GET /api/v1/workspaces/current`.
+- Create another workspace with `POST /api/v1/workspaces`; the creator becomes its Manager.
+- Manage project groupings through `/api/v1/projects`. Project choice filters repository-based views but does not replace workspace switching.
 - Controlled workspace deletion (`DELETE /api/v1/workspaces/current`) requires Manager role, BCrypt password reauthentication, and exact confirmation-slug matching.
 - A successful deletion request marks the workspace `DELETING`, suspends its active integrations, and enqueues one pending `DELETE_WORKSPACE` job. Phase 2 does not include the job handler, so it does not hard-delete the workspace.
 
@@ -102,4 +105,4 @@ Integration tests require Docker running for PostgreSQL Testcontainers:
 
 Flyway files under `src/main/resources/db/migration` are the schema source of truth. Hibernate uses `ddl-auto: validate`. Never edit an already-shared migration. Generate local ERD with `./scripts/generate-erd.sh`.
 
-Phase 2 adds no schema migration. Its only prerequisite schema change is the already-completed V8 migration, and the migration inventory must remain V1–V8.
+The authentication/workspace baseline ends at V8. The approved project-grouping extension is isolated in V9, and the migration inventory is V1–V9.

@@ -48,6 +48,9 @@ public class OpenApiConfig {
     private static final String RESET_PASSWORD = "/api/v1/auth/reset-password";
     private static final String WORKSPACES = "/api/v1/workspaces";
     private static final String CURRENT_WORKSPACE = "/api/v1/workspaces/current";
+    private static final String PROJECTS = "/api/v1/projects";
+    private static final String PROJECT = "/api/v1/projects/{projectId}";
+    private static final String PROJECT_REPOSITORIES = "/api/v1/projects/{projectId}/repositories";
 
     private static final Set<String> PHASE_2_PATHS = Set.of(
         CSRF,
@@ -62,7 +65,10 @@ public class OpenApiConfig {
         FORGOT_PASSWORD,
         RESET_PASSWORD,
         WORKSPACES,
-        CURRENT_WORKSPACE
+        CURRENT_WORKSPACE,
+        PROJECTS,
+        PROJECT,
+        PROJECT_REPOSITORIES
     );
 
     @Bean
@@ -204,6 +210,20 @@ public class OpenApiConfig {
             );
             configure(
                 openApi,
+                WORKSPACES,
+                PathItem.HttpMethod.POST,
+                "createWorkspace",
+                "Create another workspace",
+                "Creates a new tenant and an active Manager membership for the authenticated Manager.",
+                "201",
+                "Workspace created",
+                componentRef("WorkspaceSummaryResponse"),
+                SecurityProfile.BEARER_CSRF,
+                Set.of("400", "401", "403", "409", "413", "415"),
+                CookieBehavior.NONE
+            );
+            configure(
+                openApi,
                 CURRENT_WORKSPACE,
                 PathItem.HttpMethod.GET,
                 "getCurrentWorkspace",
@@ -242,6 +262,91 @@ public class OpenApiConfig {
                 componentRef("WorkspaceDeletionResponse"),
                 SecurityProfile.BEARER_CSRF,
                 Set.of("400", "401", "403", "409", "413", "415", "429"),
+                CookieBehavior.NONE
+            );
+
+            configure(
+                openApi,
+                PROJECTS,
+                PathItem.HttpMethod.GET,
+                "listProjects",
+                "List visible projects in the current workspace",
+                "Managers receive all projects. Leads receive only projects containing an actively assigned repository.",
+                "200",
+                "Projects returned",
+                new ArraySchema().items(componentRef("ProjectResponse")),
+                SecurityProfile.BEARER,
+                Set.of("401", "403"),
+                CookieBehavior.NONE
+            );
+            configure(
+                openApi,
+                PROJECTS,
+                PathItem.HttpMethod.POST,
+                "createProject",
+                "Create a project in the current workspace",
+                null,
+                "201",
+                "Project created",
+                componentRef("ProjectResponse"),
+                SecurityProfile.BEARER_CSRF,
+                Set.of("400", "401", "403", "409", "413", "415"),
+                CookieBehavior.NONE
+            );
+            configure(
+                openApi,
+                PROJECT,
+                PathItem.HttpMethod.GET,
+                "getProject",
+                "Get a visible project",
+                null,
+                "200",
+                "Project returned",
+                componentRef("ProjectResponse"),
+                SecurityProfile.BEARER,
+                Set.of("401", "403", "404"),
+                CookieBehavior.NONE
+            );
+            configure(
+                openApi,
+                PROJECT,
+                PathItem.HttpMethod.PATCH,
+                "updateProject",
+                "Update a project",
+                null,
+                "200",
+                "Project updated",
+                componentRef("ProjectResponse"),
+                SecurityProfile.BEARER_CSRF,
+                Set.of("400", "401", "403", "404", "409", "413", "415"),
+                CookieBehavior.NONE
+            );
+            configure(
+                openApi,
+                PROJECT,
+                PathItem.HttpMethod.DELETE,
+                "deleteProject",
+                "Delete a project",
+                "Deletes only the project grouping; repositories and their analytics remain in the workspace.",
+                "204",
+                "Project deleted",
+                null,
+                SecurityProfile.BEARER_CSRF,
+                Set.of("401", "403", "404"),
+                CookieBehavior.NONE
+            );
+            configure(
+                openApi,
+                PROJECT_REPOSITORIES,
+                PathItem.HttpMethod.PUT,
+                "replaceProjectRepositories",
+                "Replace a project's repository set",
+                "Every supplied repository must belong to the current workspace.",
+                "200",
+                "Project repositories replaced",
+                componentRef("ProjectResponse"),
+                SecurityProfile.BEARER_CSRF,
+                Set.of("400", "401", "403", "404", "413", "415"),
                 CookieBehavior.NONE
             );
         };
@@ -419,6 +524,7 @@ public class OpenApiConfig {
         components.getSchemas().remove("Payload");
 
         hideProperties(components, "UpdateWorkspaceRequest", "namePresent", "timezonePresent");
+        hideProperties(components, "UpdateProjectRequest", "namePresent", "descriptionPresent");
         markWriteOnly(components, "SignupRequest", "password");
         markWriteOnly(components, "LoginRequest", "password");
         markWriteOnly(components, "ActionTokenRequest", "token");
@@ -432,6 +538,8 @@ public class OpenApiConfig {
         require(components, "MeResponse", "user", "currentMembership", "workspaces");
         require(components, "CurrentWorkspaceResponse", "id", "name", "slug", "timezone", "role", "membershipId");
         require(components, "WorkspaceDeletionResponse", "workspaceId", "status");
+        require(components, "ProjectRepositoryResponse", "id", "fullName", "trackingEnabled", "archived");
+        require(components, "ProjectResponse", "id", "workspaceId", "name", "repositories");
 
         Schema<?> updateRequest = components.getSchemas().get("UpdateWorkspaceRequest");
         if (updateRequest != null) {

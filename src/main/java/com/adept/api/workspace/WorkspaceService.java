@@ -36,6 +36,7 @@ import com.adept.api.security.ratelimit.AuthRateLimiter;
 import com.adept.api.user.User;
 import com.adept.api.user.UserRepository;
 import com.adept.api.workspace.dto.CurrentWorkspaceResponse;
+import com.adept.api.workspace.dto.CreateWorkspaceRequest;
 import com.adept.api.workspace.dto.DeleteWorkspaceRequest;
 import com.adept.api.workspace.dto.UpdateWorkspaceRequest;
 import com.adept.api.workspace.dto.WorkspaceDeletionResponse;
@@ -55,6 +56,7 @@ public class WorkspaceService {
     private final AuthRateLimiter authRateLimiter;
     private final PasswordService passwordService;
     private final AuditService auditService;
+    private final WorkspaceSlugService workspaceSlugService;
 
     public WorkspaceService(
             MembershipRepository membershipRepository,
@@ -66,7 +68,8 @@ public class WorkspaceService {
             WorkspaceAuthorizationService workspaceAuthorizationService,
             AuthRateLimiter authRateLimiter,
             PasswordService passwordService,
-            AuditService auditService) {
+            AuditService auditService,
+            WorkspaceSlugService workspaceSlugService) {
         this.membershipRepository = membershipRepository;
         this.workspaceRepository = workspaceRepository;
         this.userRepository = userRepository;
@@ -77,6 +80,7 @@ public class WorkspaceService {
         this.authRateLimiter = authRateLimiter;
         this.passwordService = passwordService;
         this.auditService = auditService;
+        this.workspaceSlugService = workspaceSlugService;
     }
 
     @Transactional(readOnly = true)
@@ -95,6 +99,42 @@ public class WorkspaceService {
     public CurrentWorkspaceResponse getCurrentWorkspace(AuthenticatedPrincipal principal) {
         Membership membership = revalidateActiveMembership(principal);
         return CurrentWorkspaceResponse.from(membership);
+    }
+
+    public WorkspaceSummaryResponse createWorkspace(
+            AuthenticatedPrincipal principal,
+            CreateWorkspaceRequest request,
+            AccountRequestContext context) {
+        workspaceAuthorizationService.requireManager(principal);
+        Membership currentMembership = revalidateActiveMembership(principal);
+        User user = currentMembership.getUser();
+
+        Workspace workspace = new Workspace();
+        workspace.setName(request.name().trim());
+        workspace.setTimezone(request.timezone());
+        workspace.setSlug(workspaceSlugService.generate(request.name()));
+        workspace.setStatus(WorkspaceStatus.ACTIVE);
+        workspace = workspaceRepository.saveAndFlush(workspace);
+
+        Membership membership = new Membership();
+        membership.setUser(user);
+        membership.setWorkspace(workspace);
+        membership.setRole(MembershipRole.MANAGER);
+        membership.setStatus(MembershipStatus.ACTIVE);
+        membership = membershipRepository.saveAndFlush(membership);
+
+        auditService.record(
+            AuditAction.WORKSPACE_CREATED,
+            user,
+            membership,
+            workspace,
+            "WORKSPACE",
+            workspace.getId(),
+            Map.of(),
+            context != null ? context.ipAddress() : null,
+            context != null ? context.userAgent() : null
+        );
+        return WorkspaceSummaryResponse.from(membership);
     }
 
     public CurrentWorkspaceResponse updateCurrentWorkspace(

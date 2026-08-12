@@ -159,9 +159,9 @@ jobs:
           docker compose --env-file .env \
             -f adept-api/infra/local/compose.yaml \
             exec -T engine-api \
-            python -c 'import json, urllib.request; payload = json.load(urllib.request.urlopen("http://localhost:8000/ready", timeout=3)); assert payload == {"status": "READY", "schemaVersion": "8"}, payload'
+            python -c 'import json, urllib.request; payload = json.load(urllib.request.urlopen("http://localhost:8000/ready", timeout=3)); assert payload == {"status": "READY", "schemaVersion": "9"}, payload'
 
-      - name: Verify PostgreSQL 18 and eight Flyway migrations
+      - name: Verify PostgreSQL 18 and nine Flyway migrations
         shell: bash
         run: |
           postgres_version_number="$(
@@ -183,7 +183,7 @@ jobs:
               | tr -d '[:space:]'
           )"
           echo "Successful migration count: $migration_count"
-          test "$migration_count" = "8"
+          test "$migration_count" = "9"
 
       - name: Verify migration idempotency after API restart
         shell: bash
@@ -211,7 +211,7 @@ jobs:
               | tr -d '[:space:]'
           )"
           echo "Migration count after API restart: $migration_count"
-          test "$migration_count" = "8"
+          test "$migration_count" = "9"
 
       - name: Compare committed OpenAPI contracts
         if: github.event_name == 'workflow_dispatch'

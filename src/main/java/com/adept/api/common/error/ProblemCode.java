@@ -26,6 +26,8 @@ public enum ProblemCode {
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "Unexpected error", "An unexpected error occurred."),
     ENDPOINT_NOT_FOUND(HttpStatus.NOT_FOUND, "Endpoint not found", "The requested endpoint does not exist."),
     REPOSITORY_NOT_FOUND(HttpStatus.NOT_FOUND, "Repository not found", "The repository was not found or is not accessible."),
+    PROJECT_NOT_FOUND(HttpStatus.NOT_FOUND, "Project not found", "The project was not found or is not accessible."),
+    PROJECT_CONFLICT(HttpStatus.CONFLICT, "Project conflict", "A project with that name already exists in this workspace."),
     METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "Method not allowed", "The HTTP method is not supported for this endpoint.");
 
     private static final String TYPE_BASE = "https://adept.local/problems/";
