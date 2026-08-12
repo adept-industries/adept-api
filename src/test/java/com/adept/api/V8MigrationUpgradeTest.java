@@ -42,7 +42,7 @@ class V8MigrationUpgradeTest {
             managerMembershipId
         );
 
-        Flyway throughV8 = flyway().load();
+        Flyway throughV8 = flyway().target("8").load();
         assertThat(throughV8.migrate().migrationsExecuted).isOne();
         assertThat(throughV8.info().applied()).hasSize(8);
 

@@ -147,6 +147,7 @@ public class SecurityConfig {
                 ).permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/auth/me", "/api/v1/auth/test-me").authenticated()
                 .requestMatchers("/api/v1/workspaces", "/api/v1/workspaces/**").authenticated()
+                .requestMatchers("/api/v1/projects", "/api/v1/projects/**").authenticated()
                 .anyRequest().denyAll())
             .addFilterBefore(originValidationFilter, CsrfFilter.class)
             .addFilterBefore(bodyLimitFilter, OriginValidationFilter.class)

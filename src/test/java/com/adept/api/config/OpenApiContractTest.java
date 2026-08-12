@@ -62,6 +62,8 @@ class OpenApiContractTest extends PartCIntegrationTestSupport {
             "400", "403", "413", "415", "429"),
         endpoint("/api/v1/workspaces", "get", "listWorkspaces", "200", security("bearerAuth"), null,
             "401", "403"),
+        endpoint("/api/v1/workspaces", "post", "createWorkspace", "201", security("bearerAuth", "csrfHeader"), "CreateWorkspaceRequest",
+            "400", "401", "403", "409", "413", "415"),
         endpoint("/api/v1/workspaces/current", "get", "getCurrentWorkspace", "200", security("bearerAuth"), null,
             "401", "403"),
         endpoint("/api/v1/workspaces/current", "patch", "updateCurrentWorkspace", "200",
@@ -69,18 +71,36 @@ class OpenApiContractTest extends PartCIntegrationTestSupport {
             "400", "401", "403", "409", "413", "415"),
         endpoint("/api/v1/workspaces/current", "delete", "deleteCurrentWorkspace", "202",
             security("bearerAuth", "csrfHeader"), "DeleteWorkspaceRequest",
-            "400", "401", "403", "409", "413", "415", "429")
+            "400", "401", "403", "409", "413", "415", "429"),
+        endpoint("/api/v1/projects", "get", "listProjects", "200", security("bearerAuth"), null,
+            "401", "403"),
+        endpoint("/api/v1/projects", "post", "createProject", "201", security("bearerAuth", "csrfHeader"), "CreateProjectRequest",
+            "400", "401", "403", "409", "413", "415"),
+        endpoint("/api/v1/projects/{projectId}", "get", "getProject", "200", security("bearerAuth"), null,
+            "401", "403", "404"),
+        endpoint("/api/v1/projects/{projectId}", "patch", "updateProject", "200", security("bearerAuth", "csrfHeader"), "UpdateProjectRequest",
+            "400", "401", "403", "404", "409", "413", "415"),
+        endpoint("/api/v1/projects/{projectId}", "delete", "deleteProject", "204", security("bearerAuth", "csrfHeader"), null,
+            "401", "403", "404"),
+        endpoint("/api/v1/projects/{projectId}/repositories", "put", "replaceProjectRepositories", "200",
+            security("bearerAuth", "csrfHeader"), "ReplaceProjectRepositoriesRequest",
+            "400", "401", "403", "404", "413", "415")
     );
 
-    private static final Map<String, String> SUCCESS_SCHEMAS = Map.of(
-        "signup", "#/components/schemas/SignupResponse",
-        "login", "#/components/schemas/AuthSessionResponse",
-        "refreshSession", "#/components/schemas/AuthSessionResponse",
-        "getCurrentUser", "#/components/schemas/MeResponse",
-        "switchWorkspace", "#/components/schemas/AuthSessionResponse",
-        "getCurrentWorkspace", "#/components/schemas/CurrentWorkspaceResponse",
-        "updateCurrentWorkspace", "#/components/schemas/CurrentWorkspaceResponse",
-        "deleteCurrentWorkspace", "#/components/schemas/WorkspaceDeletionResponse"
+    private static final Map<String, String> SUCCESS_SCHEMAS = Map.ofEntries(
+        Map.entry("signup", "#/components/schemas/SignupResponse"),
+        Map.entry("login", "#/components/schemas/AuthSessionResponse"),
+        Map.entry("refreshSession", "#/components/schemas/AuthSessionResponse"),
+        Map.entry("getCurrentUser", "#/components/schemas/MeResponse"),
+        Map.entry("switchWorkspace", "#/components/schemas/AuthSessionResponse"),
+        Map.entry("createWorkspace", "#/components/schemas/WorkspaceSummaryResponse"),
+        Map.entry("getCurrentWorkspace", "#/components/schemas/CurrentWorkspaceResponse"),
+        Map.entry("updateCurrentWorkspace", "#/components/schemas/CurrentWorkspaceResponse"),
+        Map.entry("deleteCurrentWorkspace", "#/components/schemas/WorkspaceDeletionResponse"),
+        Map.entry("createProject", "#/components/schemas/ProjectResponse"),
+        Map.entry("getProject", "#/components/schemas/ProjectResponse"),
+        Map.entry("updateProject", "#/components/schemas/ProjectResponse"),
+        Map.entry("replaceProjectRepositories", "#/components/schemas/ProjectResponse")
     );
 
     private static final Set<String> ALLOWED_SCHEMAS = Set.of(
@@ -88,6 +108,8 @@ class OpenApiContractTest extends PartCIntegrationTestSupport {
         "AuthSessionResponse",
         "AuthenticatedSessionResponse",
         "CurrentWorkspaceResponse",
+        "CreateProjectRequest",
+        "CreateWorkspaceRequest",
         "DeleteWorkspaceRequest",
         "EmailRequest",
         "FieldError",
@@ -95,11 +117,15 @@ class OpenApiContractTest extends PartCIntegrationTestSupport {
         "MeResponse",
         "MembershipSummary",
         "ProblemDetail",
+        "ProjectRepositoryResponse",
+        "ProjectResponse",
         "RefreshRequest",
         "ResetPasswordRequest",
+        "ReplaceProjectRepositoriesRequest",
         "SignupRequest",
         "SignupResponse",
         "UpdateWorkspaceRequest",
+        "UpdateProjectRequest",
         "UserSummary",
         "WorkspaceDeletionResponse",
         "WorkspaceSelectionSessionResponse",
@@ -201,6 +227,8 @@ class OpenApiContractTest extends PartCIntegrationTestSupport {
 
         assertThat(fieldNames(schemas.at("/UpdateWorkspaceRequest/properties")))
             .containsExactly("name", "timezone");
+        assertThat(fieldNames(schemas.at("/UpdateProjectRequest/properties")))
+            .containsExactly("description", "name");
 
         assertWriteOnly(schemas, "SignupRequest", "password");
         assertWriteOnly(schemas, "LoginRequest", "password");
@@ -269,11 +297,13 @@ class OpenApiContractTest extends PartCIntegrationTestSupport {
 
     private static void assertSuccessContent(JsonNode operation, Endpoint endpoint) {
         JsonNode success = operation.path("responses").path(endpoint.successStatus());
-        if ("listWorkspaces".equals(endpoint.operationId())) {
+        if ("listWorkspaces".equals(endpoint.operationId()) || "listProjects".equals(endpoint.operationId())) {
             assertThat(fieldNames(success.path("content"))).containsExactly(JSON);
             assertThat(success.at("/content/application~1json/schema/type").asText()).isEqualTo("array");
             assertThat(success.at("/content/application~1json/schema/items/$ref").asText())
-                .isEqualTo("#/components/schemas/WorkspaceSummaryResponse");
+                .isEqualTo("listWorkspaces".equals(endpoint.operationId())
+                    ? "#/components/schemas/WorkspaceSummaryResponse"
+                    : "#/components/schemas/ProjectResponse");
             return;
         }
 
