@@ -5,7 +5,7 @@ The Adept API is the Java backend and sole owner of the shared PostgreSQL databa
 ## Overview & Current Status
 
 Phase 2 authentication, session management, workspace switching, workspace management, project grouping, and OpenAPI contract generation are fully implemented:
-- **Framework & Runtime**: Spring Boot 4.1 on Java 25, Flyway V1–V9, Hibernate validation, PostgreSQL 18.
+- **Framework & Runtime**: Spring Boot 4.1 on Java 25, Flyway V1–V10, Hibernate validation, PostgreSQL 18.
 - **Authentication**: JWT access tokens, HttpOnly refresh cookies (`adept_refresh`), CSRF protection (`XSRF-TOKEN` / `X-XSRF-TOKEN`), BCrypt password hashing.
 - **Workspace Management**: Managers can create additional tenant workspaces, switch between memberships, update workspace settings, and request controlled workspace deletion.
 - **Projects**: Projects group repositories inside one workspace. Managers manage projects and repository links; Leads see only projects containing repositories assigned to them.
@@ -105,4 +105,4 @@ Integration tests require Docker running for PostgreSQL Testcontainers:
 
 Flyway files under `src/main/resources/db/migration` are the schema source of truth. Hibernate uses `ddl-auto: validate`. Never edit an already-shared migration. Generate local ERD with `./scripts/generate-erd.sh`.
 
-The authentication/workspace baseline ends at V8. The approved project-grouping extension is isolated in V9, and the migration inventory is V1–V9.
+The authentication/workspace baseline ends at V8, project grouping is isolated in V9, and Google authentication is isolated in V10. The migration inventory is V1–V10.

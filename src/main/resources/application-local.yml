@@ -12,6 +12,12 @@ spring:
 springdoc:
   api-docs:
     enabled: true
+
+server:
+  servlet:
+    session:
+      cookie:
+        secure: false
   swagger-ui:
     enabled: true
 

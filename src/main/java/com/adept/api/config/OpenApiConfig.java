@@ -46,6 +46,8 @@ public class OpenApiConfig {
     private static final String SWITCH_WORKSPACE = "/api/v1/auth/switch-workspace/{workspaceId}";
     private static final String FORGOT_PASSWORD = "/api/v1/auth/forgot-password";
     private static final String RESET_PASSWORD = "/api/v1/auth/reset-password";
+    private static final String GOOGLE_START = "/api/v1/auth/google/start";
+    private static final String GOOGLE_ONBOARDING = "/api/v1/auth/google/onboarding";
     private static final String WORKSPACES = "/api/v1/workspaces";
     private static final String CURRENT_WORKSPACE = "/api/v1/workspaces/current";
     private static final String PROJECTS = "/api/v1/projects";
@@ -64,6 +66,8 @@ public class OpenApiConfig {
         SWITCH_WORKSPACE,
         FORGOT_PASSWORD,
         RESET_PASSWORD,
+        GOOGLE_START,
+        GOOGLE_ONBOARDING,
         WORKSPACES,
         CURRENT_WORKSPACE,
         PROJECTS,
@@ -88,7 +92,12 @@ public class OpenApiConfig {
                 .type(SecurityScheme.Type.APIKEY)
                 .in(SecurityScheme.In.HEADER)
                 .name("X-XSRF-TOKEN")
-                .description("CSRF header whose value must match the paired readable XSRF-TOKEN cookie."));
+                .description("CSRF header whose value must match the paired readable XSRF-TOKEN cookie."))
+            .addSecuritySchemes("oauthSessionCookie", new SecurityScheme()
+                .type(SecurityScheme.Type.APIKEY)
+                .in(SecurityScheme.In.COOKIE)
+                .name("adept_oauth")
+                .description("Short-lived HttpOnly session used only to complete Google signup onboarding."));
 
         addProblemSchemas(components);
 
@@ -193,6 +202,39 @@ public class OpenApiConfig {
             configureBodyOperation(openApi, RESET_PASSWORD, "resetPassword", "Reset a password", "204",
                 "Password reset and session cookies cleared", null, SecurityProfile.CSRF,
                 Set.of("400", "403", "413", "415", "429"), CookieBehavior.REFRESH_AND_CSRF);
+
+            configure(
+                openApi,
+                GOOGLE_START,
+                PathItem.HttpMethod.GET,
+                "startGoogleAuthentication",
+                "Start Google authentication",
+                "Creates a short-lived OAuth handshake and redirects the browser to Google.",
+                "302",
+                "Redirect to Google",
+                null,
+                SecurityProfile.PUBLIC,
+                Set.of("404", "429"),
+                CookieBehavior.OAUTH_SESSION
+            );
+            operation(openApi, GOOGLE_START, PathItem.HttpMethod.GET)
+                .getResponses().get("302")
+                .addHeaderObject("Location", new Header()
+                    .description("Internal authorization endpoint that then redirects to Google.")
+                    .schema(new StringSchema().format("uri-reference")));
+
+            configureBodyOperation(
+                openApi,
+                GOOGLE_ONBOARDING,
+                "completeGoogleOnboarding",
+                "Complete Google account onboarding",
+                "200",
+                "Adept account and session created",
+                "AuthSessionResponse",
+                SecurityProfile.OAUTH_SESSION_CSRF,
+                Set.of("400", "401", "403", "409", "413", "415", "429"),
+                CookieBehavior.GOOGLE_ONBOARDING
+            );
 
             configure(
                 openApi,
@@ -483,6 +525,8 @@ public class OpenApiConfig {
             case CSRF -> "Sets the readable XSRF-TOKEN cookie.";
             case REFRESH -> "Rotates or clears the HttpOnly adept_refresh cookie.";
             case REFRESH_AND_CSRF -> "Sets or clears adept_refresh and rotates or expires XSRF-TOKEN as described by the operation.";
+            case OAUTH_SESSION -> "A successful start sets the short-lived HttpOnly adept_oauth cookie.";
+            case GOOGLE_ONBOARDING -> "Successful onboarding clears adept_oauth, sets adept_refresh, and expires XSRF-TOKEN.";
             case NONE -> "May clear the adept_refresh cookie after invalid session state.";
         };
     }
@@ -535,6 +579,7 @@ public class OpenApiConfig {
         require(components, "MembershipSummary", "id", "workspaceId", "workspaceName", "workspaceSlug", "timezone", "role");
         require(components, "WorkspaceSummaryResponse", "id", "name", "slug", "timezone", "role");
         require(components, "SignupResponse", "user", "workspace", "emailVerificationRequired");
+        require(components, "GoogleOnboardingRequest", "workspaceName", "timezone");
         require(components, "MeResponse", "user", "currentMembership", "workspaces");
         require(components, "CurrentWorkspaceResponse", "id", "name", "slug", "timezone", "role", "membershipId");
         require(components, "WorkspaceDeletionResponse", "workspaceId", "status");
@@ -626,7 +671,8 @@ public class OpenApiConfig {
         CSRF,
         BEARER,
         BEARER_CSRF,
-        REFRESH_CSRF;
+        REFRESH_CSRF,
+        OAUTH_SESSION_CSRF;
 
         List<SecurityRequirement> requirements() {
             return switch (this) {
@@ -639,6 +685,9 @@ public class OpenApiConfig {
                 case REFRESH_CSRF -> List.of(
                     new SecurityRequirement().addList("refreshCookie").addList("csrfHeader")
                 );
+                case OAUTH_SESSION_CSRF -> List.of(
+                    new SecurityRequirement().addList("oauthSessionCookie").addList("csrfHeader")
+                );
             };
         }
     }
@@ -647,6 +696,8 @@ public class OpenApiConfig {
         NONE,
         CSRF,
         REFRESH,
-        REFRESH_AND_CSRF
+        REFRESH_AND_CSRF,
+        OAUTH_SESSION,
+        GOOGLE_ONBOARDING
     }
 }

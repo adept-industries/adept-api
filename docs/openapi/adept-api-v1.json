@@ -150,6 +150,22 @@
         "required" : [ "field", "message" ],
         "type" : "object"
       },
+      "GoogleOnboardingRequest" : {
+        "additionalProperties" : false,
+        "properties" : {
+          "timezone" : {
+            "minLength" : 1,
+            "type" : "string"
+          },
+          "workspaceName" : {
+            "maxLength" : 160,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "timezone", "workspaceName" ],
+        "type" : "object"
+      },
       "LoginRequest" : {
         "properties" : {
           "email" : {
@@ -500,6 +516,12 @@
         "name" : "X-XSRF-TOKEN",
         "type" : "apiKey"
       },
+      "oauthSessionCookie" : {
+        "description" : "Short-lived HttpOnly session used only to complete Google signup onboarding.",
+        "in" : "cookie",
+        "name" : "adept_oauth",
+        "type" : "apiKey"
+      },
       "refreshCookie" : {
         "description" : "HttpOnly refresh-session cookie. The cookie is required for refresh and workspace switching.",
         "in" : "cookie",
@@ -679,6 +701,331 @@
         } ],
         "summary" : "Request a password reset",
         "tags" : [ "auth-controller" ]
+      }
+    },
+    "/api/v1/auth/google/onboarding" : {
+      "post" : {
+        "operationId" : "completeGoogleOnboarding",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/GoogleOnboardingRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AuthSessionResponse"
+                }
+              }
+            },
+            "description" : "Adept account and session created",
+            "headers" : {
+              "Cache-Control" : {
+                "description" : "Sensitive Phase 2 responses are not cached.",
+                "schema" : {
+                  "enum" : [ "no-store" ],
+                  "type" : "string"
+                }
+              },
+              "Set-Cookie" : {
+                "description" : "Successful onboarding clears adept_oauth, sets adept_refresh, and expires XSRF-TOKEN.",
+                "schema" : {
+                  "type" : "string"
+                }
+              }
+            }
+          },
+          "400" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description" : "Validation failed or the request was malformed",
+            "headers" : {
+              "Cache-Control" : {
+                "description" : "Sensitive Phase 2 responses are not cached.",
+                "schema" : {
+                  "enum" : [ "no-store" ],
+                  "type" : "string"
+                }
+              },
+              "Set-Cookie" : {
+                "description" : "Successful onboarding clears adept_oauth, sets adept_refresh, and expires XSRF-TOKEN.",
+                "schema" : {
+                  "type" : "string"
+                }
+              }
+            }
+          },
+          "401" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description" : "Authentication or session validation failed",
+            "headers" : {
+              "Cache-Control" : {
+                "description" : "Sensitive Phase 2 responses are not cached.",
+                "schema" : {
+                  "enum" : [ "no-store" ],
+                  "type" : "string"
+                }
+              },
+              "Set-Cookie" : {
+                "description" : "Successful onboarding clears adept_oauth, sets adept_refresh, and expires XSRF-TOKEN.",
+                "schema" : {
+                  "type" : "string"
+                }
+              }
+            }
+          },
+          "403" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description" : "CSRF, origin, membership, or role authorization failed",
+            "headers" : {
+              "Cache-Control" : {
+                "description" : "Sensitive Phase 2 responses are not cached.",
+                "schema" : {
+                  "enum" : [ "no-store" ],
+                  "type" : "string"
+                }
+              },
+              "Set-Cookie" : {
+                "description" : "Successful onboarding clears adept_oauth, sets adept_refresh, and expires XSRF-TOKEN.",
+                "schema" : {
+                  "type" : "string"
+                }
+              }
+            }
+          },
+          "409" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description" : "The requested state conflicts with current state",
+            "headers" : {
+              "Cache-Control" : {
+                "description" : "Sensitive Phase 2 responses are not cached.",
+                "schema" : {
+                  "enum" : [ "no-store" ],
+                  "type" : "string"
+                }
+              },
+              "Set-Cookie" : {
+                "description" : "Successful onboarding clears adept_oauth, sets adept_refresh, and expires XSRF-TOKEN.",
+                "schema" : {
+                  "type" : "string"
+                }
+              }
+            }
+          },
+          "413" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description" : "The request body exceeded the 16 KiB limit",
+            "headers" : {
+              "Cache-Control" : {
+                "description" : "Sensitive Phase 2 responses are not cached.",
+                "schema" : {
+                  "enum" : [ "no-store" ],
+                  "type" : "string"
+                }
+              },
+              "Set-Cookie" : {
+                "description" : "Successful onboarding clears adept_oauth, sets adept_refresh, and expires XSRF-TOKEN.",
+                "schema" : {
+                  "type" : "string"
+                }
+              }
+            }
+          },
+          "415" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description" : "The request body used an unsupported media type",
+            "headers" : {
+              "Cache-Control" : {
+                "description" : "Sensitive Phase 2 responses are not cached.",
+                "schema" : {
+                  "enum" : [ "no-store" ],
+                  "type" : "string"
+                }
+              },
+              "Set-Cookie" : {
+                "description" : "Successful onboarding clears adept_oauth, sets adept_refresh, and expires XSRF-TOKEN.",
+                "schema" : {
+                  "type" : "string"
+                }
+              }
+            }
+          },
+          "429" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description" : "A request rate limit was exceeded",
+            "headers" : {
+              "Cache-Control" : {
+                "description" : "Sensitive Phase 2 responses are not cached.",
+                "schema" : {
+                  "enum" : [ "no-store" ],
+                  "type" : "string"
+                }
+              },
+              "Retry-After" : {
+                "description" : "Seconds until the request may be retried.",
+                "schema" : {
+                  "format" : "int64",
+                  "minimum" : 0,
+                  "type" : "integer"
+                }
+              },
+              "Set-Cookie" : {
+                "description" : "Successful onboarding clears adept_oauth, sets adept_refresh, and expires XSRF-TOKEN.",
+                "schema" : {
+                  "type" : "string"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "csrfHeader" : [ ],
+          "oauthSessionCookie" : [ ]
+        } ],
+        "summary" : "Complete Google account onboarding",
+        "tags" : [ "google-auth-controller" ]
+      }
+    },
+    "/api/v1/auth/google/start" : {
+      "get" : {
+        "description" : "Creates a short-lived OAuth handshake and redirects the browser to Google.",
+        "operationId" : "startGoogleAuthentication",
+        "responses" : {
+          "302" : {
+            "description" : "Redirect to Google",
+            "headers" : {
+              "Cache-Control" : {
+                "description" : "Sensitive Phase 2 responses are not cached.",
+                "schema" : {
+                  "enum" : [ "no-store" ],
+                  "type" : "string"
+                }
+              },
+              "Location" : {
+                "description" : "Internal authorization endpoint that then redirects to Google.",
+                "schema" : {
+                  "format" : "uri-reference",
+                  "type" : "string"
+                }
+              },
+              "Set-Cookie" : {
+                "description" : "A successful start sets the short-lived HttpOnly adept_oauth cookie.",
+                "schema" : {
+                  "type" : "string"
+                }
+              }
+            }
+          },
+          "404" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description" : "The scoped resource was not found",
+            "headers" : {
+              "Cache-Control" : {
+                "description" : "Sensitive Phase 2 responses are not cached.",
+                "schema" : {
+                  "enum" : [ "no-store" ],
+                  "type" : "string"
+                }
+              },
+              "Set-Cookie" : {
+                "description" : "A successful start sets the short-lived HttpOnly adept_oauth cookie.",
+                "schema" : {
+                  "type" : "string"
+                }
+              }
+            }
+          },
+          "429" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description" : "A request rate limit was exceeded",
+            "headers" : {
+              "Cache-Control" : {
+                "description" : "Sensitive Phase 2 responses are not cached.",
+                "schema" : {
+                  "enum" : [ "no-store" ],
+                  "type" : "string"
+                }
+              },
+              "Retry-After" : {
+                "description" : "Seconds until the request may be retried.",
+                "schema" : {
+                  "format" : "int64",
+                  "minimum" : 0,
+                  "type" : "integer"
+                }
+              },
+              "Set-Cookie" : {
+                "description" : "A successful start sets the short-lived HttpOnly adept_oauth cookie.",
+                "schema" : {
+                  "type" : "string"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ ],
+        "summary" : "Start Google authentication",
+        "tags" : [ "google-auth-controller" ]
       }
     },
     "/api/v1/auth/login" : {

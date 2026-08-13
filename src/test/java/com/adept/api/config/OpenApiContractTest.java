@@ -60,6 +60,11 @@ class OpenApiContractTest extends PartCIntegrationTestSupport {
             "400", "403", "413", "415", "429"),
         endpoint("/api/v1/auth/reset-password", "post", "resetPassword", "204", security("csrfHeader"), "ResetPasswordRequest",
             "400", "403", "413", "415", "429"),
+        endpoint("/api/v1/auth/google/start", "get", "startGoogleAuthentication", "302", security(), null,
+            "404", "429"),
+        endpoint("/api/v1/auth/google/onboarding", "post", "completeGoogleOnboarding", "200",
+            security("oauthSessionCookie", "csrfHeader"), "GoogleOnboardingRequest",
+            "400", "401", "403", "409", "413", "415", "429"),
         endpoint("/api/v1/workspaces", "get", "listWorkspaces", "200", security("bearerAuth"), null,
             "401", "403"),
         endpoint("/api/v1/workspaces", "post", "createWorkspace", "201", security("bearerAuth", "csrfHeader"), "CreateWorkspaceRequest",
@@ -91,6 +96,7 @@ class OpenApiContractTest extends PartCIntegrationTestSupport {
         Map.entry("signup", "#/components/schemas/SignupResponse"),
         Map.entry("login", "#/components/schemas/AuthSessionResponse"),
         Map.entry("refreshSession", "#/components/schemas/AuthSessionResponse"),
+        Map.entry("completeGoogleOnboarding", "#/components/schemas/AuthSessionResponse"),
         Map.entry("getCurrentUser", "#/components/schemas/MeResponse"),
         Map.entry("switchWorkspace", "#/components/schemas/AuthSessionResponse"),
         Map.entry("createWorkspace", "#/components/schemas/WorkspaceSummaryResponse"),
@@ -113,6 +119,7 @@ class OpenApiContractTest extends PartCIntegrationTestSupport {
         "DeleteWorkspaceRequest",
         "EmailRequest",
         "FieldError",
+        "GoogleOnboardingRequest",
         "LoginRequest",
         "MeResponse",
         "MembershipSummary",
@@ -257,12 +264,12 @@ class OpenApiContractTest extends PartCIntegrationTestSupport {
 
         String serializedSchemas = mapper.writeValueAsString(schemas);
         assertThat(serializedSchemas)
-            .doesNotContain("passwordHash", "rawToken", "tokenHash", "AuditLog", "ProcessingJob", "GithubIntegration", "JiraIntegration");
+            .doesNotContain("passwordHash", "rawToken", "tokenHash", "AuditLog", "ProcessingJob", "GithubIntegration", "JiraIntegration", "GoogleAuthAccount");
     }
 
     private void assertSecuritySchemes(JsonNode root) {
         JsonNode schemes = root.at("/components/securitySchemes");
-        assertThat(fieldNames(schemes)).containsExactly("bearerAuth", "csrfHeader", "refreshCookie");
+        assertThat(fieldNames(schemes)).containsExactly("bearerAuth", "csrfHeader", "oauthSessionCookie", "refreshCookie");
         assertThat(schemes.at("/bearerAuth/type").asText()).isEqualTo("http");
         assertThat(schemes.at("/bearerAuth/scheme").asText()).isEqualTo("bearer");
         assertThat(schemes.at("/refreshCookie/in").asText()).isEqualTo("cookie");
@@ -270,6 +277,8 @@ class OpenApiContractTest extends PartCIntegrationTestSupport {
         assertThat(schemes.at("/csrfHeader/in").asText()).isEqualTo("header");
         assertThat(schemes.at("/csrfHeader/name").asText()).isEqualTo("X-XSRF-TOKEN");
         assertThat(schemes.at("/csrfHeader/description").asText()).contains("XSRF-TOKEN cookie");
+        assertThat(schemes.at("/oauthSessionCookie/in").asText()).isEqualTo("cookie");
+        assertThat(schemes.at("/oauthSessionCookie/name").asText()).isEqualTo("adept_oauth");
     }
 
     private JsonNode liveDocument() throws Exception {
