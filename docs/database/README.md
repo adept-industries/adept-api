@@ -8,4 +8,4 @@ Generate an HTML schema report from the current local PostgreSQL database:
 ./scripts/generate-erd.sh
 ```
 
-Open `docs/database/erd/index.html` in a browser. The generated directory is ignored because it can always be rebuilt. The application must continue to use Flyway V1–V9 as the schema source of truth.
+Open `docs/database/erd/index.html` in a browser. The generated directory is ignored because it can always be rebuilt. The application must continue to use Flyway V1–V10 as the schema source of truth.

@@ -17,7 +17,6 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import com.adept.api.audit.AuditAction;
 import com.adept.api.audit.AuditService;
-import com.adept.api.auth.dto.AuthSessionResponse;
 import com.adept.api.auth.dto.LoginRequest;
 import com.adept.api.auth.dto.MeResponse;
 import com.adept.api.auth.dto.MembershipSummary;
@@ -33,7 +32,6 @@ import com.adept.api.common.error.ConflictException;
 import com.adept.api.common.error.ForbiddenException;
 import com.adept.api.common.error.ProblemCode;
 import com.adept.api.common.error.UnauthorizedException;
-import com.adept.api.config.AppProperties;
 import com.adept.api.crypto.PasswordService;
 import com.adept.api.crypto.SecureTokenGenerator;
 import com.adept.api.crypto.TokenHasher;
@@ -41,7 +39,6 @@ import com.adept.api.mail.PasswordChangedMailRequested;
 import com.adept.api.mail.PasswordResetMailRequested;
 import com.adept.api.mail.VerificationMailRequested;
 import com.adept.api.security.AuthenticatedPrincipal;
-import com.adept.api.security.JwtService;
 import com.adept.api.security.ratelimit.AuthRateLimiter;
 import com.adept.api.user.User;
 import com.adept.api.user.UserRepository;
@@ -75,9 +72,7 @@ public class AuthService {
     private final AuditService auditService;
     private final ActiveMembershipService activeMembershipService;
     private final TokenHasher tokenHasher;
-    private final SecureTokenGenerator secureTokenGenerator;
-    private final JwtService jwtService;
-    private final AppProperties appProperties;
+    private final FreshSessionService freshSessionService;
     private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
     private final Validator validator;
@@ -96,9 +91,7 @@ public class AuthService {
             AuditService auditService,
             ActiveMembershipService activeMembershipService,
             TokenHasher tokenHasher,
-            SecureTokenGenerator secureTokenGenerator,
-            JwtService jwtService,
-            AppProperties appProperties,
+            FreshSessionService freshSessionService,
             ApplicationEventPublisher eventPublisher,
             Clock clock,
             Validator validator,
@@ -115,9 +108,7 @@ public class AuthService {
         this.auditService = auditService;
         this.activeMembershipService = activeMembershipService;
         this.tokenHasher = tokenHasher;
-        this.secureTokenGenerator = secureTokenGenerator;
-        this.jwtService = jwtService;
-        this.appProperties = appProperties;
+        this.freshSessionService = freshSessionService;
         this.eventPublisher = eventPublisher;
         this.clock = clock;
         this.validator = validator;
@@ -425,83 +416,9 @@ public class AuthService {
                 return new LoginOutcome.Failure(ProblemCode.NO_ACTIVE_MEMBERSHIP);
             }
 
-            Instant now = clock.instant();
-            user.setLastLoginAt(now);
-            userRepository.save(user);
-
-            String rawRefreshToken = secureTokenGenerator.generate();
-            String refreshTokenHash = tokenHasher.hashRefreshToken(rawRefreshToken);
-            Instant refreshExpiresAt = now.plus(appProperties.refreshToken().ttl());
-
-            RefreshToken refreshToken = new RefreshToken();
-            refreshToken.setUser(user);
-            refreshToken.setFamilyId(UUID.randomUUID());
-            refreshToken.setTokenHash(refreshTokenHash);
-            refreshToken.setExpiresAt(refreshExpiresAt);
-            if (context.ipAddress() != null && !context.ipAddress().isBlank()) {
-                refreshToken.setIpHash(tokenHasher.hashAuditIp(context.ipAddress()));
-            }
-            String safeAgent = safeUserAgent(context.userAgent());
-            if (!safeAgent.isBlank()) {
-                refreshToken.setUserAgentHash(tokenHasher.hashUserAgent(safeAgent));
-            }
-            refreshTokenRepository.save(refreshToken);
-
-            AuthSessionResponse responsePayload;
-            Membership currentMembership = null;
-
-            if (activeMemberships.size() == 1) {
-                currentMembership = activeMemberships.get(0);
-                AuthenticatedPrincipal principal = new AuthenticatedPrincipal(
-                    user.getId(),
-                    currentMembership.getId(),
-                    currentMembership.getWorkspace().getId(),
-                    currentMembership.getRole(),
-                    user.getTokenVersion()
-                );
-                String accessToken = jwtService.issue(principal);
-                int expiresInSeconds = (int) jwtService.accessTokenTtlSeconds();
-                UserSummary userSummary = UserSummary.from(user);
-                MembershipSummary membershipSummary = MembershipSummary.from(currentMembership);
-                List<WorkspaceSummaryResponse> workspaces = activeMemberships.stream()
-                    .map(WorkspaceSummaryResponse::from)
-                    .toList();
-                responsePayload = new AuthSessionResponse(
-                    accessToken,
-                    expiresInSeconds,
-                    false,
-                    userSummary,
-                    membershipSummary,
-                    workspaces
-                );
-            } else {
-                UserSummary userSummary = UserSummary.from(user);
-                List<WorkspaceSummaryResponse> workspaces = activeMemberships.stream()
-                    .map(WorkspaceSummaryResponse::from)
-                    .toList();
-                responsePayload = new AuthSessionResponse(
-                    null,
-                    null,
-                    true,
-                    userSummary,
-                    null,
-                    workspaces
-                );
-            }
-
-            auditService.record(
-                AuditAction.LOGIN_SUCCEEDED,
-                user,
-                currentMembership,
-                currentMembership != null ? currentMembership.getWorkspace() : null,
-                "USER",
-                user.getId(),
-                Map.of("workspaceSelectionRequired", activeMemberships.size() > 1),
-                context.ipAddress(),
-                context.userAgent()
+            return new LoginOutcome.Success(
+                freshSessionService.issue(user, activeMemberships, context, "PASSWORD")
             );
-
-            return new LoginOutcome.Success(responsePayload, rawRefreshToken, refreshExpiresAt);
         });
 
         if (outcome instanceof LoginOutcome.Failure failure) {
@@ -513,13 +430,11 @@ public class AuthService {
         }
 
         if (outcome instanceof LoginOutcome.Success success) {
-            return new LoginResult(success.response(), success.rawRefreshToken(), success.refreshExpiresAt());
+            return success.login();
         }
 
         throw new IllegalStateException("Unexpected login outcome");
     }
-
-    private static final int MAX_USER_AGENT_LENGTH = 512;
 
     private void recordFailedLogin(String emailHmac, AccountRequestContext context) {
         auditService.record(
@@ -535,18 +450,8 @@ public class AuthService {
         );
     }
 
-    private static String safeUserAgent(String value) {
-        if (value == null) {
-            return "";
-        }
-        String stripped = value.replaceAll("\\p{Cntrl}", "").trim();
-        return stripped.length() <= MAX_USER_AGENT_LENGTH
-            ? stripped
-            : stripped.substring(0, MAX_USER_AGENT_LENGTH);
-    }
-
     private sealed interface LoginOutcome {
-        record Success(AuthSessionResponse response, String rawRefreshToken, Instant refreshExpiresAt) implements LoginOutcome {}
+        record Success(LoginResult login) implements LoginOutcome {}
         record Failure(ProblemCode problemCode) implements LoginOutcome {}
     }
 

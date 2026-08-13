@@ -23,7 +23,8 @@ public class User extends BaseEntity {
     private String email;
 
     // Explicit name maps Java camelCase to SQL snake_case.
-    @Column(name = "password_hash", nullable = false)
+    // Google-only accounts intentionally have no local password until one is set.
+    @Column(name = "password_hash")
     private String passwordHash;
 
     @Column(name = "display_name", nullable = false, length = 160)

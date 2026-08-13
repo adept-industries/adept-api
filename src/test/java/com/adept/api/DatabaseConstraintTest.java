@@ -72,6 +72,37 @@ class DatabaseConstraintTest {
     }
 
     @Test
+    void googleAccountsUseUniqueSubjectsAndOneMappingPerUser() {
+        UUID firstUser = jdbc.queryForObject("""
+            INSERT INTO users (email, password_hash, display_name, email_verified_at)
+            VALUES ('google-one@example.com', NULL, 'Google One', now())
+            RETURNING id
+            """, UUID.class);
+        UUID secondUser = jdbc.queryForObject("""
+            INSERT INTO users (email, password_hash, display_name, email_verified_at)
+            VALUES ('google-two@example.com', NULL, 'Google Two', now())
+            RETURNING id
+            """, UUID.class);
+
+        jdbc.update("""
+            INSERT INTO google_auth_accounts (user_id, google_subject, google_email)
+            VALUES (?, 'google-subject-1', 'google-one@example.com')
+            """, firstUser);
+
+        assertThatThrownBy(() -> jdbc.update("""
+            INSERT INTO google_auth_accounts (user_id, google_subject, google_email)
+            VALUES (?, 'google-subject-1', 'google-two@example.com')
+            """, secondUser))
+            .isInstanceOf(DataIntegrityViolationException.class);
+
+        assertThatThrownBy(() -> jdbc.update("""
+            INSERT INTO google_auth_accounts (user_id, google_subject, google_email)
+            VALUES (?, 'google-subject-2', 'google-one@example.com')
+            """, firstUser))
+            .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
     void everyEnumCheckRejectsAnInvalidValue() {
         EnumFixture fixture = createEnumFixture();
         TenantFixture tenant = fixture.tenant();
