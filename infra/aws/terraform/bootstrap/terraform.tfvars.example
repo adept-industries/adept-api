@@ -1,0 +1,4 @@
+aws_region                = "ap-south-1"
+project_name              = "adept"
+budget_notification_email = "replace-with-your-alert-email@example.com"
+monthly_budget_limit_usd  = 100

@@ -1,0 +1,16 @@
+aws_region   = "ap-south-1"
+environment  = "staging"
+project_name = "adept"
+domain_name  = "adeptindustries.dev"
+
+# Safety default: this must stay false until the live Lightsail catalog,
+# SSH restrictions, cost, and the complete Terraform plan are reviewed.
+runtime_enabled = false
+
+availability_zone       = "ap-south-1a"
+lightsail_blueprint_id  = "ubuntu_24_04"
+lightsail_bundle_id     = "replace-after-paid-plan-upgrade"
+ssh_public_key_path     = "/absolute/path/to/adept-staging.pub"
+server_user             = "ubuntu"
+admin_ssh_cidrs         = ["203.0.113.10/32"]
+automatic_snapshot_time = "03:00"
