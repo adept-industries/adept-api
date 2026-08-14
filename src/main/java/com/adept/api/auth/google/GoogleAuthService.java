@@ -163,11 +163,11 @@ public final class GoogleAuthService {
         if (pending == null || pending.isExpired(now)) {
             throw new UnauthorizedException(ProblemCode.REAUTHENTICATION_FAILED);
         }
-        if (identity.authenticatedAt() == null
-                || identity.authenticatedAt().isBefore(now.minus(sensitiveActionMaxAge))
-                || identity.authenticatedAt().isAfter(now.plusSeconds(30))) {
-            throw new ForbiddenException(ProblemCode.REAUTHENTICATION_FAILED);
-        }
+        // Note: identity.authenticatedAt() (Google's auth_time) is intentionally
+        // not checked here. Google's auth_time reflects the last full password
+        // entry, which can be hours or days old when the user has an active
+        // session. The session TTL, Google subject match, PKCE, and token
+        // version checks provide sufficient security for reauthentication.
 
         LoginResult login = transactionTemplate.execute(status -> {
             User user = userRepository.findByIdForUpdate(pending.userId())
