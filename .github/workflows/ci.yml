@@ -34,7 +34,7 @@ jobs:
           tracked_env_files="$(
             git ls-files |
             grep -E '(^|/)\.env($|\.)' |
-            grep -vE '(^|/)\.env\.example$' ||
+            grep -vE '(^|/)\.env(\.[^/]*)?\.example$' ||
             true
           )"
 
