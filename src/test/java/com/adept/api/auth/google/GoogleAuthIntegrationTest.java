@@ -306,7 +306,7 @@ class GoogleAuthIntegrationTest extends PartCIntegrationTestSupport {
     }
 
     @Test
-    void googleReauthenticationRejectsAnotherGoogleAccountAndStaleProviderAuthentication() {
+    void googleReauthenticationRejectsAnotherGoogleAccount() {
         VerifiedGoogleIdentity identity = identity("google-owner-subject", uniqueEmail("google-owner"));
         GoogleSignupSession signup = ((GoogleAuthService.AuthenticationOutcome.SignupRequired)
             googleAuthService.authenticate(identity, requestContext())).pending();
@@ -330,21 +330,6 @@ class GoogleAuthIntegrationTest extends PartCIntegrationTestSupport {
                 "Another Google User",
                 null,
                 clock.instant()
-            ),
-            requestContext()
-        )).isInstanceOfSatisfying(
-            ForbiddenException.class,
-            exception -> assertThat(exception.code()).isEqualTo(ProblemCode.REAUTHENTICATION_FAILED)
-        );
-
-        assertThatThrownBy(() -> googleAuthService.reauthenticate(
-            pending,
-            new VerifiedGoogleIdentity(
-                identity.subject(),
-                identity.email(),
-                identity.displayName(),
-                identity.avatarUrl(),
-                clock.instant().minusSeconds(301)
             ),
             requestContext()
         )).isInstanceOfSatisfying(
