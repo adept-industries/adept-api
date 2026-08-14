@@ -42,9 +42,13 @@ final class GoogleOAuthFailureHandler implements AuthenticationFailureHandler {
             AuthenticationException exception) throws IOException, ServletException {
         log.warn("Google OAuth handshake failed: errorCode={}", safeErrorCode(exception));
         response.setHeader(HttpHeaders.CACHE_CONTROL, "no-store");
+        boolean reauthentication = oauthSessionService.pendingReauthentication(request).isPresent();
         oauthSessionService.clear(request, response);
         csrfCookieService.expire(request, response);
-        response.sendRedirect(frontendBaseUrl.resolve("login?google_error=authentication_failed").toString());
+        String relativePath = reauthentication
+            ? "dashboard/settings?google_reauth_error=authentication_failed"
+            : "login?google_error=authentication_failed";
+        response.sendRedirect(frontendBaseUrl.resolve(relativePath).toString());
     }
 
     private static String safeErrorCode(Throwable exception) {

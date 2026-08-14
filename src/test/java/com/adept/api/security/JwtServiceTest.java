@@ -48,7 +48,13 @@ class JwtServiceTest {
     @Test
     void issuesAndParsesExactAccessTokenClaims() {
         AuthenticatedPrincipal principal = new AuthenticatedPrincipal(
-            USER_ID, MEMBERSHIP_ID, WORKSPACE_ID, MembershipRole.MANAGER, 7);
+            USER_ID,
+            MEMBERSHIP_ID,
+            WORKSPACE_ID,
+            MembershipRole.MANAGER,
+            7,
+            NOW.minusSeconds(30)
+        );
 
         JwtClaims claims = service.parse(service.issue(principal));
 
@@ -73,6 +79,8 @@ class JwtServiceTest {
         assertInvalid(token(builderWithRequiredClaims()
             .issuedAt(Date.from(NOW.plusSeconds(31)))
             .expiration(Date.from(NOW.plusSeconds(931))), Jwts.SIG.HS256));
+        assertInvalid(token(builderWithRequiredClaims()
+            .claim("auth_time", NOW.plusSeconds(31).getEpochSecond()), Jwts.SIG.HS256));
         assertInvalid(token(builderWithRequiredClaims().issuer("wrong-issuer"), Jwts.SIG.HS256));
         assertInvalid(token(builderWithRequiredClaims().claim("aud", java.util.Set.of("wrong-audience")), Jwts.SIG.HS256));
         assertInvalid(token(builderWithRequiredClaims().claim("membershipId", "not-a-uuid"), Jwts.SIG.HS256));

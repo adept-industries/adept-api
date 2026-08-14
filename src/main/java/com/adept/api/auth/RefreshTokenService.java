@@ -26,6 +26,8 @@ import com.adept.api.user.User;
 import com.adept.api.user.UserRepository;
 import com.adept.api.workspace.ActiveMembershipService;
 import com.adept.api.workspace.Membership;
+import com.adept.api.workspace.WorkspaceService;
+import com.adept.api.workspace.dto.CreateWorkspaceRequest;
 import com.adept.api.workspace.dto.WorkspaceSummaryResponse;
 
 @Service
@@ -36,6 +38,7 @@ public class RefreshTokenService {
     private final RefreshTokenRepository refreshTokenRepository;
     private final UserRepository userRepository;
     private final ActiveMembershipService activeMembershipService;
+    private final WorkspaceService workspaceService;
     private final TokenHasher tokenHasher;
     private final SecureTokenGenerator secureTokenGenerator;
     private final JwtService jwtService;
@@ -47,6 +50,7 @@ public class RefreshTokenService {
             RefreshTokenRepository refreshTokenRepository,
             UserRepository userRepository,
             ActiveMembershipService activeMembershipService,
+            WorkspaceService workspaceService,
             TokenHasher tokenHasher,
             SecureTokenGenerator secureTokenGenerator,
             JwtService jwtService,
@@ -56,6 +60,7 @@ public class RefreshTokenService {
         this.refreshTokenRepository = refreshTokenRepository;
         this.userRepository = userRepository;
         this.activeMembershipService = activeMembershipService;
+        this.workspaceService = workspaceService;
         this.tokenHasher = tokenHasher;
         this.secureTokenGenerator = secureTokenGenerator;
         this.jwtService = jwtService;
@@ -75,7 +80,6 @@ public class RefreshTokenService {
         record Invalid() implements RefreshOutcome {}
         record ReuseDetected() implements RefreshOutcome {}
         record IneligibleUser() implements RefreshOutcome {}
-        record NoActiveMembership() implements RefreshOutcome {}
     }
 
     public sealed interface SwitchOutcome {
@@ -84,6 +88,14 @@ public class RefreshTokenService {
         record Invalid() implements SwitchOutcome {}
         record ReuseDetected() implements SwitchOutcome {}
         record IneligibleUser() implements SwitchOutcome {}
+    }
+
+    public sealed interface WorkspaceCreationOutcome {
+        record Success(AuthSessionResponse response) implements WorkspaceCreationOutcome {}
+        record ActiveMembershipExists() implements WorkspaceCreationOutcome {}
+        record Invalid() implements WorkspaceCreationOutcome {}
+        record ReuseDetected() implements WorkspaceCreationOutcome {}
+        record IneligibleUser() implements WorkspaceCreationOutcome {}
     }
 
     public RefreshOutcome rotate(String rawCookieValue, UUID requestedWorkspaceId, AccountRequestContext context) {
@@ -133,11 +145,6 @@ public class RefreshTokenService {
             }
 
             List<Membership> activeMemberships = activeMembershipService.getActiveWorkspaces(user.getId());
-            if (activeMemberships.isEmpty()) {
-                refreshTokenRepository.revokeFamily(token.getFamilyId());
-                return new RefreshOutcome.NoActiveMembership();
-            }
-
             Membership selectedMembership = null;
             if (requestedWorkspaceId != null) {
                 selectedMembership = activeMemberships.stream()
@@ -161,6 +168,7 @@ public class RefreshTokenService {
             child.setParentToken(token);
             child.setTokenHash(childTokenHash);
             child.setExpiresAt(token.getExpiresAt());
+            child.setAuthenticatedAt(token.getAuthenticatedAt());
             if (context.ipAddress() != null && !context.ipAddress().isBlank()) {
                 child.setIpHash(tokenHasher.hashAuditIp(context.ipAddress()));
             }
@@ -177,7 +185,8 @@ public class RefreshTokenService {
                     selectedMembership.getId(),
                     selectedMembership.getWorkspace().getId(),
                     selectedMembership.getRole(),
-                    user.getTokenVersion()
+                    user.getTokenVersion(),
+                    child.getAuthenticatedAt()
                 );
                 String accessToken = jwtService.issue(principal);
                 int expiresInSeconds = (int) jwtService.accessTokenTtlSeconds();
@@ -284,7 +293,8 @@ public class RefreshTokenService {
                 targetMembership.getId(),
                 targetMembership.getWorkspace().getId(),
                 targetMembership.getRole(),
-                user.getTokenVersion()
+                user.getTokenVersion(),
+                token.getAuthenticatedAt()
             );
             String accessToken = jwtService.issue(principal);
             int expiresInSeconds = (int) jwtService.accessTokenTtlSeconds();
@@ -317,6 +327,74 @@ public class RefreshTokenService {
             );
 
             return new SwitchOutcome.Success(responsePayload);
+        });
+    }
+
+    public WorkspaceCreationOutcome createWorkspaceForEmptyAccount(
+            String rawCookieValue,
+            CreateWorkspaceRequest request,
+            AccountRequestContext context) {
+        if (!SecureTokenGenerator.isWellFormed(rawCookieValue)) {
+            return new WorkspaceCreationOutcome.Invalid();
+        }
+
+        String tokenHash = tokenHasher.hashRefreshToken(rawCookieValue);
+        Optional<RefreshTokenProjection> projection = refreshTokenRepository.findIdAndUserIdByTokenHash(tokenHash);
+        if (projection.isEmpty()) {
+            return new WorkspaceCreationOutcome.Invalid();
+        }
+
+        UUID tokenId = projection.get().getId();
+        UUID userId = projection.get().getUserId();
+
+        return transactionTemplate.execute(status -> {
+            User user = userRepository.findByIdForUpdate(userId).orElse(null);
+            if (user == null) {
+                return new WorkspaceCreationOutcome.Invalid();
+            }
+
+            RefreshToken token = refreshTokenRepository.findByIdForUpdate(tokenId).orElse(null);
+            if (token == null || !token.getUser().getId().equals(user.getId())) {
+                return new WorkspaceCreationOutcome.Invalid();
+            }
+
+            Instant now = clock.instant();
+            if (!token.getExpiresAt().isAfter(now)) {
+                return new WorkspaceCreationOutcome.Invalid();
+            }
+            if (token.getRotatedAt() != null) {
+                commitReuseDetection(user, token, now, context);
+                return new WorkspaceCreationOutcome.ReuseDetected();
+            }
+            if (token.getRevokedAt() != null) {
+                return new WorkspaceCreationOutcome.Invalid();
+            }
+            if (user.getStatus() != UserStatus.ACTIVE || user.getEmailVerifiedAt() == null) {
+                refreshTokenRepository.revokeFamily(token.getFamilyId());
+                return new WorkspaceCreationOutcome.IneligibleUser();
+            }
+            if (!activeMembershipService.getActiveWorkspaces(user.getId()).isEmpty()) {
+                return new WorkspaceCreationOutcome.ActiveMembershipExists();
+            }
+
+            Membership membership = workspaceService.createInitialWorkspace(user, request, context);
+            AuthenticatedPrincipal principal = new AuthenticatedPrincipal(
+                user.getId(),
+                membership.getId(),
+                membership.getWorkspace().getId(),
+                membership.getRole(),
+                user.getTokenVersion(),
+                token.getAuthenticatedAt()
+            );
+            AuthSessionResponse response = new AuthSessionResponse(
+                jwtService.issue(principal),
+                (int) jwtService.accessTokenTtlSeconds(),
+                false,
+                UserSummary.from(user),
+                MembershipSummary.from(membership),
+                List.of(WorkspaceSummaryResponse.from(membership))
+            );
+            return new WorkspaceCreationOutcome.Success(response);
         });
     }
 

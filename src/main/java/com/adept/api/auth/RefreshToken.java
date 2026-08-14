@@ -34,6 +34,9 @@ public class RefreshToken {
     @Column(name = "expires_at", nullable = false)
     private Instant expiresAt;
 
+    @Column(name = "authenticated_at")
+    private Instant authenticatedAt;
+
     @Column(name = "rotated_at") private Instant rotatedAt;
     @Column(name = "revoked_at") private Instant revokedAt;
     @Column(name = "reuse_detected_at") private Instant reuseDetectedAt;

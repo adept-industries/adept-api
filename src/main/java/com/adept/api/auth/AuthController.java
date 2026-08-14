@@ -12,19 +12,21 @@ import com.adept.api.auth.dto.ActionTokenRequest;
 import com.adept.api.auth.dto.AuthSessionResponse;
 import com.adept.api.auth.dto.EmailRequest;
 import com.adept.api.auth.dto.LoginRequest;
+import com.adept.api.auth.dto.MeResponse;
+import com.adept.api.auth.dto.PasswordReauthenticationRequest;
 import com.adept.api.auth.dto.RefreshRequest;
 import com.adept.api.auth.dto.ResetPasswordRequest;
 import com.adept.api.auth.dto.SignupRequest;
 import com.adept.api.auth.dto.SignupResponse;
-import com.adept.api.common.error.ForbiddenException;
+import com.adept.api.common.error.ConflictException;
 import com.adept.api.common.error.NotFoundException;
 import com.adept.api.common.error.ProblemCode;
 import com.adept.api.common.error.UnauthorizedException;
-import com.adept.api.auth.dto.MeResponse;
 import com.adept.api.security.AuthenticatedPrincipal;
 import com.adept.api.security.CsrfCookieService;
 import com.adept.api.security.CurrentPrincipal;
 import com.adept.api.security.RefreshCookieService;
+import com.adept.api.workspace.dto.CreateWorkspaceRequest;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -84,6 +86,24 @@ public class AuthController {
             .body(result.response());
     }
 
+    @PostMapping("/reauthenticate/password")
+    public ResponseEntity<AuthSessionResponse> reauthenticatePassword(
+            @Valid @RequestBody PasswordReauthenticationRequest request,
+            HttpServletRequest servletRequest,
+            HttpServletResponse servletResponse) {
+        AuthenticatedPrincipal principal = currentPrincipal.require();
+        LoginResult result = authService.reauthenticatePassword(
+            principal,
+            request,
+            AccountRequestContext.from(servletRequest)
+        );
+        refreshCookieService.set(servletResponse, result.rawRefreshToken(), result.refreshExpiresAt());
+        csrfCookieService.expire(servletRequest, servletResponse);
+        return ResponseEntity.ok()
+            .header(HttpHeaders.CACHE_CONTROL, "no-store")
+            .body(result.response());
+    }
+
     @PostMapping("/refresh")
     public ResponseEntity<AuthSessionResponse> refresh(
             @RequestBody(required = false) RefreshRequest request,
@@ -112,8 +132,6 @@ public class AuthController {
 
         if (outcome instanceof RefreshTokenService.RefreshOutcome.ReuseDetected) {
             throw new UnauthorizedException(ProblemCode.REFRESH_REUSE_DETECTED);
-        } else if (outcome instanceof RefreshTokenService.RefreshOutcome.NoActiveMembership) {
-            throw new ForbiddenException(ProblemCode.NO_ACTIVE_MEMBERSHIP);
         }
         throw new UnauthorizedException(ProblemCode.SESSION_INVALID);
     }
@@ -148,6 +166,40 @@ public class AuthController {
         refreshCookieService.clear(servletResponse);
 
         if (outcome instanceof RefreshTokenService.SwitchOutcome.ReuseDetected) {
+            throw new UnauthorizedException(ProblemCode.REFRESH_REUSE_DETECTED);
+        }
+        throw new UnauthorizedException(ProblemCode.SESSION_INVALID);
+    }
+
+    @PostMapping("/workspaces")
+    public ResponseEntity<AuthSessionResponse> createWorkspaceForSession(
+            @Valid @RequestBody CreateWorkspaceRequest request,
+            HttpServletRequest servletRequest,
+            HttpServletResponse servletResponse) {
+        Optional<String> rawCookie = refreshCookieService.read(servletRequest);
+        if (rawCookie.isEmpty()) {
+            refreshCookieService.clear(servletResponse);
+            throw new UnauthorizedException(ProblemCode.SESSION_INVALID);
+        }
+
+        RefreshTokenService.WorkspaceCreationOutcome outcome =
+            refreshTokenService.createWorkspaceForEmptyAccount(
+                rawCookie.get(),
+                request,
+                AccountRequestContext.from(servletRequest)
+            );
+
+        if (outcome instanceof RefreshTokenService.WorkspaceCreationOutcome.Success success) {
+            return ResponseEntity.status(201)
+                .header(HttpHeaders.CACHE_CONTROL, "no-store")
+                .body(success.response());
+        }
+        if (outcome instanceof RefreshTokenService.WorkspaceCreationOutcome.ActiveMembershipExists) {
+            throw new ConflictException(ProblemCode.WORKSPACE_CONFLICT);
+        }
+
+        refreshCookieService.clear(servletResponse);
+        if (outcome instanceof RefreshTokenService.WorkspaceCreationOutcome.ReuseDetected) {
             throw new UnauthorizedException(ProblemCode.REFRESH_REUSE_DETECTED);
         }
         throw new UnauthorizedException(ProblemCode.SESSION_INVALID);

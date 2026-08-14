@@ -57,7 +57,7 @@ class DatabaseMigrationSmokeTest {
 
     @Test
     void contextLoadsAndHibernateValidatesFlywaySchema() {
-        assertThat(flyway.info().applied()).hasSize(10);
+        assertThat(flyway.info().applied()).hasSize(11);
 
         Integer serverVersion = jdbc.queryForObject(
             "SELECT current_setting('server_version_num')::integer", Integer.class);
@@ -86,6 +86,16 @@ class DatabaseMigrationSmokeTest {
                 SELECT 1
                 FROM information_schema.columns
                 WHERE table_schema = 'public'
+                  AND table_name = 'refresh_tokens'
+                  AND column_name = 'authenticated_at'
+                  AND is_nullable = 'YES'
+            )
+            """, Boolean.class)).isTrue();
+        assertThat(jdbc.queryForObject("""
+            SELECT EXISTS (
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
                   AND table_name = 'repository_lead_assignments'
                   AND column_name = 'created_at'
             )
@@ -94,6 +104,6 @@ class DatabaseMigrationSmokeTest {
         var secondRun = flyway.migrate();
 
         assertThat(secondRun.migrationsExecuted).isZero();
-        assertThat(flyway.info().applied()).hasSize(10);
+        assertThat(flyway.info().applied()).hasSize(11);
     }
 }

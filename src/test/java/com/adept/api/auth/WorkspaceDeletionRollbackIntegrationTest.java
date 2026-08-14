@@ -1,5 +1,6 @@
 package com.adept.api.auth;
 
+import java.time.Instant;
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
@@ -94,12 +95,13 @@ class WorkspaceDeletionRollbackIntegrationTest extends PartCIntegrationTestSuppo
             membershipId,
             workspaceId,
             MembershipRole.MANAGER,
-            tokenVersion
+            tokenVersion,
+            Instant.now()
         );
 
         assertThatThrownBy(() -> workspaceService.deleteCurrentWorkspace(
             principal,
-            new DeleteWorkspaceRequest(signup.workspace().slug(), VALID_PASSWORD),
+            new DeleteWorkspaceRequest(signup.workspace().slug()),
             requestContext()
         )).isInstanceOf(IllegalStateException.class);
 

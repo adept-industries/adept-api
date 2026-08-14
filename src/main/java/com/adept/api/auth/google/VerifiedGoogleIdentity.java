@@ -1,6 +1,7 @@
 package com.adept.api.auth.google;
 
 import java.net.URI;
+import java.time.Instant;
 import java.util.Locale;
 
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
@@ -12,8 +13,17 @@ public record VerifiedGoogleIdentity(
     String subject,
     String email,
     String displayName,
-    String avatarUrl
+    String avatarUrl,
+    Instant authenticatedAt
 ) {
+
+    public VerifiedGoogleIdentity(
+            String subject,
+            String email,
+            String displayName,
+            String avatarUrl) {
+        this(subject, email, displayName, avatarUrl, null);
+    }
 
     private static final int MAX_SUBJECT_LENGTH = 255;
     private static final int MAX_EMAIL_LENGTH = 320;
@@ -39,7 +49,8 @@ public record VerifiedGoogleIdentity(
             subject,
             email,
             displayName,
-            safeAvatarUrl(user.getPicture())
+            safeAvatarUrl(user.getPicture()),
+            user.getIdToken().getAuthenticatedAt()
         );
     }
 
@@ -69,4 +80,3 @@ public record VerifiedGoogleIdentity(
         return value.length() <= maxLength ? value : value.substring(0, maxLength);
     }
 }
-

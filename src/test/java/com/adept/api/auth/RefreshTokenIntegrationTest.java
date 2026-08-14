@@ -85,6 +85,8 @@ class RefreshTokenIntegrationTest extends PartCIntegrationTestSupport {
         assertThat(childRow.getRotatedAt()).isNull();
         assertThat(childRow.getFamilyId()).isEqualTo(parentRow.getFamilyId());
         assertThat(childRow.getExpiresAt()).isEqualTo(parentRow.getExpiresAt());
+        assertThat(parentRow.getAuthenticatedAt()).isNotNull();
+        assertThat(childRow.getAuthenticatedAt()).isEqualTo(parentRow.getAuthenticatedAt());
         assertThat(refreshResult.getResponse().getHeaders(HttpHeaders.SET_COOKIE))
             .noneMatch(headerValue -> headerValue.startsWith("XSRF-TOKEN="));
     }

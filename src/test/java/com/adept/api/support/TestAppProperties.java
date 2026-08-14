@@ -37,7 +37,13 @@ public final class TestAppProperties {
             URI.create("http://localhost:8080"),
             "Adept Test <test@adept.local>",
             jwt,
-            new AppProperties.Auth(12, Duration.ofHours(24), Duration.ofHours(1), rateLimit),
+            new AppProperties.Auth(
+                12,
+                Duration.ofHours(24),
+                Duration.ofHours(1),
+                Duration.ofMinutes(5),
+                rateLimit
+            ),
             refreshToken,
             base64Bytes(32, (byte) 2),
             new AppProperties.IntegrationEncryption(1, Map.of(1, base64Bytes(32, (byte) 3))),

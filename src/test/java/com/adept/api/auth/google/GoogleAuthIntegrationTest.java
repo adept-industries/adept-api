@@ -24,6 +24,7 @@ import org.springframework.security.oauth2.core.oidc.user.OidcUserAuthority;
 import com.adept.api.auth.PartCIntegrationTestSupport;
 import com.adept.api.auth.LoginResult;
 import com.adept.api.common.error.ConflictException;
+import com.adept.api.common.error.ForbiddenException;
 import com.adept.api.common.error.ProblemCode;
 import com.adept.api.common.error.UnauthorizedException;
 import com.adept.api.config.AppProperties;
@@ -33,6 +34,8 @@ import jakarta.servlet.http.Cookie;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -84,6 +87,7 @@ class GoogleAuthIntegrationTest extends PartCIntegrationTestSupport {
         assertThat(created.response().workspaceSelectionRequired()).isFalse();
         assertThat(created.response().user().email()).isEqualTo(identity.email());
         assertThat(created.response().user().emailVerified()).isTrue();
+        assertThat(created.response().user().hasPassword()).isFalse();
         assertThat(created.response().currentMembership().role().name()).isEqualTo("MANAGER");
         assertThat(created.rawRefreshToken()).hasSize(43);
         assertThat(jdbc.queryForObject(
@@ -111,6 +115,36 @@ class GoogleAuthIntegrationTest extends PartCIntegrationTestSupport {
         assertThat(returned.response().user().id()).isEqualTo(created.response().user().id());
         assertThat(jdbc.queryForObject("SELECT count(*) FROM users", Integer.class)).isEqualTo(1);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM refresh_tokens", Integer.class)).isEqualTo(2);
+    }
+
+    @Test
+    void returningGoogleIdentityWithoutAnActiveWorkspaceReceivesARecoverySession() {
+        VerifiedGoogleIdentity identity = identity("google-recovery-subject", uniqueEmail("google-recovery"));
+        GoogleSignupSession pending = ((GoogleAuthService.AuthenticationOutcome.SignupRequired)
+            googleAuthService.authenticate(identity, requestContext())).pending();
+        LoginResult created = googleAuthService.completeSignup(
+            pending,
+            new GoogleOnboardingRequest("Google Workspace To Delete", "UTC"),
+            requestContext()
+        );
+        jdbc.update(
+            "UPDATE workspaces SET status = 'DELETING' WHERE id = ?",
+            created.response().currentMembership().workspaceId()
+        );
+
+        GoogleAuthService.AuthenticationOutcome returning = googleAuthService.authenticate(
+            identity,
+            requestContext()
+        );
+
+        assertThat(returning).isInstanceOf(GoogleAuthService.AuthenticationOutcome.Authenticated.class);
+        LoginResult recovery = ((GoogleAuthService.AuthenticationOutcome.Authenticated) returning).login();
+        assertThat(recovery.response().workspaceSelectionRequired()).isTrue();
+        assertThat(recovery.response().accessToken()).isNull();
+        assertThat(recovery.response().currentMembership()).isNull();
+        assertThat(recovery.response().workspaces()).isEmpty();
+        assertThat(recovery.response().user().id()).isEqualTo(created.response().user().id());
+        assertThat(recovery.rawRefreshToken()).hasSize(43);
     }
 
     @Test
@@ -201,6 +235,122 @@ class GoogleAuthIntegrationTest extends PartCIntegrationTestSupport {
             .contains("code_challenge=")
             .contains("code_challenge_method=S256")
             .contains("redirect_uri=http://localhost:8080/api/v1/auth/google/callback/google");
+    }
+
+    @Test
+    void googleReauthenticationForcesFreshProviderLoginAndAllowsWorkspaceDeletion() throws Exception {
+        VerifiedGoogleIdentity identity = identity("google-reauth-subject", uniqueEmail("google-reauth"));
+        GoogleSignupSession signup = ((GoogleAuthService.AuthenticationOutcome.SignupRequired)
+            googleAuthService.authenticate(identity, requestContext())).pending();
+        LoginResult created = googleAuthService.completeSignup(
+            signup,
+            new GoogleOnboardingRequest("Google Reauthentication Workspace", "UTC"),
+            requestContext()
+        );
+
+        CsrfPair startCsrf = fetchCsrf(mockMvc);
+        MvcResult start = mockMvc.perform(post("/api/v1/auth/google/reauthentication/start")
+                .header(HttpHeaders.ORIGIN, FRONTEND_ORIGIN)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + created.response().accessToken())
+                .header("X-XSRF-TOKEN", startCsrf.token())
+                .cookie(new Cookie("XSRF-TOKEN", startCsrf.token())))
+            .andExpect(status().isOk())
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
+                .jsonPath("$.authorizationUrl").value(GoogleOAuthConfig.AUTHORIZATION_BASE_URI + "/google"))
+            .andReturn();
+
+        MockHttpSession session = (MockHttpSession) start.getRequest().getSession(false);
+        assertThat(session).isNotNull();
+        String authorizationLocation = mockMvc.perform(
+                get(GoogleOAuthConfig.AUTHORIZATION_BASE_URI + "/google").session(session))
+            .andExpect(status().isFound())
+            .andReturn()
+            .getResponse()
+            .getHeader(HttpHeaders.LOCATION);
+        assertThat(authorizationLocation)
+            .contains("prompt=select_account")
+            .contains("max_age=0")
+            .contains("claims=");
+
+        UUID userId = created.response().user().id();
+        UUID workspaceId = created.response().currentMembership().workspaceId();
+        GoogleReauthenticationSession pending = new GoogleReauthenticationSession(
+            userId,
+            workspaceId,
+            0,
+            clock.instant().plusSeconds(300)
+        );
+        LoginResult reauthenticated = googleAuthService.reauthenticate(
+            pending,
+            new VerifiedGoogleIdentity(
+                identity.subject(),
+                identity.email(),
+                identity.displayName(),
+                identity.avatarUrl(),
+                clock.instant()
+            ),
+            requestContext()
+        );
+
+        CsrfPair deletionCsrf = fetchCsrf(mockMvc);
+        mockMvc.perform(delete("/api/v1/workspaces/current")
+                .header(HttpHeaders.ORIGIN, FRONTEND_ORIGIN)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + reauthenticated.response().accessToken())
+                .header("X-XSRF-TOKEN", deletionCsrf.token())
+                .cookie(new Cookie("XSRF-TOKEN", deletionCsrf.token()))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"confirmationSlug":"%s"}
+                    """.formatted(created.response().currentMembership().workspaceSlug())))
+            .andExpect(status().isAccepted());
+    }
+
+    @Test
+    void googleReauthenticationRejectsAnotherGoogleAccountAndStaleProviderAuthentication() {
+        VerifiedGoogleIdentity identity = identity("google-owner-subject", uniqueEmail("google-owner"));
+        GoogleSignupSession signup = ((GoogleAuthService.AuthenticationOutcome.SignupRequired)
+            googleAuthService.authenticate(identity, requestContext())).pending();
+        LoginResult created = googleAuthService.completeSignup(
+            signup,
+            new GoogleOnboardingRequest("Google Owner Workspace", "UTC"),
+            requestContext()
+        );
+        GoogleReauthenticationSession pending = new GoogleReauthenticationSession(
+            created.response().user().id(),
+            created.response().currentMembership().workspaceId(),
+            0,
+            clock.instant().plusSeconds(300)
+        );
+
+        assertThatThrownBy(() -> googleAuthService.reauthenticate(
+            pending,
+            new VerifiedGoogleIdentity(
+                "another-google-subject",
+                uniqueEmail("another-google"),
+                "Another Google User",
+                null,
+                clock.instant()
+            ),
+            requestContext()
+        )).isInstanceOfSatisfying(
+            ForbiddenException.class,
+            exception -> assertThat(exception.code()).isEqualTo(ProblemCode.REAUTHENTICATION_FAILED)
+        );
+
+        assertThatThrownBy(() -> googleAuthService.reauthenticate(
+            pending,
+            new VerifiedGoogleIdentity(
+                identity.subject(),
+                identity.email(),
+                identity.displayName(),
+                identity.avatarUrl(),
+                clock.instant().minusSeconds(301)
+            ),
+            requestContext()
+        )).isInstanceOfSatisfying(
+            ForbiddenException.class,
+            exception -> assertThat(exception.code()).isEqualTo(ProblemCode.REAUTHENTICATION_FAILED)
+        );
     }
 
     @Test

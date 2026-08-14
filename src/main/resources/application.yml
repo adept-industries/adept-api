@@ -91,6 +91,7 @@ app:
     bcrypt-cost: 12
     verification-token-ttl: PT24H
     reset-token-ttl: PT1H
+    sensitive-action-max-age: PT1M
     rate-limit:
       auth-peer-limit: 30000
       auth-peer-window: PT15M
