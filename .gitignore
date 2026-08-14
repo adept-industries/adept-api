@@ -17,9 +17,31 @@ dependency-reduced-pom.xml
 .env
 .env.*
 !.env.example
+!infra/aws/.env.production.example
 
 # Operating-system files
 .DS_Store
 Thumbs.db
 
 docs/database/erd/
+
+# Terraform local state, plans, and machine-specific configuration
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+*.tfvars
+!*.tfvars.example
+backend.hcl
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+
+# AWS production runtime files and local backups
+infra/aws/.env.production
+infra/aws/backups/

@@ -34,7 +34,7 @@ jobs:
           tracked_env_files="$(
             git ls-files |
             grep -E '(^|/)\.env($|\.)' |
-            grep -vE '(^|/)\.env\.example$' ||
+            grep -vE '(^|/)\.env(\.[^/]*)?\.example$' ||
             true
           )"
 
@@ -72,6 +72,9 @@ jobs:
 
       - name: Verify Docker availability
         run: docker info
+
+      - name: Verify production Compose and Caddy configuration
+        run: ./scripts/verify-production-stack.sh
 
       - name: Build and test
         run: ./mvnw -B clean verify

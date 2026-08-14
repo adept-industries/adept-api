@@ -1,0 +1,17 @@
+# application-production.yml
+server:
+  # Caddy is the only public caller of the private API port. Consume the
+  # forwarding headers it creates so redirects, request context, and rate
+  # limiting use the original HTTPS request and client address.
+  forward-headers-strategy: framework
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+logging:
+  level:
+    com.adept.api: INFO
+    org.hibernate.SQL: WARN

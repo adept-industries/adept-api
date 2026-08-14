@@ -102,6 +102,17 @@ Integration tests require Docker running for PostgreSQL Testcontainers:
 ./mvnw clean verify
 ```
 
+After the complete `CI` workflow succeeds for a push to `main`, the publish
+workflow builds Linux AMD64 and pushes exactly one immutable image tag:
+
+```text
+ghcr.io/adept-industries/adept-api:sha-<full-commit>
+```
+
+Pull-request runs, failed CI runs, and non-main branches never publish. The
+workflow uses GitHub's short-lived `GITHUB_TOKEN`; it does not require a PAT or
+any application/AWS secret.
+
 ## Database Ownership
 
 Flyway files under `src/main/resources/db/migration` are the schema source of truth. Hibernate uses `ddl-auto: validate`. Never edit an already-shared migration. Generate local ERD with `./scripts/generate-erd.sh`.
