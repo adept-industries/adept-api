@@ -1,5 +1,6 @@
 package com.adept.api.security;
 
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -32,6 +33,16 @@ public class PrincipalValidationService {
             UUID workspaceId,
             MembershipRole claimedRole,
             int claimedTokenVersion) {
+        return validate(userId, membershipId, workspaceId, claimedRole, claimedTokenVersion, null);
+    }
+
+    public Optional<ValidatedPrincipal> validate(
+            UUID userId,
+            UUID membershipId,
+            UUID workspaceId,
+            MembershipRole claimedRole,
+            int claimedTokenVersion,
+            Instant authenticatedAt) {
         if (userId == null || membershipId == null || workspaceId == null || claimedRole == null) {
             return Optional.empty();
         }
@@ -76,7 +87,8 @@ public class PrincipalValidationService {
             membership.getId(),
             membership.getWorkspace().getId(),
             membership.getRole(),
-            membership.getUser().getTokenVersion()
+            membership.getUser().getTokenVersion(),
+            authenticatedAt
         );
 
         return Optional.of(new ValidatedPrincipal(principal, membership));

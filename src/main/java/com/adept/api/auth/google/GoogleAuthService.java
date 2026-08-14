@@ -1,6 +1,7 @@
 package com.adept.api.auth.google;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -26,6 +27,7 @@ import com.adept.api.common.error.ForbiddenException;
 import com.adept.api.common.error.NotFoundException;
 import com.adept.api.common.error.ProblemCode;
 import com.adept.api.common.error.UnauthorizedException;
+import com.adept.api.config.AppProperties;
 import com.adept.api.config.GoogleAuthProperties;
 import com.adept.api.security.ratelimit.AuthRateLimiter;
 import com.adept.api.user.User;
@@ -53,6 +55,7 @@ public final class GoogleAuthService {
     private final AuthRateLimiter rateLimiter;
     private final AuditService auditService;
     private final Clock clock;
+    private final Duration sensitiveActionMaxAge;
     private final TransactionTemplate transactionTemplate;
 
     public GoogleAuthService(
@@ -67,6 +70,7 @@ public final class GoogleAuthService {
             AuthRateLimiter rateLimiter,
             AuditService auditService,
             Clock clock,
+            AppProperties appProperties,
             PlatformTransactionManager transactionManager) {
         this.properties = properties;
         this.googleAccountRepository = googleAccountRepository;
@@ -79,6 +83,7 @@ public final class GoogleAuthService {
         this.rateLimiter = rateLimiter;
         this.auditService = auditService;
         this.clock = clock;
+        this.sensitiveActionMaxAge = appProperties.auth().sensitiveActionMaxAge();
         this.transactionTemplate = new TransactionTemplate(transactionManager);
         this.transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
@@ -148,6 +153,56 @@ public final class GoogleAuthService {
         }
     }
 
+    public LoginResult reauthenticate(
+            GoogleReauthenticationSession pending,
+            VerifiedGoogleIdentity identity,
+            AccountRequestContext context) {
+        requireEnabled();
+        Objects.requireNonNull(identity, "identity");
+        Instant now = clock.instant();
+        if (pending == null || pending.isExpired(now)) {
+            throw new UnauthorizedException(ProblemCode.REAUTHENTICATION_FAILED);
+        }
+        if (identity.authenticatedAt() == null
+                || identity.authenticatedAt().isBefore(now.minus(sensitiveActionMaxAge))
+                || identity.authenticatedAt().isAfter(now.plusSeconds(30))) {
+            throw new ForbiddenException(ProblemCode.REAUTHENTICATION_FAILED);
+        }
+
+        LoginResult login = transactionTemplate.execute(status -> {
+            User user = userRepository.findByIdForUpdate(pending.userId())
+                .orElseThrow(() -> new UnauthorizedException(ProblemCode.REAUTHENTICATION_FAILED));
+            GoogleAuthAccount account = googleAccountRepository
+                .findByGoogleSubjectForUpdate(identity.subject())
+                .orElseThrow(() -> new ForbiddenException(ProblemCode.REAUTHENTICATION_FAILED));
+            if (!account.getUser().getId().equals(user.getId())
+                    || user.getStatus() != UserStatus.ACTIVE
+                    || user.getEmailVerifiedAt() == null
+                    || user.getTokenVersion() != pending.tokenVersion()) {
+                throw new ForbiddenException(ProblemCode.REAUTHENTICATION_FAILED);
+            }
+
+            List<Membership> activeMemberships = activeMembershipService.getActiveWorkspaces(user.getId());
+            boolean requestedWorkspaceActive = activeMemberships.stream()
+                .anyMatch(membership -> membership.getWorkspace().getId().equals(pending.workspaceId()));
+            if (!requestedWorkspaceActive) {
+                throw new ForbiddenException(ProblemCode.NO_ACTIVE_MEMBERSHIP);
+            }
+
+            account.setGoogleEmail(identity.email());
+            account.setLastAuthenticatedAt(now);
+            googleAccountRepository.save(account);
+            return freshSessionService.issue(
+                user,
+                activeMemberships,
+                pending.workspaceId(),
+                context,
+                "GOOGLE_REAUTHENTICATION"
+            );
+        });
+        return Objects.requireNonNull(login);
+    }
+
     private LoginResult authenticateExisting(
             UUID userId,
             VerifiedGoogleIdentity identity,
@@ -165,10 +220,6 @@ public final class GoogleAuthService {
         }
 
         List<Membership> activeMemberships = activeMembershipService.getActiveWorkspaces(user.getId());
-        if (activeMemberships.isEmpty()) {
-            throw new ForbiddenException(ProblemCode.NO_ACTIVE_MEMBERSHIP);
-        }
-
         account.setGoogleEmail(identity.email());
         account.setLastAuthenticatedAt(clock.instant());
         googleAccountRepository.save(account);
@@ -260,4 +311,3 @@ public final class GoogleAuthService {
         }
     }
 }
-

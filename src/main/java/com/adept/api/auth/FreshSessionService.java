@@ -62,8 +62,21 @@ public final class FreshSessionService {
             List<Membership> activeMemberships,
             AccountRequestContext context,
             String authenticationMethod) {
-        if (activeMemberships == null || activeMemberships.isEmpty()) {
-            throw new IllegalArgumentException("at least one active membership is required");
+        return issue(user, activeMemberships, null, context, authenticationMethod);
+    }
+
+    /**
+     * Issues a new Adept-owned session and keeps the requested workspace active.
+     * The caller must hold the user transaction lock.
+     */
+    public LoginResult issue(
+            User user,
+            List<Membership> activeMemberships,
+            UUID preferredWorkspaceId,
+            AccountRequestContext context,
+            String authenticationMethod) {
+        if (activeMemberships == null) {
+            throw new IllegalArgumentException("active memberships are required");
         }
 
         Instant now = clock.instant();
@@ -78,6 +91,7 @@ public final class FreshSessionService {
         refreshToken.setFamilyId(UUID.randomUUID());
         refreshToken.setTokenHash(tokenHasher.hashRefreshToken(rawRefreshToken));
         refreshToken.setExpiresAt(refreshExpiresAt);
+        refreshToken.setAuthenticatedAt(now);
         if (context.ipAddress() != null && !context.ipAddress().isBlank()) {
             refreshToken.setIpHash(tokenHasher.hashAuditIp(context.ipAddress()));
         }
@@ -87,10 +101,13 @@ public final class FreshSessionService {
         }
         refreshTokenRepository.save(refreshToken);
 
-        Membership currentMembership = activeMemberships.size() == 1
-            ? activeMemberships.getFirst()
-            : null;
-        AuthSessionResponse response = response(user, currentMembership, activeMemberships);
+        Membership currentMembership = preferredWorkspaceId == null
+            ? activeMemberships.size() == 1 ? activeMemberships.getFirst() : null
+            : activeMemberships.stream()
+                .filter(membership -> membership.getWorkspace().getId().equals(preferredWorkspaceId))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("preferred workspace is not active"));
+        AuthSessionResponse response = response(user, currentMembership, activeMemberships, now);
 
         auditService.record(
             AuditAction.LOGIN_SUCCEEDED,
@@ -101,7 +118,7 @@ public final class FreshSessionService {
             user.getId(),
             Map.of(
                 "authenticationMethod", authenticationMethod,
-                "workspaceSelectionRequired", activeMemberships.size() > 1
+                "workspaceSelectionRequired", currentMembership == null
             ),
             context.ipAddress(),
             context.userAgent()
@@ -113,7 +130,8 @@ public final class FreshSessionService {
     private AuthSessionResponse response(
             User user,
             Membership currentMembership,
-            List<Membership> activeMemberships) {
+            List<Membership> activeMemberships,
+            Instant authenticatedAt) {
         UserSummary userSummary = UserSummary.from(user);
         List<WorkspaceSummaryResponse> workspaces = activeMemberships.stream()
             .map(WorkspaceSummaryResponse::from)
@@ -127,7 +145,8 @@ public final class FreshSessionService {
             currentMembership.getId(),
             currentMembership.getWorkspace().getId(),
             currentMembership.getRole(),
-            user.getTokenVersion()
+            user.getTokenVersion(),
+            authenticatedAt
         );
         return new AuthSessionResponse(
             jwtService.issue(principal),
@@ -149,4 +168,3 @@ public final class FreshSessionService {
             : stripped.substring(0, MAX_USER_AGENT_LENGTH);
     }
 }
-

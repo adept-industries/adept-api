@@ -48,6 +48,9 @@ class OpenApiContractTest extends PartCIntegrationTestSupport {
             "400", "403", "413", "415", "429"),
         endpoint("/api/v1/auth/login", "post", "login", "200", security("csrfHeader"), "LoginRequest",
             "400", "401", "403", "413", "415", "429"),
+        endpoint("/api/v1/auth/reauthenticate/password", "post", "reauthenticateWithPassword", "200",
+            security("bearerAuth", "csrfHeader"), "PasswordReauthenticationRequest",
+            "400", "401", "403", "413", "415", "429"),
         endpoint("/api/v1/auth/refresh", "post", "refreshSession", "200", security("refreshCookie", "csrfHeader"), "RefreshRequest",
             "400", "401", "403", "413", "415", "429"),
         endpoint("/api/v1/auth/logout", "post", "logoutSession", "204", security("csrfHeader"), null,
@@ -56,6 +59,9 @@ class OpenApiContractTest extends PartCIntegrationTestSupport {
             "401", "403"),
         endpoint("/api/v1/auth/switch-workspace/{workspaceId}", "post", "switchWorkspace", "200",
             security("refreshCookie", "csrfHeader"), null, "400", "401", "403", "404", "429"),
+        endpoint("/api/v1/auth/workspaces", "post", "createWorkspaceForSession", "201",
+            security("refreshCookie", "csrfHeader"), "CreateWorkspaceRequest",
+            "400", "401", "403", "409", "413", "415", "429"),
         endpoint("/api/v1/auth/forgot-password", "post", "forgotPassword", "202", security("csrfHeader"), "EmailRequest",
             "400", "403", "413", "415", "429"),
         endpoint("/api/v1/auth/reset-password", "post", "resetPassword", "204", security("csrfHeader"), "ResetPasswordRequest",
@@ -65,6 +71,8 @@ class OpenApiContractTest extends PartCIntegrationTestSupport {
         endpoint("/api/v1/auth/google/onboarding", "post", "completeGoogleOnboarding", "200",
             security("oauthSessionCookie", "csrfHeader"), "GoogleOnboardingRequest",
             "400", "401", "403", "409", "413", "415", "429"),
+        endpoint("/api/v1/auth/google/reauthentication/start", "post", "startGoogleReauthentication", "200",
+            security("bearerAuth", "csrfHeader"), null, "401", "403", "404", "429"),
         endpoint("/api/v1/workspaces", "get", "listWorkspaces", "200", security("bearerAuth"), null,
             "401", "403"),
         endpoint("/api/v1/workspaces", "post", "createWorkspace", "201", security("bearerAuth", "csrfHeader"), "CreateWorkspaceRequest",
@@ -95,10 +103,13 @@ class OpenApiContractTest extends PartCIntegrationTestSupport {
     private static final Map<String, String> SUCCESS_SCHEMAS = Map.ofEntries(
         Map.entry("signup", "#/components/schemas/SignupResponse"),
         Map.entry("login", "#/components/schemas/AuthSessionResponse"),
+        Map.entry("reauthenticateWithPassword", "#/components/schemas/AuthSessionResponse"),
         Map.entry("refreshSession", "#/components/schemas/AuthSessionResponse"),
         Map.entry("completeGoogleOnboarding", "#/components/schemas/AuthSessionResponse"),
+        Map.entry("startGoogleReauthentication", "#/components/schemas/GoogleReauthenticationStartResponse"),
         Map.entry("getCurrentUser", "#/components/schemas/MeResponse"),
         Map.entry("switchWorkspace", "#/components/schemas/AuthSessionResponse"),
+        Map.entry("createWorkspaceForSession", "#/components/schemas/AuthSessionResponse"),
         Map.entry("createWorkspace", "#/components/schemas/WorkspaceSummaryResponse"),
         Map.entry("getCurrentWorkspace", "#/components/schemas/CurrentWorkspaceResponse"),
         Map.entry("updateCurrentWorkspace", "#/components/schemas/CurrentWorkspaceResponse"),
@@ -120,9 +131,11 @@ class OpenApiContractTest extends PartCIntegrationTestSupport {
         "EmailRequest",
         "FieldError",
         "GoogleOnboardingRequest",
+        "GoogleReauthenticationStartResponse",
         "LoginRequest",
         "MeResponse",
         "MembershipSummary",
+        "PasswordReauthenticationRequest",
         "ProblemDetail",
         "ProjectRepositoryResponse",
         "ProjectResponse",
@@ -239,10 +252,12 @@ class OpenApiContractTest extends PartCIntegrationTestSupport {
 
         assertWriteOnly(schemas, "SignupRequest", "password");
         assertWriteOnly(schemas, "LoginRequest", "password");
+        assertWriteOnly(schemas, "PasswordReauthenticationRequest", "password");
         assertWriteOnly(schemas, "ActionTokenRequest", "token");
         assertWriteOnly(schemas, "ResetPasswordRequest", "token");
         assertWriteOnly(schemas, "ResetPasswordRequest", "newPassword");
-        assertWriteOnly(schemas, "DeleteWorkspaceRequest", "password");
+        assertThat(fieldNames(schemas.at("/DeleteWorkspaceRequest/properties")))
+            .containsExactly("confirmationSlug");
 
         assertThat(schemas.at("/AuthSessionResponse/oneOf/0/$ref").asText())
             .isEqualTo("#/components/schemas/AuthenticatedSessionResponse");

@@ -29,6 +29,7 @@ public final class JwtService {
     private static final String WORKSPACE_ID = "workspaceId";
     private static final String ROLE = "role";
     private static final String TOKEN_VERSION = "tokenVersion";
+    private static final String AUTHENTICATED_AT = "auth_time";
     private static final long MAX_FUTURE_ISSUED_AT_SECONDS = 30;
 
     private final AppProperties.Jwt properties;
@@ -51,7 +52,7 @@ public final class JwtService {
     public String issue(AuthenticatedPrincipal principal) {
         Instant issuedAt = clock.instant();
         Instant expiresAt = issuedAt.plus(properties.accessTokenTtl());
-        return Jwts.builder()
+        var builder = Jwts.builder()
             .issuer(properties.issuer())
             .subject(principal.userId().toString())
             .audience().add(properties.audience()).and()
@@ -61,7 +62,11 @@ public final class JwtService {
             .claim(TOKEN_VERSION, principal.tokenVersion())
             .issuedAt(Date.from(issuedAt))
             .expiration(Date.from(expiresAt))
-            .id(UUID.randomUUID().toString())
+            .id(UUID.randomUUID().toString());
+        if (principal.authenticatedAt() != null) {
+            builder.claim(AUTHENTICATED_AT, principal.authenticatedAt().getEpochSecond());
+        }
+        return builder
             .signWith(key, Jwts.SIG.HS256)
             .compact();
     }
@@ -81,12 +86,18 @@ public final class JwtService {
             if (issuedAt.isAfter(clock.instant().plusSeconds(MAX_FUTURE_ISSUED_AT_SECONDS))) {
                 throw invalidSession();
             }
+            Instant authenticatedAt = optionalInstant(claims.get(AUTHENTICATED_AT));
+            if (authenticatedAt != null
+                    && authenticatedAt.isAfter(clock.instant().plusSeconds(MAX_FUTURE_ISSUED_AT_SECONDS))) {
+                throw invalidSession();
+            }
             return new JwtClaims(
                 requiredUuid(claims.getSubject()),
                 requiredUuid(claims.get(MEMBERSHIP_ID, String.class)),
                 requiredUuid(claims.get(WORKSPACE_ID, String.class)),
                 MembershipRole.valueOf(requiredString(claims.get(ROLE, String.class))),
                 requiredTokenVersion(claims.get(TOKEN_VERSION)),
+                authenticatedAt,
                 issuedAt,
                 expiresAt,
                 requiredUuid(claims.getId())
@@ -129,6 +140,20 @@ public final class JwtService {
             throw invalidSession();
         }
         return tokenVersion;
+    }
+
+    private static Instant optionalInstant(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (!(value instanceof Number number)) {
+            throw invalidSession();
+        }
+        long epochSecond = number.longValue();
+        if (number.doubleValue() != epochSecond) {
+            throw invalidSession();
+        }
+        return Instant.ofEpochSecond(epochSecond);
     }
 
     private static UnauthorizedException invalidSession() {

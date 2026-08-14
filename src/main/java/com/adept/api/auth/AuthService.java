@@ -20,6 +20,7 @@ import com.adept.api.audit.AuditService;
 import com.adept.api.auth.dto.LoginRequest;
 import com.adept.api.auth.dto.MeResponse;
 import com.adept.api.auth.dto.MembershipSummary;
+import com.adept.api.auth.dto.PasswordReauthenticationRequest;
 import com.adept.api.auth.dto.SignupRequest;
 import com.adept.api.auth.dto.SignupResponse;
 import com.adept.api.auth.dto.UserSummary;
@@ -411,11 +412,6 @@ public class AuthService {
             }
 
             List<Membership> activeMemberships = activeMembershipService.getActiveWorkspaces(user.getId());
-            if (activeMemberships.isEmpty()) {
-                recordFailedLogin(emailHmac, context);
-                return new LoginOutcome.Failure(ProblemCode.NO_ACTIVE_MEMBERSHIP);
-            }
-
             return new LoginOutcome.Success(
                 freshSessionService.issue(user, activeMemberships, context, "PASSWORD")
             );
@@ -424,7 +420,7 @@ public class AuthService {
         if (outcome instanceof LoginOutcome.Failure failure) {
             switch (failure.problemCode()) {
                 case INVALID_CREDENTIALS -> throw new UnauthorizedException(ProblemCode.INVALID_CREDENTIALS);
-                case EMAIL_NOT_VERIFIED, NO_ACTIVE_MEMBERSHIP -> throw new ForbiddenException(failure.problemCode());
+                case EMAIL_NOT_VERIFIED -> throw new ForbiddenException(failure.problemCode());
                 default -> throw new UnauthorizedException(failure.problemCode());
             }
         }
@@ -434,6 +430,57 @@ public class AuthService {
         }
 
         throw new IllegalStateException("Unexpected login outcome");
+    }
+
+    public LoginResult reauthenticatePassword(
+            AuthenticatedPrincipal principal,
+            PasswordReauthenticationRequest request,
+            AccountRequestContext context) {
+        if (principal == null || principal.userId() == null || principal.workspaceId() == null) {
+            throw new UnauthorizedException(ProblemCode.SESSION_INVALID);
+        }
+
+        LoginOutcome outcome = transactionTemplate.execute(status -> {
+            User user = userRepository.findByIdForUpdate(principal.userId()).orElse(null);
+            if (user == null
+                    || user.getStatus() != UserStatus.ACTIVE
+                    || user.getEmailVerifiedAt() == null
+                    || user.getTokenVersion() != principal.tokenVersion()) {
+                return new LoginOutcome.Failure(ProblemCode.SESSION_INVALID);
+            }
+
+            rateLimiter.requireLogin(user.getEmail());
+            if (!passwordService.matchesAuthenticationCandidate(request.password(), user.getPasswordHash())) {
+                return new LoginOutcome.Failure(ProblemCode.REAUTHENTICATION_FAILED);
+            }
+
+            List<Membership> activeMemberships = activeMembershipService.getActiveWorkspaces(user.getId());
+            boolean currentWorkspaceActive = activeMemberships.stream()
+                .anyMatch(membership -> membership.getWorkspace().getId().equals(principal.workspaceId()));
+            if (!currentWorkspaceActive) {
+                return new LoginOutcome.Failure(ProblemCode.NO_ACTIVE_MEMBERSHIP);
+            }
+
+            return new LoginOutcome.Success(freshSessionService.issue(
+                user,
+                activeMemberships,
+                principal.workspaceId(),
+                context,
+                "PASSWORD_REAUTHENTICATION"
+            ));
+        });
+
+        if (outcome instanceof LoginOutcome.Success success) {
+            return success.login();
+        }
+        if (outcome instanceof LoginOutcome.Failure failure) {
+            switch (failure.problemCode()) {
+                case REAUTHENTICATION_FAILED, NO_ACTIVE_MEMBERSHIP ->
+                    throw new ForbiddenException(failure.problemCode());
+                default -> throw new UnauthorizedException(failure.problemCode());
+            }
+        }
+        throw new IllegalStateException("Unexpected reauthentication outcome");
     }
 
     private void recordFailedLogin(String emailHmac, AccountRequestContext context) {

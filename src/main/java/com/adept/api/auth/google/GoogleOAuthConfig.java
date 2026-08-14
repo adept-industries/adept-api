@@ -91,6 +91,8 @@ public class GoogleOAuthConfig {
             problemWriter,
             AUTHORIZATION_BASE_URI + "/" + REGISTRATION_ID
         );
+        GoogleAuthorizationRequestResolver authorizationRequestResolver =
+            new GoogleAuthorizationRequestResolver(registrations, oauthSessionService);
 
         return http
             .securityMatcher(AUTHORIZATION_BASE_URI + "/**", CALLBACK_BASE_URI + "/**")
@@ -108,7 +110,9 @@ public class GoogleOAuthConfig {
             .oauth2Login(oauth -> oauth
                 .clientRegistrationRepository(registrations)
                 .authorizedClientService(authorizedClientService)
-                .authorizationEndpoint(endpoint -> endpoint.baseUri(AUTHORIZATION_BASE_URI))
+                .authorizationEndpoint(endpoint -> endpoint
+                    .baseUri(AUTHORIZATION_BASE_URI)
+                    .authorizationRequestResolver(authorizationRequestResolver))
                 .redirectionEndpoint(endpoint -> endpoint.baseUri(CALLBACK_BASE_URI + "/*"))
                 .successHandler(successHandler)
                 .failureHandler(failureHandler))

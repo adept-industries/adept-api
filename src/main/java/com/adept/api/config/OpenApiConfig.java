@@ -40,14 +40,18 @@ public class OpenApiConfig {
     private static final String VERIFY_EMAIL = "/api/v1/auth/verify-email";
     private static final String RESEND_VERIFICATION = "/api/v1/auth/resend-verification";
     private static final String LOGIN = "/api/v1/auth/login";
+    private static final String PASSWORD_REAUTHENTICATION = "/api/v1/auth/reauthenticate/password";
     private static final String REFRESH = "/api/v1/auth/refresh";
     private static final String LOGOUT = "/api/v1/auth/logout";
     private static final String ME = "/api/v1/auth/me";
     private static final String SWITCH_WORKSPACE = "/api/v1/auth/switch-workspace/{workspaceId}";
+    private static final String SESSION_WORKSPACES = "/api/v1/auth/workspaces";
     private static final String FORGOT_PASSWORD = "/api/v1/auth/forgot-password";
     private static final String RESET_PASSWORD = "/api/v1/auth/reset-password";
     private static final String GOOGLE_START = "/api/v1/auth/google/start";
     private static final String GOOGLE_ONBOARDING = "/api/v1/auth/google/onboarding";
+    private static final String GOOGLE_REAUTHENTICATION_START =
+        "/api/v1/auth/google/reauthentication/start";
     private static final String WORKSPACES = "/api/v1/workspaces";
     private static final String CURRENT_WORKSPACE = "/api/v1/workspaces/current";
     private static final String PROJECTS = "/api/v1/projects";
@@ -60,14 +64,17 @@ public class OpenApiConfig {
         VERIFY_EMAIL,
         RESEND_VERIFICATION,
         LOGIN,
+        PASSWORD_REAUTHENTICATION,
         REFRESH,
         LOGOUT,
         ME,
         SWITCH_WORKSPACE,
+        SESSION_WORKSPACES,
         FORGOT_PASSWORD,
         RESET_PASSWORD,
         GOOGLE_START,
         GOOGLE_ONBOARDING,
+        GOOGLE_REAUTHENTICATION_START,
         WORKSPACES,
         CURRENT_WORKSPACE,
         PROJECTS,
@@ -87,7 +94,7 @@ public class OpenApiConfig {
                 .type(SecurityScheme.Type.APIKEY)
                 .in(SecurityScheme.In.COOKIE)
                 .name("adept_refresh")
-                .description("HttpOnly refresh-session cookie. The cookie is required for refresh and workspace switching."))
+                .description("HttpOnly refresh-session cookie. The cookie is required for refresh, workspace switching, and zero-workspace account recovery."))
             .addSecuritySchemes("csrfHeader", new SecurityScheme()
                 .type(SecurityScheme.Type.APIKEY)
                 .in(SecurityScheme.In.HEADER)
@@ -97,7 +104,7 @@ public class OpenApiConfig {
                 .type(SecurityScheme.Type.APIKEY)
                 .in(SecurityScheme.In.COOKIE)
                 .name("adept_oauth")
-                .description("Short-lived HttpOnly session used only to complete Google signup onboarding."));
+                .description("Short-lived HttpOnly session used for Google login, onboarding, or reauthentication."));
 
         addProblemSchemas(components);
 
@@ -147,6 +154,18 @@ public class OpenApiConfig {
             configureBodyOperation(openApi, LOGIN, "login", "Create a browser session", "200",
                 "Session created", "AuthSessionResponse", SecurityProfile.CSRF,
                 Set.of("400", "401", "403", "413", "415", "429"), CookieBehavior.REFRESH_AND_CSRF);
+            configureBodyOperation(
+                openApi,
+                PASSWORD_REAUTHENTICATION,
+                "reauthenticateWithPassword",
+                "Verify the current user with a password",
+                "200",
+                "Identity verified and a recent session issued",
+                "AuthSessionResponse",
+                SecurityProfile.BEARER_CSRF,
+                Set.of("400", "401", "403", "413", "415", "429"),
+                CookieBehavior.REFRESH_AND_CSRF
+            );
             configureBodyOperation(openApi, REFRESH, "refreshSession", "Rotate the refresh token and issue session state", "200",
                 "Session refreshed", "AuthSessionResponse", SecurityProfile.REFRESH_CSRF,
                 Set.of("400", "401", "403", "413", "415", "429"), CookieBehavior.REFRESH);
@@ -196,6 +215,19 @@ public class OpenApiConfig {
                 CookieBehavior.NONE
             );
 
+            configureBodyOperation(
+                openApi,
+                SESSION_WORKSPACES,
+                "createWorkspaceForSession",
+                "Create a workspace for an account with none",
+                "201",
+                "Workspace and authenticated session created",
+                "AuthSessionResponse",
+                SecurityProfile.REFRESH_CSRF,
+                Set.of("400", "401", "403", "409", "413", "415", "429"),
+                CookieBehavior.NONE
+            );
+
             configureBodyOperation(openApi, FORGOT_PASSWORD, "forgotPassword", "Request a password reset", "202",
                 "Request accepted", null, SecurityProfile.CSRF,
                 Set.of("400", "403", "413", "415", "429"), CookieBehavior.NONE);
@@ -234,6 +266,21 @@ public class OpenApiConfig {
                 SecurityProfile.OAUTH_SESSION_CSRF,
                 Set.of("400", "401", "403", "409", "413", "415", "429"),
                 CookieBehavior.GOOGLE_ONBOARDING
+            );
+
+            configure(
+                openApi,
+                GOOGLE_REAUTHENTICATION_START,
+                PathItem.HttpMethod.POST,
+                "startGoogleReauthentication",
+                "Start Google identity verification",
+                "Creates a browser-bound OAuth handshake that forces a fresh Google authentication.",
+                "200",
+                "Google authorization URL returned",
+                componentRef("GoogleReauthenticationStartResponse"),
+                SecurityProfile.BEARER_CSRF,
+                Set.of("401", "403", "404", "429"),
+                CookieBehavior.OAUTH_SESSION
             );
 
             configure(
@@ -298,7 +345,7 @@ public class OpenApiConfig {
                 PathItem.HttpMethod.DELETE,
                 "deleteCurrentWorkspace",
                 "Request current workspace deletion",
-                "Marks the workspace DELETING, suspends integrations, and queues one pending DELETE_WORKSPACE job. The deletion worker is intentionally deferred beyond Phase 2.",
+                "Requires authentication within the configured sensitive-action window, marks the workspace DELETING, suspends integrations, and queues one pending DELETE_WORKSPACE job.",
                 "202",
                 "Deletion requested",
                 componentRef("WorkspaceDeletionResponse"),
@@ -571,15 +618,16 @@ public class OpenApiConfig {
         hideProperties(components, "UpdateProjectRequest", "namePresent", "descriptionPresent");
         markWriteOnly(components, "SignupRequest", "password");
         markWriteOnly(components, "LoginRequest", "password");
+        markWriteOnly(components, "PasswordReauthenticationRequest", "password");
         markWriteOnly(components, "ActionTokenRequest", "token");
         markWriteOnly(components, "ResetPasswordRequest", "token", "newPassword");
-        markWriteOnly(components, "DeleteWorkspaceRequest", "password");
 
-        require(components, "UserSummary", "id", "email", "displayName", "emailVerified");
+        require(components, "UserSummary", "id", "email", "displayName", "emailVerified", "hasPassword");
         require(components, "MembershipSummary", "id", "workspaceId", "workspaceName", "workspaceSlug", "timezone", "role");
         require(components, "WorkspaceSummaryResponse", "id", "name", "slug", "timezone", "role");
         require(components, "SignupResponse", "user", "workspace", "emailVerificationRequired");
         require(components, "GoogleOnboardingRequest", "workspaceName", "timezone");
+        require(components, "GoogleReauthenticationStartResponse", "authorizationUrl");
         require(components, "MeResponse", "user", "currentMembership", "workspaces");
         require(components, "CurrentWorkspaceResponse", "id", "name", "slug", "timezone", "role", "membershipId");
         require(components, "WorkspaceDeletionResponse", "workspaceId", "status");
@@ -627,7 +675,9 @@ public class OpenApiConfig {
         schema.addProperty("workspaceSelectionRequired", selection);
         schema.addProperty("user", componentRef("UserSummary"));
         schema.addProperty("currentMembership", componentRef("MembershipSummary"));
-        schema.addProperty("workspaces", new ArraySchema().items(componentRef("WorkspaceSummaryResponse")));
+        schema.addProperty("workspaces", new ArraySchema()
+            .items(componentRef("WorkspaceSummaryResponse"))
+            .description("Active workspace memberships. Empty when the account must create a workspace."));
         return schema;
     }
 

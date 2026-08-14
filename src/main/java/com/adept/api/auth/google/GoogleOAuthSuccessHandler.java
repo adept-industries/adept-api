@@ -63,6 +63,16 @@ final class GoogleOAuthSuccessHandler implements AuthenticationSuccessHandler {
             }
 
             VerifiedGoogleIdentity identity = VerifiedGoogleIdentity.from(oidcUser);
+            var reauthentication = oauthSessionService.pendingReauthentication(request);
+            if (reauthentication.isPresent()) {
+                LoginResult login = googleAuthService.reauthenticate(
+                    reauthentication.get(),
+                    identity,
+                    AccountRequestContext.from(request)
+                );
+                finishReauthentication(request, response, login);
+                return;
+            }
             GoogleAuthService.AuthenticationOutcome outcome = googleAuthService.authenticate(
                 identity,
                 AccountRequestContext.from(request)
@@ -90,6 +100,16 @@ final class GoogleOAuthSuccessHandler implements AuthenticationSuccessHandler {
         }
     }
 
+    private void finishReauthentication(
+            HttpServletRequest request,
+            HttpServletResponse response,
+            LoginResult login) throws IOException {
+        oauthSessionService.clear(request, response);
+        refreshCookieService.set(response, login.rawRefreshToken(), login.refreshExpiresAt());
+        csrfCookieService.expire(request, response);
+        redirect(response, "dashboard/settings?reauthenticated=1");
+    }
+
     private void finishLogin(
             HttpServletRequest request,
             HttpServletResponse response,
@@ -104,9 +124,15 @@ final class GoogleOAuthSuccessHandler implements AuthenticationSuccessHandler {
             HttpServletRequest request,
             HttpServletResponse response,
             String code) throws IOException {
+        boolean reauthentication = oauthSessionService.pendingReauthentication(request).isPresent();
         oauthSessionService.clear(request, response);
         csrfCookieService.expire(request, response);
-        redirect(response, "login?google_error=" + code);
+        redirect(
+            response,
+            reauthentication
+                ? "dashboard/settings?google_reauth_error=" + code
+                : "login?google_error=" + code
+        );
     }
 
     private void redirect(HttpServletResponse response, String relativePath) throws IOException {

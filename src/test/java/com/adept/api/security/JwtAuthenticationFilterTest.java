@@ -65,21 +65,23 @@ class JwtAuthenticationFilterTest {
         UUID userId = UUID.randomUUID();
         UUID membershipId = UUID.randomUUID();
         UUID workspaceId = UUID.randomUUID();
+        Instant authenticatedAt = Instant.now().minusSeconds(30);
         JwtClaims claims = new JwtClaims(
             userId,
             membershipId,
             workspaceId,
             MembershipRole.MANAGER,
             0,
+            authenticatedAt,
             Instant.now(),
             Instant.now().plusSeconds(900),
             UUID.randomUUID()
         );
         AuthenticatedPrincipal principal = new AuthenticatedPrincipal(
-            userId, membershipId, workspaceId, MembershipRole.MANAGER, 0);
+            userId, membershipId, workspaceId, MembershipRole.MANAGER, 0, authenticatedAt);
         when(jwtService.parse("valid-token")).thenReturn(claims);
         when(validationService.validate(
-            userId, membershipId, workspaceId, MembershipRole.MANAGER, 0
+            userId, membershipId, workspaceId, MembershipRole.MANAGER, 0, authenticatedAt
         )).thenReturn(Optional.of(new PrincipalValidationService.ValidatedPrincipal(principal, null)));
 
         MockHttpServletRequest downstreamRequest = request("/api/v1/auth/me");

@@ -145,11 +145,16 @@ public class SecurityConfig {
                     "/api/v1/auth/refresh",
                     "/api/v1/auth/logout",
                     "/api/v1/auth/switch-workspace/*",
+                    "/api/v1/auth/workspaces",
                     "/api/v1/auth/forgot-password",
                     "/api/v1/auth/reset-password",
                     "/api/v1/auth/google/onboarding"
                 ).permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/auth/me", "/api/v1/auth/test-me").authenticated()
+                .requestMatchers(HttpMethod.POST,
+                    "/api/v1/auth/reauthenticate/password",
+                    "/api/v1/auth/google/reauthentication/start"
+                ).authenticated()
                 .requestMatchers("/api/v1/workspaces", "/api/v1/workspaces/**").authenticated()
                 .requestMatchers("/api/v1/projects", "/api/v1/projects/**").authenticated()
                 .anyRequest().denyAll())

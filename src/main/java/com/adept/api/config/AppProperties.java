@@ -141,8 +141,15 @@ public record AppProperties(
         @Min(4) @Max(31) int bcryptCost,
         @NotNull Duration verificationTokenTtl,
         @NotNull Duration resetTokenTtl,
+        @NotNull Duration sensitiveActionMaxAge,
         @Valid @NotNull RateLimit rateLimit
     ) {
+        public Auth {
+            if (sensitiveActionMaxAge == null) {
+                sensitiveActionMaxAge = Duration.ofMinutes(5);
+            }
+        }
+
         @AssertTrue(message = "app.auth.verification-token-ttl must be positive")
         public boolean isVerificationTokenTtlValid() {
             return isPositive(verificationTokenTtl);
@@ -151,6 +158,11 @@ public record AppProperties(
         @AssertTrue(message = "app.auth.reset-token-ttl must be positive")
         public boolean isResetTokenTtlValid() {
             return isPositive(resetTokenTtl);
+        }
+
+        @AssertTrue(message = "app.auth.sensitive-action-max-age must be positive")
+        public boolean isSensitiveActionMaxAgeValid() {
+            return isPositive(sensitiveActionMaxAge);
         }
     }
 

@@ -40,6 +40,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String path = request.getRequestURI();
         return !("/api/v1/auth/me".equals(path)
             || "/api/v1/auth/test-me".equals(path)
+            || "/api/v1/auth/reauthenticate/password".equals(path)
+            || "/api/v1/auth/google/reauthentication/start".equals(path)
             || "/api/v1/workspaces".equals(path)
             || path.startsWith("/api/v1/workspaces/")
             || "/api/v1/projects".equals(path)
@@ -76,7 +78,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         try {
             JwtClaims claims = jwtService.parse(token);
             validated = principalValidationService
-                .validate(claims.userId(), claims.membershipId(), claims.workspaceId(), claims.role(), claims.tokenVersion())
+                .validate(
+                    claims.userId(),
+                    claims.membershipId(),
+                    claims.workspaceId(),
+                    claims.role(),
+                    claims.tokenVersion(),
+                    claims.authenticatedAt()
+                )
                 .orElseThrow(() -> new UnauthorizedException(ProblemCode.SESSION_INVALID));
         } catch (RuntimeException exception) {
             reject(request, response);

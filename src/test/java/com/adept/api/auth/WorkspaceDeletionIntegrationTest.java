@@ -1,5 +1,6 @@
 package com.adept.api.auth;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -25,6 +26,7 @@ import com.adept.api.common.error.ForbiddenException;
 import com.adept.api.common.error.ProblemCode;
 import com.adept.api.common.error.UnauthorizedException;
 import com.adept.api.security.AuthenticatedPrincipal;
+import com.adept.api.security.JwtService;
 import com.adept.api.workspace.WorkspaceService;
 import com.adept.api.workspace.dto.DeleteWorkspaceRequest;
 import com.adept.api.workspace.dto.WorkspaceDeletionResponse;
@@ -52,6 +54,9 @@ class WorkspaceDeletionIntegrationTest extends PartCIntegrationTestSupport {
     @Autowired
     private WorkspaceService workspaceService;
 
+    @Autowired
+    private JwtService jwtService;
+
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Test
@@ -59,11 +64,11 @@ class WorkspaceDeletionIntegrationTest extends PartCIntegrationTestSupport {
         SignupResponse reauthentication = verifiedSignup("invalid-delete", "Reauthentication Workspace");
         String accessToken = loginAndGetAccessToken(reauthentication.user().email());
 
-        requestDeletion(accessToken, "wrong-slug", VALID_PASSWORD)
+        requestDeletion(accessToken, "wrong-slug")
             .andExpect(status().isBadRequest())
             .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
             .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
-        requestDeletion(accessToken, reauthentication.workspace().slug(), "wrong-password")
+        requestPasswordReauthentication(accessToken, "wrong-password")
             .andExpect(status().isForbidden())
             .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
             .andExpect(jsonPath("$.code").value("REAUTHENTICATION_FAILED"));
@@ -75,7 +80,7 @@ class WorkspaceDeletionIntegrationTest extends PartCIntegrationTestSupport {
 
         assertThatThrownBy(() -> workspaceService.deleteCurrentWorkspace(
             staleTokenPrincipal,
-            new DeleteWorkspaceRequest(tokenMismatch.workspace().slug(), VALID_PASSWORD),
+            new DeleteWorkspaceRequest(tokenMismatch.workspace().slug()),
             requestContext()
         )).isInstanceOfSatisfying(
             UnauthorizedException.class,
@@ -89,13 +94,44 @@ class WorkspaceDeletionIntegrationTest extends PartCIntegrationTestSupport {
 
         assertThatThrownBy(() -> workspaceService.deleteCurrentWorkspace(
             staleRolePrincipal,
-            new DeleteWorkspaceRequest(roleDowngrade.workspace().slug(), VALID_PASSWORD),
+            new DeleteWorkspaceRequest(roleDowngrade.workspace().slug()),
             requestContext()
         )).isInstanceOfSatisfying(
             ForbiddenException.class,
             exception -> assertThat(exception.code()).isEqualTo(ProblemCode.MANAGER_REQUIRED)
         );
         assertNoDeletionSideEffects(roleDowngrade.workspace().id());
+    }
+
+    @Test
+    void staleSessionRequiresPasswordReauthenticationBeforeDeletion() throws Exception {
+        SignupResponse signup = verifiedSignup("recent-password-delete", "Recent Password Workspace");
+        AuthenticatedPrincipal current = managerPrincipal(signup);
+        AuthenticatedPrincipal stale = new AuthenticatedPrincipal(
+            current.userId(),
+            current.membershipId(),
+            current.workspaceId(),
+            current.role(),
+            current.tokenVersion(),
+            Instant.now().minusSeconds(601)
+        );
+        String staleAccessToken = jwtService.issue(stale);
+
+        requestDeletion(staleAccessToken, signup.workspace().slug())
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.code").value("REAUTHENTICATION_REQUIRED"));
+        assertNoDeletionSideEffects(signup.workspace().id());
+
+        MvcResult reauthentication = requestPasswordReauthentication(staleAccessToken, VALID_PASSWORD)
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.user.hasPassword").value(true))
+            .andReturn();
+        String freshAccessToken = objectMapper.readTree(reauthentication.getResponse().getContentAsString())
+            .path("accessToken")
+            .asText();
+
+        requestDeletion(freshAccessToken, signup.workspace().slug())
+            .andExpect(status().isAccepted());
     }
 
     @Test
@@ -106,7 +142,7 @@ class WorkspaceDeletionIntegrationTest extends PartCIntegrationTestSupport {
         UUID jiraIntegrationId = insertJiraIntegration(workspaceId);
         String accessToken = loginAndGetAccessToken(signup.user().email());
         AuthenticatedPrincipal principal = managerPrincipal(signup);
-        DeleteWorkspaceRequest request = new DeleteWorkspaceRequest(signup.workspace().slug(), VALID_PASSWORD);
+        DeleteWorkspaceRequest request = new DeleteWorkspaceRequest(signup.workspace().slug());
 
         CountDownLatch ready = new CountDownLatch(2);
         CountDownLatch start = new CountDownLatch(1);
@@ -206,7 +242,7 @@ class WorkspaceDeletionIntegrationTest extends PartCIntegrationTestSupport {
             .get("accessToken")
             .asText();
 
-        requestDeletion(accessToken, signup.workspace().slug(), VALID_PASSWORD)
+        requestDeletion(accessToken, signup.workspace().slug())
             .andExpect(status().isAccepted());
 
         CsrfPair refreshCsrf = fetchCsrf(mockMvc);
@@ -223,7 +259,7 @@ class WorkspaceDeletionIntegrationTest extends PartCIntegrationTestSupport {
             .andExpect(jsonPath("$.accessToken").isString());
     }
 
-    private ResultActions requestDeletion(String accessToken, String confirmationSlug, String password)
+    private ResultActions requestDeletion(String accessToken, String confirmationSlug)
             throws Exception {
         CsrfPair csrf = fetchCsrf(mockMvc);
         return mockMvc.perform(delete("/api/v1/workspaces/current")
@@ -233,8 +269,22 @@ class WorkspaceDeletionIntegrationTest extends PartCIntegrationTestSupport {
             .cookie(csrf.cookie())
             .contentType(MediaType.APPLICATION_JSON)
             .content("""
-                {"confirmationSlug":"%s","password":"%s"}
-                """.formatted(confirmationSlug, password)));
+                {"confirmationSlug":"%s"}
+                """.formatted(confirmationSlug)));
+    }
+
+    private ResultActions requestPasswordReauthentication(String accessToken, String password)
+            throws Exception {
+        CsrfPair csrf = fetchCsrf(mockMvc);
+        return mockMvc.perform(post("/api/v1/auth/reauthenticate/password")
+            .header("Origin", FRONTEND_ORIGIN)
+            .header("Authorization", "Bearer " + accessToken)
+            .header("X-XSRF-TOKEN", csrf.token())
+            .cookie(csrf.cookie())
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("""
+                {"password":"%s"}
+                """.formatted(password)));
     }
 
     private String loginAndGetAccessToken(String email) throws Exception {
@@ -278,7 +328,8 @@ class WorkspaceDeletionIntegrationTest extends PartCIntegrationTestSupport {
             membershipId,
             signup.workspace().id(),
             MembershipRole.MANAGER,
-            tokenVersion
+            tokenVersion,
+            Instant.now()
         );
     }
 

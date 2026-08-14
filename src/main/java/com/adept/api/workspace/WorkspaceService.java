@@ -1,5 +1,6 @@
 package com.adept.api.workspace;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -24,7 +25,7 @@ import com.adept.api.common.error.ForbiddenException;
 import com.adept.api.common.error.NotFoundException;
 import com.adept.api.common.error.ProblemCode;
 import com.adept.api.common.error.UnauthorizedException;
-import com.adept.api.crypto.PasswordService;
+import com.adept.api.config.AppProperties;
 import com.adept.api.integration.github.GithubIntegration;
 import com.adept.api.integration.github.GithubIntegrationRepository;
 import com.adept.api.integration.jira.JiraIntegration;
@@ -54,9 +55,10 @@ public class WorkspaceService {
     private final ProcessingJobRepository processingJobRepository;
     private final WorkspaceAuthorizationService workspaceAuthorizationService;
     private final AuthRateLimiter authRateLimiter;
-    private final PasswordService passwordService;
     private final AuditService auditService;
     private final WorkspaceSlugService workspaceSlugService;
+    private final Clock clock;
+    private final AppProperties appProperties;
 
     public WorkspaceService(
             MembershipRepository membershipRepository,
@@ -67,9 +69,10 @@ public class WorkspaceService {
             ProcessingJobRepository processingJobRepository,
             WorkspaceAuthorizationService workspaceAuthorizationService,
             AuthRateLimiter authRateLimiter,
-            PasswordService passwordService,
             AuditService auditService,
-            WorkspaceSlugService workspaceSlugService) {
+            WorkspaceSlugService workspaceSlugService,
+            Clock clock,
+            AppProperties appProperties) {
         this.membershipRepository = membershipRepository;
         this.workspaceRepository = workspaceRepository;
         this.userRepository = userRepository;
@@ -78,9 +81,10 @@ public class WorkspaceService {
         this.processingJobRepository = processingJobRepository;
         this.workspaceAuthorizationService = workspaceAuthorizationService;
         this.authRateLimiter = authRateLimiter;
-        this.passwordService = passwordService;
         this.auditService = auditService;
         this.workspaceSlugService = workspaceSlugService;
+        this.clock = clock;
+        this.appProperties = appProperties;
     }
 
     @Transactional(readOnly = true)
@@ -107,7 +111,34 @@ public class WorkspaceService {
             AccountRequestContext context) {
         workspaceAuthorizationService.requireManager(principal);
         Membership currentMembership = revalidateActiveMembership(principal);
-        User user = currentMembership.getUser();
+        Membership created = createWorkspaceMembership(currentMembership.getUser(), request, context);
+        return WorkspaceSummaryResponse.from(created);
+    }
+
+    /**
+     * Re-establishes a workspace boundary for an authenticated account whose
+     * previous workspaces are no longer active. The caller must hold the user
+     * lock while this method executes.
+     */
+    public Membership createInitialWorkspace(
+            User user,
+            CreateWorkspaceRequest request,
+            AccountRequestContext context) {
+        if (user == null
+                || user.getStatus() != UserStatus.ACTIVE
+                || user.getEmailVerifiedAt() == null) {
+            throw new UnauthorizedException(ProblemCode.SESSION_INVALID);
+        }
+        if (!membershipRepository.findAllActiveWithWorkspaceByUserId(user.getId()).isEmpty()) {
+            throw new ConflictException(ProblemCode.WORKSPACE_CONFLICT);
+        }
+        return createWorkspaceMembership(user, request, context);
+    }
+
+    private Membership createWorkspaceMembership(
+            User user,
+            CreateWorkspaceRequest request,
+            AccountRequestContext context) {
 
         Workspace workspace = new Workspace();
         workspace.setName(request.name().trim());
@@ -134,7 +165,7 @@ public class WorkspaceService {
             context != null ? context.ipAddress() : null,
             context != null ? context.userAgent() : null
         );
-        return WorkspaceSummaryResponse.from(membership);
+        return membership;
     }
 
     public CurrentWorkspaceResponse updateCurrentWorkspace(
@@ -198,11 +229,12 @@ public class WorkspaceService {
             throw new ForbiddenException(ProblemCode.MANAGER_REQUIRED);
         }
 
+        requireRecentAuthentication(principal);
+
         authRateLimiter.requireDeletion(principal.userId());
 
-        if (request == null || request.confirmationSlug() == null || request.confirmationSlug().isBlank()
-                || request.password() == null || request.password().isBlank()) {
-            throw new ApiException(ProblemCode.VALIDATION_FAILED, "Confirmation slug and password are required.");
+        if (request == null || request.confirmationSlug() == null || request.confirmationSlug().isBlank()) {
+            throw new ApiException(ProblemCode.VALIDATION_FAILED, "Confirmation slug is required.");
         }
 
         // Strict PESSIMISTIC_WRITE lock order: User -> Membership -> Workspace
@@ -237,10 +269,6 @@ public class WorkspaceService {
 
         if (!workspace.getSlug().equals(request.confirmationSlug())) {
             throw new ApiException(ProblemCode.VALIDATION_FAILED, "Confirmation slug does not match workspace slug.");
-        }
-
-        if (!passwordService.matchesAuthenticationCandidate(request.password(), user.getPasswordHash())) {
-            throw new ForbiddenException(ProblemCode.REAUTHENTICATION_FAILED);
         }
 
         workspace.setStatus(WorkspaceStatus.DELETING);
@@ -285,6 +313,14 @@ public class WorkspaceService {
         );
 
         return new WorkspaceDeletionResponse(workspace.getId(), WorkspaceStatus.DELETING);
+    }
+
+    private void requireRecentAuthentication(AuthenticatedPrincipal principal) {
+        Instant authenticatedAt = principal.authenticatedAt();
+        Instant cutoff = clock.instant().minus(appProperties.auth().sensitiveActionMaxAge());
+        if (authenticatedAt == null || authenticatedAt.isBefore(cutoff)) {
+            throw new ForbiddenException(ProblemCode.REAUTHENTICATION_REQUIRED);
+        }
     }
 
     private Membership revalidateActiveMembership(AuthenticatedPrincipal principal) {

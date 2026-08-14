@@ -22,6 +22,8 @@ public final class GoogleOAuthSessionService {
     public static final String COOKIE_PATH = "/api/v1/auth/google";
     private static final String STARTED_ATTRIBUTE = GoogleOAuthSessionService.class.getName() + ".started";
     private static final String SIGNUP_ATTRIBUTE = GoogleOAuthSessionService.class.getName() + ".signup";
+    private static final String REAUTHENTICATION_ATTRIBUTE =
+        GoogleOAuthSessionService.class.getName() + ".reauthentication";
 
     private final boolean secureCookie;
     private final Duration ttl;
@@ -34,13 +36,26 @@ public final class GoogleOAuthSessionService {
     }
 
     public void begin(HttpServletRequest request) {
+        HttpSession session = newSession(request);
+        session.setAttribute(STARTED_ATTRIBUTE, Boolean.TRUE);
+    }
+
+    public void beginReauthentication(
+            HttpServletRequest request,
+            GoogleReauthenticationSession pending) {
+        HttpSession session = newSession(request);
+        session.setAttribute(STARTED_ATTRIBUTE, Boolean.TRUE);
+        session.setAttribute(REAUTHENTICATION_ATTRIBUTE, pending);
+    }
+
+    private HttpSession newSession(HttpServletRequest request) {
         HttpSession existing = request.getSession(false);
         if (existing != null) {
             existing.invalidate();
         }
         HttpSession session = request.getSession(true);
         session.setMaxInactiveInterval(ttlSeconds());
-        session.setAttribute(STARTED_ATTRIBUTE, Boolean.TRUE);
+        return session;
     }
 
     public boolean consumeStartMarker(HttpServletRequest request) {
@@ -71,6 +86,18 @@ public final class GoogleOAuthSessionService {
             : Optional.empty();
     }
 
+    public Optional<GoogleReauthenticationSession> pendingReauthentication(
+            HttpServletRequest request) {
+        HttpSession session = request.getSession(false);
+        if (session == null) {
+            return Optional.empty();
+        }
+        Object value = session.getAttribute(REAUTHENTICATION_ATTRIBUTE);
+        return value instanceof GoogleReauthenticationSession pending
+            ? Optional.of(pending)
+            : Optional.empty();
+    }
+
     public void clear(HttpServletRequest request, HttpServletResponse response) {
         HttpSession session = request.getSession(false);
         if (session != null) {
@@ -90,4 +117,3 @@ public final class GoogleOAuthSessionService {
         return Math.toIntExact(Math.min(Integer.MAX_VALUE, Math.max(1L, ttl.toSeconds())));
     }
 }
-
