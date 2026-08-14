@@ -47,7 +47,7 @@ resource "aws_lightsail_instance" "app" {
   bundle_id         = var.lightsail_bundle_id
   ip_address_type   = "ipv4"
   key_pair_name     = aws_lightsail_key_pair.deployer[each.key].name
-  user_data = templatefile("${path.module}/cloud-init.yaml.tftpl", {
+  user_data = templatefile("${path.module}/cloud-init.sh.tftpl", {
     deploy_user = var.server_user
   })
 
