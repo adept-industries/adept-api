@@ -54,3 +54,19 @@ jobs:
             org.opencontainers.image.title=Adept API
           cache-from: type=gha,scope=adept-api
           cache-to: type=gha,mode=max,scope=adept-api
+
+      - name: Deploy to AWS Lightsail
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.LIGHTSAIL_HOST }}
+          username: ${{ secrets.LIGHTSAIL_USER }}
+          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          script: |
+            set -eu
+            cd /opt/adept
+            sed -i "s|^API_IMAGE=.*|API_IMAGE=ghcr.io/adept-industries/adept-api:sha-${{ github.event.workflow_run.head_sha }}|" .env.production
+            sudo docker compose --env-file .env.production -f compose.yaml pull api
+            sudo docker compose --env-file .env.production -f compose.yaml up -d --no-deps api
+            sudo docker compose --env-file .env.production -f compose.yaml ps
+            curl -fsS https://adeptindustries.dev/actuator/health > /dev/null || curl -fsS https://adeptindustries.dev/api/v1/auth/csrf > /dev/null
+            echo "API Deployment Complete!"
