@@ -45,7 +45,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             || "/api/v1/workspaces".equals(path)
             || path.startsWith("/api/v1/workspaces/")
             || "/api/v1/projects".equals(path)
-            || path.startsWith("/api/v1/projects/"));
+            || path.startsWith("/api/v1/projects/")
+            || "/api/v1/integrations".equals(path)
+            || path.startsWith("/api/v1/integrations/")
+            || "/api/v1/repositories".equals(path)
+            || path.startsWith("/api/v1/repositories/")
+            || "/api/v1/jira".equals(path)
+            || path.startsWith("/api/v1/jira/"));
     }
 
     @Override

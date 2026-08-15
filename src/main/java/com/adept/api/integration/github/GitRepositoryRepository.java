@@ -24,6 +24,22 @@ public interface GitRepositoryRepository
         Pageable pageable
     );
 
+    Optional<GitRepository> findByWorkspaceIdAndGithubRepoId(
+        UUID workspaceId,
+        long githubRepoId
+    );
+
+    Optional<GitRepository> findByGithubIntegrationIdAndGithubRepoId(
+        UUID githubIntegrationId,
+        long githubRepoId
+    );
+
+    List<GitRepository> findAllByWorkspaceId(UUID workspaceId);
+
+    List<GitRepository> findAllByGithubIntegrationId(UUID githubIntegrationId);
+
+    int countByGithubIntegrationId(UUID githubIntegrationId);
+
     List<GitRepository> findAllByIdInAndWorkspaceId(
         Collection<UUID> ids,
         UUID workspaceId

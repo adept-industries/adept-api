@@ -136,6 +136,10 @@ public class SecurityConfig {
                 .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/auth/csrf").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/auth/google/start").permitAll()
+                .requestMatchers(HttpMethod.GET,
+                    "/api/v1/integrations/github/callback",
+                    "/api/v1/integrations/jira/callback"
+                ).permitAll()
                 .requestMatchers(HttpMethod.POST,
                     "/api/v1/auth/signup",
                     "/api/v1/auth/verify-email",
@@ -157,6 +161,9 @@ public class SecurityConfig {
                 ).authenticated()
                 .requestMatchers("/api/v1/workspaces", "/api/v1/workspaces/**").authenticated()
                 .requestMatchers("/api/v1/projects", "/api/v1/projects/**").authenticated()
+                .requestMatchers("/api/v1/integrations", "/api/v1/integrations/**").authenticated()
+                .requestMatchers("/api/v1/repositories", "/api/v1/repositories/**").authenticated()
+                .requestMatchers("/api/v1/jira", "/api/v1/jira/**").authenticated()
                 .anyRequest().denyAll())
             .addFilterBefore(originValidationFilter, CsrfFilter.class)
             .addFilterBefore(bodyLimitFilter, OriginValidationFilter.class)
