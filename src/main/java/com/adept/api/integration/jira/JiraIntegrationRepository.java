@@ -12,6 +12,8 @@ import jakarta.persistence.LockModeType;
 
 public interface JiraIntegrationRepository extends JpaRepository<JiraIntegration, UUID> {
 
+    List<JiraIntegration> findAllByWorkspaceId(UUID workspaceId);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
         select integration

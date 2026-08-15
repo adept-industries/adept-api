@@ -32,6 +32,12 @@ public enum ProblemCode {
     REPOSITORY_NOT_FOUND(HttpStatus.NOT_FOUND, "Repository not found", "The repository was not found or is not accessible."),
     PROJECT_NOT_FOUND(HttpStatus.NOT_FOUND, "Project not found", "The project was not found or is not accessible."),
     PROJECT_CONFLICT(HttpStatus.CONFLICT, "Project conflict", "A project with that name already exists in this workspace."),
+    INTEGRATION_DISABLED(HttpStatus.BAD_REQUEST, "Integration disabled", "The requested integration is disabled in configuration."),
+    INTEGRATION_NOT_FOUND(HttpStatus.NOT_FOUND, "Integration not found", "The requested integration was not found."),
+    INTEGRATION_CONFLICT(HttpStatus.CONFLICT, "Integration conflict", "This integration is already connected to a workspace."),
+    INTEGRATION_STATE_INVALID(HttpStatus.BAD_REQUEST, "Invalid integration state", "The integration authorization state is invalid, expired, or already used."),
+    INTEGRATION_PROVIDER_ERROR(HttpStatus.BAD_GATEWAY, "Provider error", "Failed to communicate with the upstream provider."),
+    JIRA_PROJECT_NOT_FOUND(HttpStatus.NOT_FOUND, "Jira project not found", "The requested Jira project was not found."),
     METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "Method not allowed", "The HTTP method is not supported for this endpoint.");
 
     private static final String TYPE_BASE = "https://adept.local/problems/";

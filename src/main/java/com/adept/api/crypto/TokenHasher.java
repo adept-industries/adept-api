@@ -64,13 +64,18 @@ public final class TokenHasher {
         return hash(Domain.USER_AGENT, value);
     }
 
+    public String hashIntegrationState(String rawState) {
+        return hash(Domain.INTEGRATION_STATE, rawState);
+    }
+
     public enum Domain {
         REFRESH("adept:v1:refresh:"),
         VERIFY("adept:v1:verify:"),
         RESET("adept:v1:reset:"),
         AUDIT_IP("adept:v1:audit-ip:"),
         AUDIT_EMAIL("adept:v1:audit-email:"),
-        USER_AGENT("adept:v1:user-agent:");
+        USER_AGENT("adept:v1:user-agent:"),
+        INTEGRATION_STATE("adept:v1:integration-state:");
 
         private final String prefix;
 

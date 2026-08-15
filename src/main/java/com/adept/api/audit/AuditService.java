@@ -50,6 +50,17 @@ public class AuditService {
         auditLogRepository.save(log);
     }
 
+    public void record(
+            AuditAction action,
+            User actorUser,
+            Membership actorMembership,
+            Workspace workspace,
+            String entityType,
+            java.util.UUID entityId,
+            Map<String, Object> metadata) {
+        record(action, actorUser, actorMembership, workspace, entityType, entityId, metadata, null, null);
+    }
+
     private static String safeUserAgent(String value) {
         if (value == null) {
             return "";
