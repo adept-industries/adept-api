@@ -21,6 +21,7 @@ import com.adept.api.common.domain.IntegrationStatus;
 import com.adept.api.common.domain.MembershipRole;
 import com.adept.api.common.domain.ProcessingJobStatus;
 import com.adept.api.common.domain.ProcessingJobType;
+import com.adept.api.common.domain.WorkspaceStatus;
 import com.adept.api.common.error.ApiException;
 import com.adept.api.common.error.ProblemCode;
 import com.adept.api.config.AppProperties;
@@ -116,18 +117,33 @@ public class GithubIntegrationService {
         Optional<GithubIntegration> existingByInstallation =
             githubIntegrationRepository.findByInstallationId(installationId);
 
-        if (existingByInstallation.isPresent()
-                && !existingByInstallation.get().getWorkspace().getId().equals(workspace.getId())) {
-            throw new ApiException(
-                ProblemCode.INTEGRATION_CONFLICT,
-                "This GitHub App installation is already connected to another workspace"
-            );
+        GithubIntegration integration;
+        if (existingByInstallation.isPresent()) {
+            GithubIntegration existing = existingByInstallation.get();
+            boolean isDifferentWorkspace = !existing.getWorkspace().getId().equals(workspace.getId());
+            boolean isOldWorkspaceActive = existing.getWorkspace().getStatus() == WorkspaceStatus.ACTIVE;
+            boolean isOldIntegrationActive = existing.getStatus() == IntegrationStatus.ACTIVE;
+
+            if (isDifferentWorkspace && isOldWorkspaceActive && isOldIntegrationActive) {
+                throw new ApiException(
+                    ProblemCode.INTEGRATION_CONFLICT,
+                    "This GitHub App installation is already connected to another active workspace"
+                );
+            }
+
+            if (isDifferentWorkspace) {
+                githubIntegrationRepository.delete(existing);
+                githubIntegrationRepository.flush();
+                integration = new GithubIntegration();
+            } else {
+                integration = existing;
+            }
+        } else {
+            integration = new GithubIntegration();
         }
 
         GithubApiClient.GithubInstallationDetails installationDetails =
             githubApiClient.getInstallation(installationId);
-
-        GithubIntegration integration = existingByInstallation.orElseGet(GithubIntegration::new);
         integration.setWorkspace(workspace);
         integration.setInstallationId(installationId);
         integration.setAccountExternalId(installationDetails.accountExternalId());
