@@ -159,6 +159,9 @@ public class SecurityConfig {
                     "/api/v1/auth/reauthenticate/password",
                     "/api/v1/auth/google/reauthentication/start"
                 ).authenticated()
+                .requestMatchers(HttpMethod.GET, "/api/v1/invitations/preview").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/v1/invitations/accept").permitAll()
+                .requestMatchers("/api/v1/invitations", "/api/v1/invitations/**").authenticated()
                 .requestMatchers("/api/v1/workspaces", "/api/v1/workspaces/**").authenticated()
                 .requestMatchers("/api/v1/projects", "/api/v1/projects/**").authenticated()
                 .requestMatchers("/api/v1/integrations", "/api/v1/integrations/**").authenticated()

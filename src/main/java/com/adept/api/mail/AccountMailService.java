@@ -47,6 +47,16 @@ public class AccountMailService {
         );
     }
 
+    public void sendInvitation(InvitationMailRequested event) {
+        send(
+            event.recipient(),
+            "You've been invited to join " + event.workspaceName() + " on Adept",
+            "You have been invited to join " + event.workspaceName() + " as a Lead on Adept.\n\n"
+                + link("/invitations/accept#token=", event.rawToken())
+                + "\n\nThis invitation will expire in 7 days. If you did not expect this invitation, you can ignore this email."
+        );
+    }
+
     private void send(String recipient, String subject, String body) {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(properties.emailFrom());

@@ -38,6 +38,10 @@ public enum ProblemCode {
     INTEGRATION_STATE_INVALID(HttpStatus.BAD_REQUEST, "Invalid integration state", "The integration authorization state is invalid, expired, or already used."),
     INTEGRATION_PROVIDER_ERROR(HttpStatus.BAD_GATEWAY, "Provider error", "Failed to communicate with the upstream provider."),
     JIRA_PROJECT_NOT_FOUND(HttpStatus.NOT_FOUND, "Jira project not found", "The requested Jira project was not found."),
+    INVITATION_NOT_FOUND(HttpStatus.NOT_FOUND, "Invitation not found", "The invitation was not found or is not accessible."),
+    INVITATION_INVALID(HttpStatus.BAD_REQUEST, "Invalid invitation", "The invitation token is invalid, expired, or already used."),
+    INVITATION_EXPIRED(HttpStatus.BAD_REQUEST, "Invitation expired", "The invitation has expired."),
+    INVITATION_CONFLICT(HttpStatus.CONFLICT, "Invitation conflict", "The invitation has already been processed or conflicts with current state."),
     METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "Method not allowed", "The HTTP method is not supported for this endpoint.");
 
     private static final String TYPE_BASE = "https://adept.local/problems/";
