@@ -48,4 +48,14 @@ public class AccountMailListener {
             log.warn("password_changed_mail_failed userId={} traceId={}", event.userId(), event.traceId());
         }
     }
+
+    @Async("accountMailExecutor")
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onInvitation(InvitationMailRequested event) {
+        try {
+            mailService.sendInvitation(event);
+        } catch (MailException exception) {
+            log.warn("invitation_mail_failed invitationId={} traceId={}", event.invitationId(), event.traceId());
+        }
+    }
 }

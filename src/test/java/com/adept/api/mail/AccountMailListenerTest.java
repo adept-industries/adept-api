@@ -39,14 +39,20 @@ class AccountMailListenerTest extends PartCIntegrationTestSupport {
         assertThat(new PasswordChangedMailRequested(userId, recipient, "trace-changed").toString())
             .contains(userId.toString(), "trace-changed", "recipient=<redacted>")
             .doesNotContain(recipient);
+        assertThat(new InvitationMailRequested(UUID.randomUUID(), recipient, "Test Workspace", rawToken, "trace-invite").toString())
+            .contains("Test Workspace", "trace-invite", "recipient=<redacted>", "rawToken=<redacted>")
+            .doesNotContain(recipient, rawToken);
 
         String verificationRecipient = uniqueEmail("mail-verify");
         String resetRecipient = uniqueEmail("mail-reset");
+        String inviteRecipient = uniqueEmail("mail-invite");
 
         accountMailService.sendVerification(new VerificationMailRequested(
             UUID.randomUUID(), verificationRecipient, "VERIFY_TOKEN", "trace-1"));
         accountMailService.sendPasswordReset(new PasswordResetMailRequested(
             UUID.randomUUID(), resetRecipient, "RESET_TOKEN", "trace-2"));
+        accountMailService.sendInvitation(new InvitationMailRequested(
+            UUID.randomUUID(), inviteRecipient, "Platform Team", "INVITE_TOKEN", "trace-3"));
 
         var verification = mailSender.messages().stream()
             .filter(message -> message.recipients().contains(verificationRecipient))
@@ -54,11 +60,18 @@ class AccountMailListenerTest extends PartCIntegrationTestSupport {
         var reset = mailSender.messages().stream()
             .filter(message -> message.recipients().contains(resetRecipient))
             .findFirst().orElseThrow();
+        var invite = mailSender.messages().stream()
+            .filter(message -> message.recipients().contains(inviteRecipient))
+            .findFirst().orElseThrow();
         assertThat(verification.body())
             .contains("http://localhost:3000/verify-email#token=VERIFY_TOKEN")
             .doesNotContain("?token=");
         assertThat(reset.body())
             .contains("http://localhost:3000/reset-password#token=RESET_TOKEN")
+            .doesNotContain("?token=");
+        assertThat(invite.body())
+            .contains("http://localhost:3000/invitations/accept#token=INVITE_TOKEN")
+            .contains("Platform Team")
             .doesNotContain("?token=");
     }
 
