@@ -1,5 +1,6 @@
 package com.adept.api.auth;
 
+import java.util.Locale;
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
@@ -154,6 +155,222 @@ class WorkspaceControllerIntegrationTest extends PartCIntegrationTestSupport {
             .andExpect(jsonPath("$.name").value("Primary Workspace"))
             .andExpect(jsonPath("$.timezone").value("Europe/London"))
             .andExpect(jsonPath("$.role").value("MANAGER"));
+    }
+
+    @Test
+    void managerLookupFindsVerifiedLeadByNormalizedEmailInCurrentWorkspace() throws Exception {
+        String managerEmail = uniqueEmail("lookup-manager");
+        SignupResponse signup = authService.signup(
+            new SignupRequest(managerEmail, VALID_PASSWORD, "Lookup Manager", "Lookup Workspace", "UTC"),
+            requestContext()
+        );
+        jdbc.update("UPDATE users SET email_verified_at = now() WHERE id = ?", signup.user().id());
+
+        String leadEmail = uniqueEmail("lookup-lead");
+        UUID leadUserId = UUID.randomUUID();
+        UUID leadMembershipId = UUID.randomUUID();
+        String passwordHash = jdbc.queryForObject(
+            "SELECT password_hash FROM users WHERE id = ?",
+            String.class,
+            signup.user().id()
+        );
+        jdbc.update(
+            "INSERT INTO users (id, email, display_name, password_hash, status, email_verified_at, token_version, created_at, updated_at, version) "
+                + "VALUES (?, ?, ?, ?, ?, now(), 0, now(), now(), 0)",
+            leadUserId, leadEmail, "Lookup Lead", passwordHash, "ACTIVE"
+        );
+        jdbc.update(
+            "INSERT INTO memberships (id, user_id, workspace_id, role, status, created_at, updated_at, version) VALUES (?, ?, ?, ?, ?, now(), now(), 0)",
+            leadMembershipId, leadUserId, signup.workspace().id(), MembershipRole.LEAD.name(), MembershipStatus.ACTIVE.name()
+        );
+
+        String accessToken = loginAndGetAccessToken(managerEmail, VALID_PASSWORD, signup.workspace().id());
+        CsrfPair csrf = fetchCsrf(mockMvc);
+
+        mockMvc.perform(post("/api/v1/workspaces/current/members/lookup")
+                .header("Origin", FRONTEND_ORIGIN)
+                .header("Authorization", "Bearer " + accessToken)
+                .header("X-XSRF-TOKEN", csrf.token())
+                .cookie(csrf.cookie())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                        "email": "%s"
+                    }
+                    """.formatted(leadEmail.toUpperCase(Locale.ROOT))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.email").value(leadEmail))
+            .andExpect(jsonPath("$.existingUser").value(true))
+            .andExpect(jsonPath("$.emailVerified").value(true))
+            .andExpect(jsonPath("$.workspaceMembershipId").value(leadMembershipId.toString()))
+            .andExpect(jsonPath("$.workspaceRole").value("LEAD"))
+            .andExpect(jsonPath("$.workspaceMembershipStatus").value("ACTIVE"))
+            .andExpect(jsonPath("$.assignableAsLead").value(true));
+    }
+
+    @Test
+    void managerLookupDoesNotExposeMembershipsFromOtherWorkspaces() throws Exception {
+        String managerEmail = uniqueEmail("lookup-cross-manager");
+        SignupResponse signup = authService.signup(
+            new SignupRequest(managerEmail, VALID_PASSWORD, "Lookup Manager", "Current Workspace", "UTC"),
+            requestContext()
+        );
+        jdbc.update("UPDATE users SET email_verified_at = now() WHERE id = ?", signup.user().id());
+
+        String existingUserEmail = uniqueEmail("lookup-other-workspace");
+        UUID existingUserId = UUID.randomUUID();
+        UUID otherWorkspaceId = UUID.randomUUID();
+        UUID otherMembershipId = UUID.randomUUID();
+        String passwordHash = jdbc.queryForObject(
+            "SELECT password_hash FROM users WHERE id = ?",
+            String.class,
+            signup.user().id()
+        );
+        jdbc.update(
+            "INSERT INTO users (id, email, display_name, password_hash, status, email_verified_at, token_version, created_at, updated_at, version) "
+                + "VALUES (?, ?, ?, ?, ?, now(), 0, now(), now(), 0)",
+            existingUserId, existingUserEmail, "Other Workspace User", passwordHash, "ACTIVE"
+        );
+        jdbc.update(
+            "INSERT INTO workspaces (id, name, slug, timezone, status, created_at, updated_at, version) VALUES (?, ?, ?, ?, ?, now(), now(), 0)",
+            otherWorkspaceId, "Other Workspace", "other-workspace-" + UUID.randomUUID().toString().substring(0, 8), "UTC", WorkspaceStatus.ACTIVE.name()
+        );
+        jdbc.update(
+            "INSERT INTO memberships (id, user_id, workspace_id, role, status, created_at, updated_at, version) VALUES (?, ?, ?, ?, ?, now(), now(), 0)",
+            otherMembershipId, existingUserId, otherWorkspaceId, MembershipRole.MANAGER.name(), MembershipStatus.ACTIVE.name()
+        );
+
+        String accessToken = loginAndGetAccessToken(managerEmail, VALID_PASSWORD, signup.workspace().id());
+        CsrfPair csrf = fetchCsrf(mockMvc);
+
+        mockMvc.perform(post("/api/v1/workspaces/current/members/lookup")
+                .header("Origin", FRONTEND_ORIGIN)
+                .header("Authorization", "Bearer " + accessToken)
+                .header("X-XSRF-TOKEN", csrf.token())
+                .cookie(csrf.cookie())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                        "email": "%s"
+                    }
+                    """.formatted(existingUserEmail.toUpperCase(Locale.ROOT))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.email").value(existingUserEmail))
+            .andExpect(jsonPath("$.existingUser").value(true))
+            .andExpect(jsonPath("$.emailVerified").value(true))
+            .andExpect(jsonPath("$.workspaceMembershipId").doesNotExist())
+            .andExpect(jsonPath("$.workspaceRole").doesNotExist())
+            .andExpect(jsonPath("$.workspaceMembershipStatus").doesNotExist())
+            .andExpect(jsonPath("$.assignableAsLead").value(false));
+    }
+
+    @Test
+    void managerLookupDoesNotMarkUnverifiedCurrentWorkspaceLeadAssignable() throws Exception {
+        String managerEmail = uniqueEmail("lookup-unverified-manager");
+        SignupResponse signup = authService.signup(
+            new SignupRequest(managerEmail, VALID_PASSWORD, "Lookup Manager", "Lookup Workspace", "UTC"),
+            requestContext()
+        );
+        jdbc.update("UPDATE users SET email_verified_at = now() WHERE id = ?", signup.user().id());
+
+        String leadEmail = uniqueEmail("lookup-unverified-lead");
+        UUID leadUserId = UUID.randomUUID();
+        UUID leadMembershipId = UUID.randomUUID();
+        String passwordHash = jdbc.queryForObject(
+            "SELECT password_hash FROM users WHERE id = ?",
+            String.class,
+            signup.user().id()
+        );
+        jdbc.update(
+            "INSERT INTO users (id, email, display_name, password_hash, status, token_version, created_at, updated_at, version) "
+                + "VALUES (?, ?, ?, ?, ?, 0, now(), now(), 0)",
+            leadUserId, leadEmail, "Unverified Lookup Lead", passwordHash, "ACTIVE"
+        );
+        jdbc.update(
+            "INSERT INTO memberships (id, user_id, workspace_id, role, status, created_at, updated_at, version) VALUES (?, ?, ?, ?, ?, now(), now(), 0)",
+            leadMembershipId, leadUserId, signup.workspace().id(), MembershipRole.LEAD.name(), MembershipStatus.ACTIVE.name()
+        );
+
+        String accessToken = loginAndGetAccessToken(managerEmail, VALID_PASSWORD, signup.workspace().id());
+        CsrfPair csrf = fetchCsrf(mockMvc);
+
+        mockMvc.perform(post("/api/v1/workspaces/current/members/lookup")
+                .header("Origin", FRONTEND_ORIGIN)
+                .header("Authorization", "Bearer " + accessToken)
+                .header("X-XSRF-TOKEN", csrf.token())
+                .cookie(csrf.cookie())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                        "email": "%s"
+                    }
+                    """.formatted(leadEmail.toUpperCase(Locale.ROOT))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.email").value(leadEmail))
+            .andExpect(jsonPath("$.existingUser").value(true))
+            .andExpect(jsonPath("$.emailVerified").value(false))
+            .andExpect(jsonPath("$.workspaceMembershipId").value(leadMembershipId.toString()))
+            .andExpect(jsonPath("$.workspaceRole").value("LEAD"))
+            .andExpect(jsonPath("$.workspaceMembershipStatus").value("ACTIVE"))
+            .andExpect(jsonPath("$.assignableAsLead").value(false));
+    }
+
+    @Test
+    void managerLookupReturnsSafeMissForUnknownEmailAndLeadCannotLookup() throws Exception {
+        String managerEmail = uniqueEmail("lookup-miss-manager");
+        SignupResponse signup = authService.signup(
+            new SignupRequest(managerEmail, VALID_PASSWORD, "Lookup Manager", "Lookup Workspace", "UTC"),
+            requestContext()
+        );
+        jdbc.update("UPDATE users SET email_verified_at = now() WHERE id = ?", signup.user().id());
+
+        String managerAccessToken = loginAndGetAccessToken(managerEmail, VALID_PASSWORD, signup.workspace().id());
+        CsrfPair managerCsrf = fetchCsrf(mockMvc);
+        String unknownEmail = uniqueEmail("lookup-unknown");
+
+        mockMvc.perform(post("/api/v1/workspaces/current/members/lookup")
+                .header("Origin", FRONTEND_ORIGIN)
+                .header("Authorization", "Bearer " + managerAccessToken)
+                .header("X-XSRF-TOKEN", managerCsrf.token())
+                .cookie(managerCsrf.cookie())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                        "email": "%s"
+                    }
+                    """.formatted(unknownEmail)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.email").value(unknownEmail))
+            .andExpect(jsonPath("$.existingUser").value(false))
+            .andExpect(jsonPath("$.emailVerified").value(false))
+            .andExpect(jsonPath("$.workspaceMembershipId").doesNotExist())
+            .andExpect(jsonPath("$.workspaceRole").doesNotExist())
+            .andExpect(jsonPath("$.workspaceMembershipStatus").doesNotExist())
+            .andExpect(jsonPath("$.assignableAsLead").value(false));
+
+        jdbc.update(
+            "UPDATE memberships SET role = ? WHERE workspace_id = ? AND user_id = ?",
+            MembershipRole.LEAD.name(),
+            signup.workspace().id(),
+            signup.user().id()
+        );
+        String leadAccessToken = loginAndGetAccessToken(managerEmail, VALID_PASSWORD, signup.workspace().id());
+        CsrfPair leadCsrf = fetchCsrf(mockMvc);
+
+        mockMvc.perform(post("/api/v1/workspaces/current/members/lookup")
+                .header("Origin", FRONTEND_ORIGIN)
+                .header("Authorization", "Bearer " + leadAccessToken)
+                .header("X-XSRF-TOKEN", leadCsrf.token())
+                .cookie(leadCsrf.cookie())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                        "email": "%s"
+                    }
+                    """.formatted(unknownEmail)))
+            .andExpect(status().isForbidden())
+            .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+            .andExpect(jsonPath("$.code").value("MANAGER_REQUIRED"));
     }
 
     @Test

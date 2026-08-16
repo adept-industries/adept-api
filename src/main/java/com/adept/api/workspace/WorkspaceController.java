@@ -18,6 +18,8 @@ import com.adept.api.security.CurrentPrincipal;
 import com.adept.api.workspace.dto.CurrentWorkspaceResponse;
 import com.adept.api.workspace.dto.CreateWorkspaceRequest;
 import com.adept.api.workspace.dto.DeleteWorkspaceRequest;
+import com.adept.api.workspace.dto.CurrentWorkspaceMemberLookupResponse;
+import com.adept.api.workspace.dto.LookupWorkspaceMemberRequest;
 import com.adept.api.workspace.dto.UpdateWorkspaceRequest;
 import com.adept.api.workspace.dto.WorkspaceDeletionResponse;
 import com.adept.api.workspace.dto.WorkspaceSummaryResponse;
@@ -57,6 +59,13 @@ public class WorkspaceController {
     public ResponseEntity<CurrentWorkspaceResponse> getCurrentWorkspace() {
         AuthenticatedPrincipal principal = currentPrincipal.require();
         return ResponseEntity.ok(workspaceService.getCurrentWorkspace(principal));
+    }
+
+    @PostMapping("/current/members/lookup")
+    public ResponseEntity<CurrentWorkspaceMemberLookupResponse> lookupCurrentWorkspaceMember(
+            @Valid @RequestBody LookupWorkspaceMemberRequest request) {
+        AuthenticatedPrincipal principal = currentPrincipal.require();
+        return ResponseEntity.ok(workspaceService.lookupCurrentWorkspaceMember(principal, request));
     }
 
     @PatchMapping("/current")
