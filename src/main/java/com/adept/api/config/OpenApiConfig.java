@@ -59,6 +59,8 @@ public class OpenApiConfig {
     private static final String PROJECTS = "/api/v1/projects";
     private static final String PROJECT = "/api/v1/projects/{projectId}";
     private static final String PROJECT_REPOSITORIES = "/api/v1/projects/{projectId}/repositories";
+    private static final String REPOSITORY_LEAD_ASSIGNMENTS =
+        "/api/v1/repositories/{repositoryId}/lead-assignments";
 
     private static final Set<String> PHASE_2_PATHS = Set.of(
         CSRF,
@@ -82,7 +84,44 @@ public class OpenApiConfig {
         CURRENT_WORKSPACE_MEMBER_LOOKUP,
         PROJECTS,
         PROJECT,
-        PROJECT_REPOSITORIES
+        PROJECT_REPOSITORIES,
+        REPOSITORY_LEAD_ASSIGNMENTS
+    );
+
+    private static final Set<String> PUBLIC_COMPONENT_SCHEMAS = Set.of(
+        "ActionTokenRequest",
+        "AuthSessionResponse",
+        "AuthenticatedSessionResponse",
+        "CreateProjectRequest",
+        "CreateRepositoryLeadInvitationRequest",
+        "CreateWorkspaceRequest",
+        "CurrentWorkspaceMemberLookupResponse",
+        "CurrentWorkspaceResponse",
+        "DeleteWorkspaceRequest",
+        "EmailRequest",
+        "FieldError",
+        "GoogleOnboardingRequest",
+        "GoogleReauthenticationStartResponse",
+        "LoginRequest",
+        "LookupWorkspaceMemberRequest",
+        "MeResponse",
+        "MembershipSummary",
+        "PasswordReauthenticationRequest",
+        "PendingRepositoryLeadInvitationResponse",
+        "ProblemDetail",
+        "ProjectRepositoryResponse",
+        "ProjectResponse",
+        "RefreshRequest",
+        "ReplaceProjectRepositoriesRequest",
+        "ResetPasswordRequest",
+        "SignupRequest",
+        "SignupResponse",
+        "UpdateProjectRequest",
+        "UpdateWorkspaceRequest",
+        "UserSummary",
+        "WorkspaceDeletionResponse",
+        "WorkspaceSelectionSessionResponse",
+        "WorkspaceSummaryResponse"
     );
 
     @Bean
@@ -453,6 +492,18 @@ public class OpenApiConfig {
                 Set.of("400", "401", "403", "404", "413", "415"),
                 CookieBehavior.NONE
             );
+            configureBodyOperation(
+                openApi,
+                REPOSITORY_LEAD_ASSIGNMENTS,
+                "createPendingRepositoryLeadInvitation",
+                "Create or reuse a pending Lead invitation",
+                "200",
+                "Pending invitation assignment returned",
+                "PendingRepositoryLeadInvitationResponse",
+                SecurityProfile.BEARER_CSRF,
+                Set.of("400", "401", "403", "404", "409", "413", "415"),
+                CookieBehavior.NONE
+            );
         };
     }
 
@@ -648,6 +699,9 @@ public class OpenApiConfig {
         require(components, "LookupWorkspaceMemberRequest", "email");
         require(components, "CurrentWorkspaceMemberLookupResponse",
             "email", "existingUser", "emailVerified", "assignableAsLead");
+        require(components, "CreateRepositoryLeadInvitationRequest", "email");
+        require(components, "PendingRepositoryLeadInvitationResponse",
+            "assignmentId", "repositoryId", "invitationId", "email", "role", "status", "expiresAt");
         require(components, "WorkspaceDeletionResponse", "workspaceId", "status");
         require(components, "ProjectRepositoryResponse", "id", "fullName", "trackingEnabled", "archived");
         require(components, "ProjectResponse", "id", "workspaceId", "name", "repositories");
@@ -680,6 +734,8 @@ public class OpenApiConfig {
             componentRef("AuthenticatedSessionResponse"),
             componentRef("WorkspaceSelectionSessionResponse")
         )));
+
+        components.getSchemas().keySet().removeIf(schemaName -> !PUBLIC_COMPONENT_SCHEMAS.contains(schemaName));
     }
 
     private static ObjectSchema sessionBranch(boolean selectionRequired) {

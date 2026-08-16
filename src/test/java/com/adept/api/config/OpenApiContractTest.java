@@ -30,7 +30,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @TestPropertySource(properties = {
     "springdoc.api-docs.enabled=true",
-    "springdoc.swagger-ui.enabled=true"
+    "springdoc.swagger-ui.enabled=true",
+    "app.github.enabled=true"
 })
 @ActiveProfiles("test")
 class OpenApiContractTest extends PartCIntegrationTestSupport {
@@ -100,7 +101,10 @@ class OpenApiContractTest extends PartCIntegrationTestSupport {
             "401", "403", "404"),
         endpoint("/api/v1/projects/{projectId}/repositories", "put", "replaceProjectRepositories", "200",
             security("bearerAuth", "csrfHeader"), "ReplaceProjectRepositoriesRequest",
-            "400", "401", "403", "404", "413", "415")
+            "400", "401", "403", "404", "413", "415"),
+        endpoint("/api/v1/repositories/{repositoryId}/lead-assignments", "post", "createPendingRepositoryLeadInvitation", "200",
+            security("bearerAuth", "csrfHeader"), "CreateRepositoryLeadInvitationRequest",
+            "400", "401", "403", "404", "409", "413", "415")
     );
 
     private static final Map<String, String> SUCCESS_SCHEMAS = Map.ofEntries(
@@ -118,6 +122,7 @@ class OpenApiContractTest extends PartCIntegrationTestSupport {
         Map.entry("updateCurrentWorkspace", "#/components/schemas/CurrentWorkspaceResponse"),
         Map.entry("deleteCurrentWorkspace", "#/components/schemas/WorkspaceDeletionResponse"),
         Map.entry("lookupCurrentWorkspaceMember", "#/components/schemas/CurrentWorkspaceMemberLookupResponse"),
+        Map.entry("createPendingRepositoryLeadInvitation", "#/components/schemas/PendingRepositoryLeadInvitationResponse"),
         Map.entry("createProject", "#/components/schemas/ProjectResponse"),
         Map.entry("getProject", "#/components/schemas/ProjectResponse"),
         Map.entry("updateProject", "#/components/schemas/ProjectResponse"),
@@ -131,6 +136,7 @@ class OpenApiContractTest extends PartCIntegrationTestSupport {
         "CurrentWorkspaceResponse",
         "CurrentWorkspaceMemberLookupResponse",
         "CreateProjectRequest",
+        "CreateRepositoryLeadInvitationRequest",
         "CreateWorkspaceRequest",
         "DeleteWorkspaceRequest",
         "EmailRequest",
@@ -142,6 +148,7 @@ class OpenApiContractTest extends PartCIntegrationTestSupport {
         "MeResponse",
         "MembershipSummary",
         "PasswordReauthenticationRequest",
+        "PendingRepositoryLeadInvitationResponse",
         "ProblemDetail",
         "ProjectRepositoryResponse",
         "ProjectResponse",
