@@ -24,6 +24,9 @@ import com.adept.api.integration.github.dto.UpdateRepositoryRequest;
 import com.adept.api.integration.jira.JiraIntegrationService;
 import com.adept.api.integration.jira.dto.JiraProjectResponse;
 import com.adept.api.integration.jira.dto.MapRepositoryJiraProjectsRequest;
+import com.adept.api.invitation.InvitationService;
+import com.adept.api.invitation.dto.CreateRepositoryLeadInvitationRequest;
+import com.adept.api.invitation.dto.PendingRepositoryLeadInvitationResponse;
 import com.adept.api.security.AuthenticatedPrincipal;
 import com.adept.api.security.CurrentPrincipal;
 import com.adept.api.workspace.ActiveMembershipService;
@@ -38,16 +41,19 @@ import jakarta.validation.Valid;
 public class RepositoryController {
 
     private final RepositoryService repositoryService;
+    private final InvitationService invitationService;
     private final Optional<JiraIntegrationService> jiraIntegrationService;
     private final CurrentPrincipal currentPrincipal;
     private final ActiveMembershipService activeMembershipService;
 
     public RepositoryController(
             RepositoryService repositoryService,
+            InvitationService invitationService,
             Optional<JiraIntegrationService> jiraIntegrationService,
             CurrentPrincipal currentPrincipal,
             ActiveMembershipService activeMembershipService) {
         this.repositoryService = repositoryService;
+        this.invitationService = invitationService;
         this.jiraIntegrationService = jiraIntegrationService;
         this.currentPrincipal = currentPrincipal;
         this.activeMembershipService = activeMembershipService;
@@ -95,6 +101,22 @@ public class RepositoryController {
             .orElseThrow(() -> new ApiException(ProblemCode.NO_ACTIVE_MEMBERSHIP));
 
         return ResponseEntity.ok(repositoryService.getLeadCandidates(principal.workspaceId(), repositoryId, membership));
+    }
+
+    @PostMapping("/{repositoryId}/lead-assignments")
+    public ResponseEntity<PendingRepositoryLeadInvitationResponse> createPendingRepositoryLeadInvitation(
+            @PathVariable UUID repositoryId,
+            @Valid @RequestBody CreateRepositoryLeadInvitationRequest request) {
+        AuthenticatedPrincipal principal = currentPrincipal.require();
+        Membership membership = activeMembershipService.getActiveMembership(principal.userId(), principal.workspaceId())
+            .orElseThrow(() -> new ApiException(ProblemCode.NO_ACTIVE_MEMBERSHIP));
+
+        return ResponseEntity.ok(invitationService.createPendingRepositoryLeadInvitation(
+            principal.workspaceId(),
+            repositoryId,
+            membership,
+            request
+        ));
     }
 
     @PostMapping("/{repositoryId}/jira-projects")

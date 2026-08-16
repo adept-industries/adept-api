@@ -52,6 +52,10 @@ public final class TokenHasher {
         return hash(Domain.RESET, rawToken);
     }
 
+    public String hashInvitationToken(String rawToken) {
+        return hash(Domain.INVITATION, rawToken);
+    }
+
     public String hashAuditIp(String value) {
         return hash(Domain.AUDIT_IP, value);
     }
@@ -72,6 +76,7 @@ public final class TokenHasher {
         REFRESH("adept:v1:refresh:"),
         VERIFY("adept:v1:verify:"),
         RESET("adept:v1:reset:"),
+        INVITATION("adept:v1:invitation:"),
         AUDIT_IP("adept:v1:audit-ip:"),
         AUDIT_EMAIL("adept:v1:audit-email:"),
         USER_AGENT("adept:v1:user-agent:"),

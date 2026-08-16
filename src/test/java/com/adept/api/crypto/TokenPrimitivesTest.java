@@ -34,6 +34,7 @@ class TokenPrimitivesTest {
         assertThat(first).matches("^[0-9a-f]{64}$");
         assertThat(hasher.hashRefreshToken("raw-token")).isEqualTo(first);
         assertThat(hasher.hashRefreshToken("another-token")).isNotEqualTo(first);
+        assertThat(hasher.hashInvitationToken("raw-token")).isNotEqualTo(first);
         assertThat(Arrays.stream(TokenHasher.Domain.values())
             .map(domain -> hasher.hash(domain, "same-value")))
             .doesNotHaveDuplicates();
