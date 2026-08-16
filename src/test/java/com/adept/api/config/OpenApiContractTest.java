@@ -122,7 +122,6 @@ class OpenApiContractTest extends PartCIntegrationTestSupport {
         Map.entry("updateCurrentWorkspace", "#/components/schemas/CurrentWorkspaceResponse"),
         Map.entry("deleteCurrentWorkspace", "#/components/schemas/WorkspaceDeletionResponse"),
         Map.entry("lookupCurrentWorkspaceMember", "#/components/schemas/CurrentWorkspaceMemberLookupResponse"),
-        Map.entry("createPendingRepositoryLeadInvitation", "#/components/schemas/PendingRepositoryLeadInvitationResponse"),
         Map.entry("createProject", "#/components/schemas/ProjectResponse"),
         Map.entry("getProject", "#/components/schemas/ProjectResponse"),
         Map.entry("updateProject", "#/components/schemas/ProjectResponse"),
