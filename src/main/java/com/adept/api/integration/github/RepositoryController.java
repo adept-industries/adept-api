@@ -106,8 +106,7 @@ public class RepositoryController {
     @PostMapping("/{repositoryId}/lead-assignments")
     public ResponseEntity<PendingRepositoryLeadInvitationResponse> createPendingRepositoryLeadInvitation(
             @PathVariable UUID repositoryId,
-            @Valid @RequestBody CreateRepositoryLeadInvitationRequest request,
-            jakarta.servlet.http.HttpServletRequest servletRequest) {
+            @Valid @RequestBody CreateRepositoryLeadInvitationRequest request) {
         AuthenticatedPrincipal principal = currentPrincipal.require();
         Membership membership = activeMembershipService.getActiveMembership(principal.userId(), principal.workspaceId())
             .orElseThrow(() -> new ApiException(ProblemCode.NO_ACTIVE_MEMBERSHIP));
@@ -116,8 +115,7 @@ public class RepositoryController {
             principal.workspaceId(),
             repositoryId,
             membership,
-            request,
-            com.adept.api.auth.AccountRequestContext.from(servletRequest)
+            request
         ));
     }
 
