@@ -699,6 +699,9 @@ public class OpenApiConfig {
         require(components, "LookupWorkspaceMemberRequest", "email");
         require(components, "CurrentWorkspaceMemberLookupResponse",
             "email", "existingUser", "emailVerified", "assignableAsLead");
+        require(components, "CreateRepositoryLeadInvitationRequest", "email");
+        require(components, "PendingRepositoryLeadInvitationResponse",
+            "assignmentId", "repositoryId", "invitationId", "email", "role", "status", "expiresAt");
         require(components, "WorkspaceDeletionResponse", "workspaceId", "status");
         require(components, "ProjectRepositoryResponse", "id", "fullName", "trackingEnabled", "archived");
         require(components, "ProjectResponse", "id", "workspaceId", "name", "repositories");
