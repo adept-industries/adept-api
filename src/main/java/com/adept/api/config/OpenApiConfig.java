@@ -54,6 +54,8 @@ public class OpenApiConfig {
         "/api/v1/auth/google/reauthentication/start";
     private static final String WORKSPACES = "/api/v1/workspaces";
     private static final String CURRENT_WORKSPACE = "/api/v1/workspaces/current";
+    private static final String CURRENT_WORKSPACE_MEMBER_LOOKUP =
+        "/api/v1/workspaces/current/members/lookup";
     private static final String PROJECTS = "/api/v1/projects";
     private static final String PROJECT = "/api/v1/projects/{projectId}";
     private static final String PROJECT_REPOSITORIES = "/api/v1/projects/{projectId}/repositories";
@@ -77,6 +79,7 @@ public class OpenApiConfig {
         GOOGLE_REAUTHENTICATION_START,
         WORKSPACES,
         CURRENT_WORKSPACE,
+        CURRENT_WORKSPACE_MEMBER_LOOKUP,
         PROJECTS,
         PROJECT,
         PROJECT_REPOSITORIES
@@ -351,6 +354,18 @@ public class OpenApiConfig {
                 componentRef("WorkspaceDeletionResponse"),
                 SecurityProfile.BEARER_CSRF,
                 Set.of("400", "401", "403", "409", "413", "415", "429"),
+                CookieBehavior.NONE
+            );
+            configureBodyOperation(
+                openApi,
+                CURRENT_WORKSPACE_MEMBER_LOOKUP,
+                "lookupCurrentWorkspaceMember",
+                "Look up a user by email in the current workspace",
+                "200",
+                "Lookup completed",
+                "CurrentWorkspaceMemberLookupResponse",
+                SecurityProfile.BEARER_CSRF,
+                Set.of("400", "401", "403", "413", "415"),
                 CookieBehavior.NONE
             );
 
@@ -630,6 +645,9 @@ public class OpenApiConfig {
         require(components, "GoogleReauthenticationStartResponse", "authorizationUrl");
         require(components, "MeResponse", "user", "currentMembership", "workspaces");
         require(components, "CurrentWorkspaceResponse", "id", "name", "slug", "timezone", "role", "membershipId");
+        require(components, "LookupWorkspaceMemberRequest", "email");
+        require(components, "CurrentWorkspaceMemberLookupResponse",
+            "email", "existingUser", "emailVerified", "assignableAsLead");
         require(components, "WorkspaceDeletionResponse", "workspaceId", "status");
         require(components, "ProjectRepositoryResponse", "id", "fullName", "trackingEnabled", "archived");
         require(components, "ProjectResponse", "id", "workspaceId", "name", "repositories");

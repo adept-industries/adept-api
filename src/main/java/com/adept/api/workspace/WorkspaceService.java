@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import org.springframework.stereotype.Service;
@@ -37,8 +38,10 @@ import com.adept.api.security.ratelimit.AuthRateLimiter;
 import com.adept.api.user.User;
 import com.adept.api.user.UserRepository;
 import com.adept.api.workspace.dto.CurrentWorkspaceResponse;
+import com.adept.api.workspace.dto.CurrentWorkspaceMemberLookupResponse;
 import com.adept.api.workspace.dto.CreateWorkspaceRequest;
 import com.adept.api.workspace.dto.DeleteWorkspaceRequest;
+import com.adept.api.workspace.dto.LookupWorkspaceMemberRequest;
 import com.adept.api.workspace.dto.UpdateWorkspaceRequest;
 import com.adept.api.workspace.dto.WorkspaceDeletionResponse;
 import com.adept.api.workspace.dto.WorkspaceSummaryResponse;
@@ -103,6 +106,46 @@ public class WorkspaceService {
     public CurrentWorkspaceResponse getCurrentWorkspace(AuthenticatedPrincipal principal) {
         Membership membership = revalidateActiveMembership(principal);
         return CurrentWorkspaceResponse.from(membership);
+    }
+
+    @Transactional(readOnly = true)
+    public CurrentWorkspaceMemberLookupResponse lookupCurrentWorkspaceMember(
+            AuthenticatedPrincipal principal,
+            LookupWorkspaceMemberRequest request) {
+        Membership managerMembership = revalidateCurrentManager(principal);
+        String normalizedEmail = normalizeLookupEmail(request);
+
+        return userRepository.findByEmailIgnoreCase(normalizedEmail)
+            .map(user -> {
+                Membership workspaceMembership = membershipRepository
+                    .findByWorkspaceIdAndUserId(managerMembership.getWorkspace().getId(), user.getId())
+                    .orElse(null);
+                boolean emailVerified = user.getEmailVerifiedAt() != null;
+                boolean assignableAsLead = user.getStatus() == UserStatus.ACTIVE
+                    && emailVerified
+                    && workspaceMembership != null
+                    && workspaceMembership.getStatus() == MembershipStatus.ACTIVE
+                    && workspaceMembership.getRole() == MembershipRole.LEAD;
+
+                return new CurrentWorkspaceMemberLookupResponse(
+                    normalizedEmail,
+                    true,
+                    emailVerified,
+                    workspaceMembership == null ? null : workspaceMembership.getId(),
+                    workspaceMembership == null ? null : workspaceMembership.getRole(),
+                    workspaceMembership == null ? null : workspaceMembership.getStatus(),
+                    assignableAsLead
+                );
+            })
+            .orElseGet(() -> new CurrentWorkspaceMemberLookupResponse(
+                normalizedEmail,
+                false,
+                false,
+                null,
+                null,
+                null,
+                false
+            ));
     }
 
     public WorkspaceSummaryResponse createWorkspace(
@@ -323,6 +366,15 @@ public class WorkspaceService {
         }
     }
 
+    private Membership revalidateCurrentManager(AuthenticatedPrincipal principal) {
+        workspaceAuthorizationService.requireManager(principal);
+        Membership membership = revalidateActiveMembership(principal);
+        if (membership.getRole() != MembershipRole.MANAGER) {
+            throw new ForbiddenException(ProblemCode.MANAGER_REQUIRED);
+        }
+        return membership;
+    }
+
     private Membership revalidateActiveMembership(AuthenticatedPrincipal principal) {
         if (principal == null || principal.userId() == null || principal.workspaceId() == null) {
             throw new ForbiddenException(ProblemCode.NO_ACTIVE_MEMBERSHIP);
@@ -330,5 +382,12 @@ public class WorkspaceService {
 
         return membershipRepository.findActiveByUserIdAndWorkspaceId(principal.userId(), principal.workspaceId())
             .orElseThrow(() -> new ForbiddenException(ProblemCode.NO_ACTIVE_MEMBERSHIP));
+    }
+
+    private static String normalizeLookupEmail(LookupWorkspaceMemberRequest request) {
+        if (request == null || request.email() == null || request.email().isBlank()) {
+            throw new ApiException(ProblemCode.VALIDATION_FAILED, "Email is required.");
+        }
+        return request.email().trim().toLowerCase(Locale.ROOT);
     }
 }
