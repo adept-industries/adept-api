@@ -14,4 +14,5 @@ public interface RepositoryLeadAssignmentRepository
     boolean existsByRepositoryIdAndLeadMembershipId(UUID repositoryId, UUID membershipId);
     boolean existsByRepositoryIdAndInvitationId(UUID repositoryId, UUID invitationId);
     Optional<RepositoryLeadAssignment> findByRepositoryIdAndInvitationId(UUID repositoryId, UUID invitationId);
+    Optional<RepositoryLeadAssignment> findByRepositoryIdAndLeadMembershipId(UUID repositoryId, UUID leadMembershipId);
 }
