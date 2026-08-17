@@ -107,6 +107,19 @@ public class RepositoryController {
         return ResponseEntity.ok(repositoryService.getLeadCandidates(principal.workspaceId(), repositoryId, membership));
     }
 
+    @GetMapping("/{repositoryId}/lead-assignments")
+    public ResponseEntity<List<PendingRepositoryLeadInvitationResponse>> getLeadAssignments(@PathVariable UUID repositoryId) {
+        AuthenticatedPrincipal principal = currentPrincipal.require();
+        Membership membership = activeMembershipService.getActiveMembership(principal.userId(), principal.workspaceId())
+            .orElseThrow(() -> new ApiException(ProblemCode.NO_ACTIVE_MEMBERSHIP));
+
+        return ResponseEntity.ok(invitationService.getRepositoryLeadAssignments(
+            principal.workspaceId(),
+            repositoryId,
+            membership
+        ));
+    }
+
     @PostMapping("/{repositoryId}/lead-assignments")
     public ResponseEntity<PendingRepositoryLeadInvitationResponse> createPendingRepositoryLeadInvitation(
             @PathVariable UUID repositoryId,
