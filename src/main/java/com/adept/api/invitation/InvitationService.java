@@ -185,22 +185,6 @@ public class InvitationService {
             context != null ? context.userAgent() : null
         );
 
-        auditService.record(
-            AuditAction.REPOSITORY_LEAD_ASSIGNED,
-            managerMembership.getUser(),
-            managerMembership,
-            repository.getWorkspace(),
-            "REPOSITORY_LEAD_ASSIGNMENT",
-            assignment.getId(),
-            Map.of(
-                "repositoryId", repository.getId().toString(),
-                "invitationId", invitation.getId().toString(),
-                "email", normalizedEmail
-            ),
-            context != null ? context.ipAddress() : null,
-            context != null ? context.userAgent() : null
-        );
-
         return PendingRepositoryLeadInvitationResponse.from(assignment, invitation);
     }
 
@@ -211,6 +195,54 @@ public class InvitationService {
             Membership managerMembership,
             CreateRepositoryLeadInvitationRequest request) {
         return createPendingRepositoryLeadInvitation(workspaceId, repositoryId, managerMembership, request, null);
+    }
+
+    @Transactional
+    public void deleteLeadAssignment(
+            UUID workspaceId,
+            UUID repositoryId,
+            UUID assignmentId,
+            Membership managerMembership,
+            AccountRequestContext context) {
+        verifyCurrentWorkspaceManager(managerMembership, workspaceId);
+
+        GitRepository repository = gitRepositoryRepository.findByIdAndWorkspaceId(repositoryId, workspaceId)
+            .orElseThrow(() -> new ApiException(ProblemCode.REPOSITORY_NOT_FOUND));
+
+        RepositoryLeadAssignment assignment = leadAssignmentRepository.findById(assignmentId)
+            .filter(a -> a.getWorkspace().getId().equals(workspaceId) && a.getRepository().getId().equals(repositoryId))
+            .orElseThrow(() -> new ApiException(ProblemCode.REPOSITORY_NOT_FOUND));
+
+        leadAssignmentRepository.delete(assignment);
+        leadAssignmentRepository.flush();
+
+        Map<String, Object> metadata;
+        if (assignment.getLeadMembership() != null) {
+            metadata = Map.of(
+                "repositoryId", repository.getId().toString(),
+                "leadMembershipId", assignment.getLeadMembership().getId().toString()
+            );
+        } else if (assignment.getInvitation() != null) {
+            metadata = Map.of(
+                "repositoryId", repository.getId().toString(),
+                "invitationId", assignment.getInvitation().getId().toString(),
+                "email", assignment.getInvitation().getEmail()
+            );
+        } else {
+            metadata = Map.of("repositoryId", repository.getId().toString());
+        }
+
+        auditService.record(
+            AuditAction.REPOSITORY_LEAD_UNASSIGNED,
+            managerMembership.getUser(),
+            managerMembership,
+            repository.getWorkspace(),
+            "REPOSITORY_LEAD_ASSIGNMENT",
+            assignment.getId(),
+            metadata,
+            context != null ? context.ipAddress() : null,
+            context != null ? context.userAgent() : null
+        );
     }
 
     @Transactional(readOnly = true)
