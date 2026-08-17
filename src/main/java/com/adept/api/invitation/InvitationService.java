@@ -103,22 +103,71 @@ public class InvitationService {
         GitRepository repository = gitRepositoryRepository.findByIdAndWorkspaceId(repositoryId, workspaceId)
             .orElseThrow(() -> new ApiException(ProblemCode.REPOSITORY_NOT_FOUND));
 
-        userRepository.findByEmailIgnoreCase(normalizedEmail)
-            .flatMap(user -> membershipRepository.findByWorkspaceIdAndUserId(workspaceId, user.getId()))
-            .ifPresent(membership -> {
-                throw new ApiException(
-                    ProblemCode.WORKSPACE_CONFLICT,
-                    "That email already has a membership in this workspace."
+        Optional<User> existingUserOpt = userRepository.findByEmailIgnoreCase(normalizedEmail);
+        if (existingUserOpt.isPresent()) {
+            User existingUser = existingUserOpt.get();
+            Optional<Membership> existingMembershipOpt =
+                membershipRepository.findByWorkspaceIdAndUserId(workspaceId, existingUser.getId());
+            if (existingMembershipOpt.isPresent()) {
+                Membership targetMembership = existingMembershipOpt.get();
+                if (targetMembership.getRole() != MembershipRole.LEAD) {
+                    throw new ApiException(
+                        ProblemCode.WORKSPACE_CONFLICT,
+                        "Members with MANAGER role cannot be assigned as repository leads."
+                    );
+                }
+                if (targetMembership.getStatus() != MembershipStatus.ACTIVE) {
+                    throw new ApiException(
+                        ProblemCode.WORKSPACE_CONFLICT,
+                        "That member is not active."
+                    );
+                }
+
+                Optional<RepositoryLeadAssignment> existingAssignmentOpt =
+                    leadAssignmentRepository.findByRepositoryIdAndLeadMembershipId(repositoryId, targetMembership.getId());
+                if (existingAssignmentOpt.isPresent()) {
+                    return PendingRepositoryLeadInvitationResponse.from(existingAssignmentOpt.get(), targetMembership);
+                }
+
+                RepositoryLeadAssignment assignment = new RepositoryLeadAssignment();
+                assignment.setWorkspace(repository.getWorkspace());
+                assignment.setRepository(repository);
+                assignment.setLeadMembership(targetMembership);
+                assignment.setAssignedBy(managerMembership);
+                assignment.setAssignedAt(clock.instant());
+                assignment = leadAssignmentRepository.saveAndFlush(assignment);
+
+                auditService.record(
+                    AuditAction.REPOSITORY_LEAD_ASSIGNED,
+                    managerMembership.getUser(),
+                    managerMembership,
+                    repository.getWorkspace(),
+                    "REPOSITORY_LEAD_ASSIGNMENT",
+                    assignment.getId(),
+                    Map.of(
+                        "repositoryId", repository.getId().toString(),
+                        "leadMembershipId", targetMembership.getId().toString(),
+                        "email", normalizedEmail
+                    ),
+                    context != null ? context.ipAddress() : null,
+                    context != null ? context.userAgent() : null
                 );
-            });
+
+                return PendingRepositoryLeadInvitationResponse.from(assignment, targetMembership);
+            }
+        }
 
         WorkspaceInvitation invitation = invitationRepository
             .findPendingByWorkspaceIdAndEmailForUpdate(workspaceId, normalizedEmail)
             .orElseGet(() -> createPendingInvitation(repository, managerMembership, normalizedEmail, context));
 
-        RepositoryLeadAssignment assignment = leadAssignmentRepository
-            .findByRepositoryIdAndInvitationId(repositoryId, invitation.getId())
-            .orElseGet(() -> createLeadInvitationAssignment(repository, invitation, managerMembership));
+        Optional<RepositoryLeadAssignment> existingAssignmentOpt =
+            leadAssignmentRepository.findByRepositoryIdAndInvitationId(repositoryId, invitation.getId());
+        if (existingAssignmentOpt.isPresent()) {
+            return PendingRepositoryLeadInvitationResponse.from(existingAssignmentOpt.get(), invitation);
+        }
+
+        RepositoryLeadAssignment assignment = createLeadInvitationAssignment(repository, invitation, managerMembership);
 
         auditService.record(
             AuditAction.REPOSITORY_LEAD_ASSIGNED,
@@ -146,6 +195,54 @@ public class InvitationService {
             Membership managerMembership,
             CreateRepositoryLeadInvitationRequest request) {
         return createPendingRepositoryLeadInvitation(workspaceId, repositoryId, managerMembership, request, null);
+    }
+
+    @Transactional
+    public void deleteLeadAssignment(
+            UUID workspaceId,
+            UUID repositoryId,
+            UUID assignmentId,
+            Membership managerMembership,
+            AccountRequestContext context) {
+        verifyCurrentWorkspaceManager(managerMembership, workspaceId);
+
+        GitRepository repository = gitRepositoryRepository.findByIdAndWorkspaceId(repositoryId, workspaceId)
+            .orElseThrow(() -> new ApiException(ProblemCode.REPOSITORY_NOT_FOUND));
+
+        RepositoryLeadAssignment assignment = leadAssignmentRepository.findById(assignmentId)
+            .filter(a -> a.getWorkspace().getId().equals(workspaceId) && a.getRepository().getId().equals(repositoryId))
+            .orElseThrow(() -> new ApiException(ProblemCode.REPOSITORY_NOT_FOUND));
+
+        leadAssignmentRepository.delete(assignment);
+        leadAssignmentRepository.flush();
+
+        Map<String, Object> metadata;
+        if (assignment.getLeadMembership() != null) {
+            metadata = Map.of(
+                "repositoryId", repository.getId().toString(),
+                "leadMembershipId", assignment.getLeadMembership().getId().toString()
+            );
+        } else if (assignment.getInvitation() != null) {
+            metadata = Map.of(
+                "repositoryId", repository.getId().toString(),
+                "invitationId", assignment.getInvitation().getId().toString(),
+                "email", assignment.getInvitation().getEmail()
+            );
+        } else {
+            metadata = Map.of("repositoryId", repository.getId().toString());
+        }
+
+        auditService.record(
+            AuditAction.REPOSITORY_LEAD_UNASSIGNED,
+            managerMembership.getUser(),
+            managerMembership,
+            repository.getWorkspace(),
+            "REPOSITORY_LEAD_ASSIGNMENT",
+            assignment.getId(),
+            metadata,
+            context != null ? context.ipAddress() : null,
+            context != null ? context.userAgent() : null
+        );
     }
 
     @Transactional(readOnly = true)

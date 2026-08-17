@@ -190,7 +190,7 @@ public class RepositoryService {
         }
     }
 
-    private RepositoryResponse toResponse(GitRepository repo) {
+    public RepositoryResponse toResponse(GitRepository repo) {
         return new RepositoryResponse(
             repo.getId(),
             repo.getWorkspace().getId(),
