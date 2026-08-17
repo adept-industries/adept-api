@@ -79,6 +79,17 @@ public class RepositoryService {
         GitRepository repo = repositoryRepository.findByIdAndWorkspaceId(repositoryId, workspaceId)
             .orElseThrow(() -> new ApiException(ProblemCode.REPOSITORY_NOT_FOUND));
 
+        if (membership != null && membership.getRole() == MembershipRole.LEAD) {
+            boolean readable = repositoryRepository.findLeadReadableRepositories(
+                workspaceId,
+                membership.getId(),
+                PageRequest.of(0, 1000)
+            ).getContent().stream().anyMatch(r -> r.getId().equals(repositoryId));
+            if (!readable) {
+                throw new ApiException(ProblemCode.REPOSITORY_NOT_FOUND);
+            }
+        }
+
         return toResponse(repo);
     }
 
