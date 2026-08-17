@@ -7,6 +7,7 @@ import com.adept.api.common.domain.InvitationStatus;
 import com.adept.api.common.domain.MembershipRole;
 import com.adept.api.integration.github.RepositoryLeadAssignment;
 import com.adept.api.invitation.WorkspaceInvitation;
+import com.adept.api.workspace.Membership;
 
 public record PendingRepositoryLeadInvitationResponse(
     UUID assignmentId,
@@ -28,6 +29,20 @@ public record PendingRepositoryLeadInvitationResponse(
             invitation.getRole(),
             invitation.getStatus(),
             invitation.getExpiresAt()
+        );
+    }
+
+    public static PendingRepositoryLeadInvitationResponse from(
+            RepositoryLeadAssignment assignment,
+            Membership leadMembership) {
+        return new PendingRepositoryLeadInvitationResponse(
+            assignment.getId(),
+            assignment.getRepository().getId(),
+            null,
+            leadMembership.getUser().getEmail(),
+            leadMembership.getRole(),
+            null,
+            null
         );
     }
 }

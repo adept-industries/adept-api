@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.UUID;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,6 +30,8 @@ import com.adept.api.common.error.UnauthorizedException;
 import com.adept.api.config.AppProperties;
 import com.adept.api.integration.github.GithubIntegration;
 import com.adept.api.integration.github.GithubIntegrationRepository;
+import com.adept.api.integration.github.RepositoryLeadAssignment;
+import com.adept.api.integration.github.RepositoryLeadAssignmentRepository;
 import com.adept.api.integration.jira.JiraIntegration;
 import com.adept.api.integration.jira.JiraIntegrationRepository;
 import com.adept.api.job.ProcessingJob;
@@ -56,6 +59,7 @@ public class WorkspaceService {
     private final GithubIntegrationRepository githubIntegrationRepository;
     private final JiraIntegrationRepository jiraIntegrationRepository;
     private final ProcessingJobRepository processingJobRepository;
+    private final RepositoryLeadAssignmentRepository leadAssignmentRepository;
     private final WorkspaceAuthorizationService workspaceAuthorizationService;
     private final AuthRateLimiter authRateLimiter;
     private final AuditService auditService;
@@ -70,6 +74,7 @@ public class WorkspaceService {
             GithubIntegrationRepository githubIntegrationRepository,
             JiraIntegrationRepository jiraIntegrationRepository,
             ProcessingJobRepository processingJobRepository,
+            RepositoryLeadAssignmentRepository leadAssignmentRepository,
             WorkspaceAuthorizationService workspaceAuthorizationService,
             AuthRateLimiter authRateLimiter,
             AuditService auditService,
@@ -82,12 +87,43 @@ public class WorkspaceService {
         this.githubIntegrationRepository = githubIntegrationRepository;
         this.jiraIntegrationRepository = jiraIntegrationRepository;
         this.processingJobRepository = processingJobRepository;
+        this.leadAssignmentRepository = leadAssignmentRepository;
         this.workspaceAuthorizationService = workspaceAuthorizationService;
         this.authRateLimiter = authRateLimiter;
         this.auditService = auditService;
         this.workspaceSlugService = workspaceSlugService;
         this.clock = clock;
         this.appProperties = appProperties;
+    }
+
+    public void removeMember(
+            AuthenticatedPrincipal principal,
+            UUID membershipId,
+            AccountRequestContext context) {
+        workspaceAuthorizationService.requireManager(principal);
+        Membership managerMembership = revalidateCurrentManager(principal);
+        UUID workspaceId = managerMembership.getWorkspace().getId();
+
+        Membership targetMembership = membershipRepository.findById(membershipId)
+            .filter(m -> m.getWorkspace().getId().equals(workspaceId))
+            .orElseThrow(() -> new NotFoundException(ProblemCode.WORKSPACE_NOT_FOUND));
+
+        if (targetMembership.getId().equals(managerMembership.getId())) {
+            throw new ConflictException(ProblemCode.WORKSPACE_CONFLICT, "Cannot remove yourself from the workspace.");
+        }
+
+        if (targetMembership.getRole() == MembershipRole.LEAD) {
+            List<RepositoryLeadAssignment> activeAssignments =
+                leadAssignmentRepository.findAllByLeadMembershipId(membershipId);
+            if (!activeAssignments.isEmpty()) {
+                throw new ConflictException(
+                    ProblemCode.WORKSPACE_CONFLICT,
+                    "Cannot remove a Lead membership with active repository assignments. Unassign the lead from all repositories first."
+                );
+            }
+        }
+
+        membershipRepository.delete(targetMembership);
     }
 
     @Transactional(readOnly = true)

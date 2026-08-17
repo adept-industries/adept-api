@@ -131,7 +131,7 @@ public abstract class PartCIntegrationTestSupport {
 
     protected record CsrfPair(String token) {
 
-        Cookie cookie() {
+        public Cookie cookie() {
             return new Cookie("XSRF-TOKEN", token);
         }
     }

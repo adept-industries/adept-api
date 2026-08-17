@@ -7,6 +7,7 @@ import java.util.UUID;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -29,9 +30,11 @@ import com.adept.api.invitation.dto.CreateRepositoryLeadInvitationRequest;
 import com.adept.api.invitation.dto.PendingRepositoryLeadInvitationResponse;
 import com.adept.api.security.AuthenticatedPrincipal;
 import com.adept.api.security.CurrentPrincipal;
+import com.adept.api.security.RepositoryScopeService;
 import com.adept.api.workspace.ActiveMembershipService;
 import com.adept.api.workspace.Membership;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 
 @Validated
@@ -45,18 +48,21 @@ public class RepositoryController {
     private final Optional<JiraIntegrationService> jiraIntegrationService;
     private final CurrentPrincipal currentPrincipal;
     private final ActiveMembershipService activeMembershipService;
+    private final RepositoryScopeService repositoryScopeService;
 
     public RepositoryController(
             RepositoryService repositoryService,
             InvitationService invitationService,
             Optional<JiraIntegrationService> jiraIntegrationService,
             CurrentPrincipal currentPrincipal,
-            ActiveMembershipService activeMembershipService) {
+            ActiveMembershipService activeMembershipService,
+            RepositoryScopeService repositoryScopeService) {
         this.repositoryService = repositoryService;
         this.invitationService = invitationService;
         this.jiraIntegrationService = jiraIntegrationService;
         this.currentPrincipal = currentPrincipal;
         this.activeMembershipService = activeMembershipService;
+        this.repositoryScopeService = repositoryScopeService;
     }
 
     @GetMapping
@@ -72,10 +78,8 @@ public class RepositoryController {
     @GetMapping("/{repositoryId}")
     public ResponseEntity<RepositoryResponse> get(@PathVariable UUID repositoryId) {
         AuthenticatedPrincipal principal = currentPrincipal.require();
-        Membership membership = activeMembershipService.getActiveMembership(principal.userId(), principal.workspaceId())
-            .orElseThrow(() -> new ApiException(ProblemCode.NO_ACTIVE_MEMBERSHIP));
-
-        return ResponseEntity.ok(repositoryService.getRepository(principal.workspaceId(), repositoryId, membership));
+        GitRepository repository = repositoryScopeService.requireReadableRepository(principal, repositoryId);
+        return ResponseEntity.ok(repositoryService.toResponse(repository));
     }
 
     @PatchMapping("/{repositoryId}")
@@ -107,7 +111,7 @@ public class RepositoryController {
     public ResponseEntity<PendingRepositoryLeadInvitationResponse> createPendingRepositoryLeadInvitation(
             @PathVariable UUID repositoryId,
             @Valid @RequestBody CreateRepositoryLeadInvitationRequest request,
-            jakarta.servlet.http.HttpServletRequest servletRequest) {
+            HttpServletRequest servletRequest) {
         AuthenticatedPrincipal principal = currentPrincipal.require();
         Membership membership = activeMembershipService.getActiveMembership(principal.userId(), principal.workspaceId())
             .orElseThrow(() -> new ApiException(ProblemCode.NO_ACTIVE_MEMBERSHIP));
@@ -119,6 +123,25 @@ public class RepositoryController {
             request,
             com.adept.api.auth.AccountRequestContext.from(servletRequest)
         ));
+    }
+
+    @DeleteMapping("/{repositoryId}/lead-assignments/{assignmentId}")
+    public ResponseEntity<Void> deleteLeadAssignment(
+            @PathVariable UUID repositoryId,
+            @PathVariable UUID assignmentId,
+            HttpServletRequest servletRequest) {
+        AuthenticatedPrincipal principal = currentPrincipal.require();
+        Membership membership = activeMembershipService.getActiveMembership(principal.userId(), principal.workspaceId())
+            .orElseThrow(() -> new ApiException(ProblemCode.NO_ACTIVE_MEMBERSHIP));
+
+        invitationService.deleteLeadAssignment(
+            principal.workspaceId(),
+            repositoryId,
+            assignmentId,
+            membership,
+            com.adept.api.auth.AccountRequestContext.from(servletRequest)
+        );
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{repositoryId}/jira-projects")
@@ -143,6 +166,8 @@ public class RepositoryController {
     @GetMapping("/{repositoryId}/jira-projects")
     public ResponseEntity<List<JiraProjectResponse>> getMappedJiraProjects(@PathVariable UUID repositoryId) {
         AuthenticatedPrincipal principal = currentPrincipal.require();
+        repositoryScopeService.requireReadableRepository(principal, repositoryId);
+
         JiraIntegrationService jiraService = jiraIntegrationService
             .orElseThrow(() -> new ApiException(ProblemCode.INTEGRATION_DISABLED));
         return ResponseEntity.ok(
