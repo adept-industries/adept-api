@@ -173,6 +173,9 @@ public class GithubApiClient {
                         String id = String.valueOf(c.get("id"));
                         String login = (String) c.get("login");
                         String avatarUrl = (String) c.get("avatar_url");
+                        String email = c.get("email") instanceof String em && !em.isBlank()
+                            ? em
+                            : fetchUserPublicEmail(installationToken, login);
                         @SuppressWarnings("unchecked")
                         Map<String, Object> perms = (Map<String, Object>) c.get("permissions");
                         String permission = "READ";
@@ -185,7 +188,7 @@ public class GithubApiClient {
                                 permission = "WRITE";
                             }
                         }
-                        candidates.add(new GithubLeadCandidate(id, login, avatarUrl, permission, null));
+                        candidates.add(new GithubLeadCandidate(id, login, avatarUrl, permission, email));
                     }
                     return candidates;
                 }
@@ -205,7 +208,10 @@ public class GithubApiClient {
                     String id = String.valueOf(c.get("id"));
                     String login = (String) c.get("login");
                     String avatarUrl = (String) c.get("avatar_url");
-                    candidates.add(new GithubLeadCandidate(id, login, avatarUrl, "CONTRIBUTOR", null));
+                    String email = c.get("email") instanceof String em && !em.isBlank()
+                        ? em
+                        : fetchUserPublicEmail(installationToken, login);
+                    candidates.add(new GithubLeadCandidate(id, login, avatarUrl, "CONTRIBUTOR", email));
                 }
             }
 
@@ -214,6 +220,26 @@ public class GithubApiClient {
             // Return empty list if candidate lookup fails, rather than crashing
             return candidates;
         }
+    }
+
+    private String fetchUserPublicEmail(String installationToken, String login) {
+        if (login == null || login.isBlank()) {
+            return null;
+        }
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> user = restClient.get()
+                .uri("/users/{username}", login)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + installationToken)
+                .retrieve()
+                .body(new ParameterizedTypeReference<Map<String, Object>>() {});
+            if (user != null && user.get("email") instanceof String email && !email.isBlank()) {
+                return email.trim();
+            }
+        } catch (Exception ignored) {
+            // Fall back to null if user profile email is private or unavailable
+        }
+        return null;
     }
 
     public record GithubInstallationDetails(
