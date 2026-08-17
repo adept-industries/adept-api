@@ -111,7 +111,7 @@ public class RepositoryController {
     public ResponseEntity<PendingRepositoryLeadInvitationResponse> createPendingRepositoryLeadInvitation(
             @PathVariable UUID repositoryId,
             @Valid @RequestBody CreateRepositoryLeadInvitationRequest request,
-            HttpServletRequest servletRequest) {
+            jakarta.servlet.http.HttpServletRequest servletRequest) {
         AuthenticatedPrincipal principal = currentPrincipal.require();
         Membership membership = activeMembershipService.getActiveMembership(principal.userId(), principal.workspaceId())
             .orElseThrow(() -> new ApiException(ProblemCode.NO_ACTIVE_MEMBERSHIP));
