@@ -45,4 +45,22 @@ public record PendingRepositoryLeadInvitationResponse(
             null
         );
     }
+
+    public static PendingRepositoryLeadInvitationResponse from(RepositoryLeadAssignment assignment) {
+        if (assignment.getLeadMembership() != null) {
+            return from(assignment, assignment.getLeadMembership());
+        }
+        if (assignment.getInvitation() != null) {
+            return from(assignment, assignment.getInvitation());
+        }
+        return new PendingRepositoryLeadInvitationResponse(
+            assignment.getId(),
+            assignment.getRepository().getId(),
+            null,
+            null,
+            MembershipRole.LEAD,
+            null,
+            null
+        );
+    }
 }

@@ -32,6 +32,7 @@ import com.adept.api.integration.github.RepositoryLeadAssignment;
 import com.adept.api.integration.github.RepositoryLeadAssignmentRepository;
 import com.adept.api.invitation.dto.AcceptInvitationRequest;
 import com.adept.api.invitation.dto.CreateRepositoryLeadInvitationRequest;
+import com.adept.api.common.domain.WorkspaceStatus;
 import com.adept.api.invitation.dto.InvitationPreviewResponse;
 import com.adept.api.invitation.dto.PendingRepositoryLeadInvitationResponse;
 import com.adept.api.mail.InvitationMailRequested;
@@ -41,6 +42,9 @@ import com.adept.api.user.UserRepository;
 import com.adept.api.workspace.ActiveMembershipService;
 import com.adept.api.workspace.Membership;
 import com.adept.api.workspace.MembershipRepository;
+import com.adept.api.workspace.Workspace;
+import com.adept.api.workspace.WorkspaceRepository;
+import com.adept.api.workspace.WorkspaceSlugService;
 
 @Service
 public class InvitationService {
@@ -52,6 +56,8 @@ public class InvitationService {
     private final GitRepositoryRepository gitRepositoryRepository;
     private final UserRepository userRepository;
     private final MembershipRepository membershipRepository;
+    private final WorkspaceRepository workspaceRepository;
+    private final WorkspaceSlugService workspaceSlugService;
     private final PasswordService passwordService;
     private final SecureTokenGenerator tokenGenerator;
     private final TokenHasher tokenHasher;
@@ -67,6 +73,8 @@ public class InvitationService {
             GitRepositoryRepository gitRepositoryRepository,
             UserRepository userRepository,
             MembershipRepository membershipRepository,
+            WorkspaceRepository workspaceRepository,
+            WorkspaceSlugService workspaceSlugService,
             PasswordService passwordService,
             SecureTokenGenerator tokenGenerator,
             TokenHasher tokenHasher,
@@ -80,6 +88,8 @@ public class InvitationService {
         this.gitRepositoryRepository = gitRepositoryRepository;
         this.userRepository = userRepository;
         this.membershipRepository = membershipRepository;
+        this.workspaceRepository = workspaceRepository;
+        this.workspaceSlugService = workspaceSlugService;
         this.passwordService = passwordService;
         this.tokenGenerator = tokenGenerator;
         this.tokenHasher = tokenHasher;
@@ -303,6 +313,7 @@ public class InvitationService {
         String email = invitation.getEmail().toLowerCase(Locale.ROOT);
         Optional<User> existingUserOpt = userRepository.findByEmailIgnoreCase(email);
         User user;
+        UUID targetSessionWorkspaceId;
 
         if (existingUserOpt.isPresent()) {
             user = existingUserOpt.get();
@@ -325,6 +336,7 @@ public class InvitationService {
                 user.setEmailVerifiedAt(clock.instant());
                 userRepository.save(user);
             }
+            targetSessionWorkspaceId = invitation.getWorkspace().getId();
         } else {
             if (request.displayName() == null || request.displayName().isBlank()) {
                 throw new ApiException(ProblemCode.VALIDATION_FAILED, "Display name is required for new account.");
@@ -341,6 +353,24 @@ public class InvitationService {
             user.setEmailVerifiedAt(clock.instant());
             user.setTokenVersion(0);
             user = userRepository.saveAndFlush(user);
+
+            // Create personal workspace where the new user is MANAGER
+            String personalWsName = request.displayName().trim() + "'s Workspace";
+            Workspace personalWs = new Workspace();
+            personalWs.setName(personalWsName);
+            personalWs.setTimezone(invitation.getWorkspace().getTimezone());
+            personalWs.setSlug(workspaceSlugService.generate(personalWsName));
+            personalWs.setStatus(WorkspaceStatus.ACTIVE);
+            personalWs = workspaceRepository.saveAndFlush(personalWs);
+
+            Membership personalMembership = new Membership();
+            personalMembership.setUser(user);
+            personalMembership.setWorkspace(personalWs);
+            personalMembership.setRole(MembershipRole.MANAGER);
+            personalMembership.setStatus(MembershipStatus.ACTIVE);
+            membershipRepository.saveAndFlush(personalMembership);
+
+            targetSessionWorkspaceId = personalWs.getId();
         }
 
         UUID workspaceId = invitation.getWorkspace().getId();
@@ -390,7 +420,19 @@ public class InvitationService {
         );
 
         List<Membership> activeMemberships = activeMembershipService.getActiveWorkspaces(user.getId());
-        return freshSessionService.issue(user, activeMemberships, workspaceId, context, "INVITATION");
+        return freshSessionService.issue(user, activeMemberships, targetSessionWorkspaceId, context, "INVITATION");
+    }
+
+    @Transactional(readOnly = true)
+    public List<PendingRepositoryLeadInvitationResponse> getRepositoryLeadAssignments(
+            UUID workspaceId,
+            UUID repositoryId,
+            Membership managerMembership) {
+        verifyCurrentWorkspaceManager(managerMembership, workspaceId);
+        List<RepositoryLeadAssignment> assignments = leadAssignmentRepository.findAllByRepositoryId(repositoryId);
+        return assignments.stream()
+            .map(PendingRepositoryLeadInvitationResponse::from)
+            .toList();
     }
 
     @Transactional

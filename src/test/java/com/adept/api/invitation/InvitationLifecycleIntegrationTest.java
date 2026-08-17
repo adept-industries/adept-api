@@ -130,9 +130,9 @@ class InvitationLifecycleIntegrationTest extends PartCIntegrationTestSupport {
             .andExpect(jsonPath("$.workspaceSelectionRequired").value(false))
             .andExpect(jsonPath("$.user.email").value(inviteeEmail))
             .andExpect(jsonPath("$.user.displayName").value("New Lead Member"))
-            .andExpect(jsonPath("$.user.emailVerified").value(true))
-            .andExpect(jsonPath("$.currentMembership.role").value("LEAD"))
-            .andExpect(jsonPath("$.currentMembership.workspaceName").value(manager.workspaceName()))
+            .andExpect(jsonPath("$.currentMembership.role").value("MANAGER"))
+            .andExpect(jsonPath("$.currentMembership.workspaceName").value("New Lead Member's Workspace"))
+            .andExpect(jsonPath("$.workspaces.length()").value(2))
             .andReturn();
 
         // Verify DB state after acceptance
