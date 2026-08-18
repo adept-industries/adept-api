@@ -42,6 +42,8 @@ public enum ProblemCode {
     INVITATION_INVALID(HttpStatus.BAD_REQUEST, "Invalid invitation", "The invitation token is invalid, expired, or already used."),
     INVITATION_EXPIRED(HttpStatus.BAD_REQUEST, "Invitation expired", "The invitation has expired."),
     INVITATION_CONFLICT(HttpStatus.CONFLICT, "Invitation conflict", "The invitation has already been processed or conflicts with current state."),
+    WEBHOOK_SIGNATURE_INVALID(HttpStatus.UNAUTHORIZED, "Webhook signature invalid", "The webhook signature could not be verified."),
+    WEBHOOK_INSTALLATION_NOT_FOUND(HttpStatus.NOT_FOUND, "Webhook installation not found", "No active integration was found for this GitHub installation."),
     METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "Method not allowed", "The HTTP method is not supported for this endpoint.");
 
     private static final String TYPE_BASE = "https://adept.local/problems/";

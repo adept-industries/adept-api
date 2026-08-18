@@ -126,6 +126,8 @@ public class SecurityConfig {
             .csrf(csrf -> {
                 csrf.spa();
                 csrf.csrfTokenRepository(csrfTokenRepository);
+                // GitHub cannot send a CSRF token; webhook signature is the trust boundary.
+                csrf.ignoringRequestMatchers("/api/v1/webhooks/**");
             })
             .exceptionHandling(exceptions -> exceptions
                 .authenticationEntryPoint(authenticationEntryPoint)
@@ -167,6 +169,10 @@ public class SecurityConfig {
                 .requestMatchers("/api/v1/integrations", "/api/v1/integrations/**").authenticated()
                 .requestMatchers("/api/v1/repositories", "/api/v1/repositories/**").authenticated()
                 .requestMatchers("/api/v1/jira", "/api/v1/jira/**").authenticated()
+                // Webhooks from GitHub are verified by HMAC; no JWT or CSRF is available.
+                .requestMatchers(HttpMethod.POST, "/api/v1/webhooks/github").permitAll()
+                // Webhooks from Jira use an unguessable integration token in the path.
+                .requestMatchers(HttpMethod.POST, "/api/v1/webhooks/jira/**").permitAll()
                 .anyRequest().denyAll())
             .addFilterBefore(originValidationFilter, CsrfFilter.class)
             .addFilterBefore(bodyLimitFilter, OriginValidationFilter.class)
