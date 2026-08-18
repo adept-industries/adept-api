@@ -1,0 +1,108 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  scripts/import-github-repo owner/repository --max-prs 100
+  scripts/import-github-repo owner/repository --max-prs 100 --max-workflow-runs 50
+  scripts/import-github-repo --remove-demo-data
+
+Environment:
+  GITHUB_TOKEN                 optional, recommended for useful import sizes
+  ADEPT_DEMO_PASSWORD          optional, defaults to AdeptDemoPass123!
+  ADEPT_DEMO_MANAGER_EMAIL     optional, defaults to demo.manager@adept.local
+  ADEPT_DEMO_LEAD_EMAIL        optional, defaults to demo.lead@adept.local
+  ADEPT_DEMO_COLEAD_EMAIL      optional, defaults to demo.colead@adept.local
+  ADEPT_DEMO_WORKSPACE_NAME    optional, defaults to GitHub Demo Data
+  ADEPT_DEMO_WORKSPACE_SLUG    optional, defaults to github-demo-data
+USAGE
+}
+
+repo=""
+max_prs="100"
+max_workflow_runs="50"
+remove_demo_data="false"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --max-prs)
+      max_prs="${2:?--max-prs requires a value}"
+      shift 2
+      ;;
+    --max-prs=*)
+      max_prs="${1#--max-prs=}"
+      shift
+      ;;
+    --max-workflow-runs)
+      max_workflow_runs="${2:?--max-workflow-runs requires a value}"
+      shift 2
+      ;;
+    --max-workflow-runs=*)
+      max_workflow_runs="${1#--max-workflow-runs=}"
+      shift
+      ;;
+    --remove-demo-data)
+      remove_demo_data="true"
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    --*)
+      echo "Unknown option: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+    *)
+      if [[ -n "$repo" ]]; then
+        echo "Only one repository may be imported per command." >&2
+        usage >&2
+        exit 2
+      fi
+      repo="$1"
+      shift
+      ;;
+  esac
+done
+
+if [[ "$remove_demo_data" != "true" && -z "$repo" ]]; then
+  echo "Repository is required unless --remove-demo-data is used." >&2
+  usage >&2
+  exit 2
+fi
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+api_root="$(cd "$script_dir/.." && pwd)"
+workspace_root="$(cd "$api_root/.." && pwd)"
+
+if [[ -f "$workspace_root/.env" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "$workspace_root/.env"
+  set +a
+fi
+
+spring_args=(
+  "--server.port=0"
+  "--debug=false"
+  "--spring.main.banner-mode=off"
+  "--spring.main.log-startup-info=false"
+  "--logging.level.root=WARN"
+  "--logging.level.com.adept.api=INFO"
+  "--app.dev.github-import.enabled=true"
+  "--adept.dev-import.max-prs=$max_prs"
+  "--adept.dev-import.max-workflow-runs=$max_workflow_runs"
+)
+
+if [[ "$remove_demo_data" == "true" ]]; then
+  spring_args+=("--adept.dev-import.remove-demo-data=true")
+else
+  spring_args+=("--adept.dev-import.repository=$repo")
+fi
+
+cd "$api_root"
+./mvnw -q spring-boot:run \
+  -Dspring-boot.run.profiles=local \
+  -Dspring-boot.run.arguments="${spring_args[*]}"

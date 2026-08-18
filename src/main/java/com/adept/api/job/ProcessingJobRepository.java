@@ -4,8 +4,12 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
+
+import com.adept.api.common.domain.ProcessingJobStatus;
+import com.adept.api.common.domain.ProcessingJobType;
 
 public interface ProcessingJobRepository
     extends JpaRepository<ProcessingJob, UUID> {
@@ -24,5 +28,11 @@ public interface ProcessingJobRepository
     )
     List<ProcessingJob> lockClaimableJobs(
         @Param("limit") int limit
+    );
+
+    boolean existsByRepositoryIdAndJobTypeAndStatusIn(
+        UUID repositoryId,
+        ProcessingJobType jobType,
+        Collection<ProcessingJobStatus> statuses
     );
 }

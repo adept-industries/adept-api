@@ -118,3 +118,20 @@ any application/AWS secret.
 Flyway files under `src/main/resources/db/migration` are the schema source of truth. Hibernate uses `ddl-auto: validate`. Never edit an already-shared migration. Generate local ERD with `./scripts/generate-erd.sh`.
 
 The authentication/workspace baseline ends at V8, project grouping is isolated in V9, Google authentication is isolated in V10, and recent-authentication session metadata is isolated in V11. The migration inventory is V1–V11.
+
+## Development GitHub Demo Data
+
+Use the local-only historical importer to populate the existing schema with real
+public GitHub repository history:
+
+```bash
+scripts/import-github-repo tiangolo/fastapi --max-prs 100
+```
+
+Set `GITHUB_TOKEN` for practical import sizes. The importer creates/reuses a
+dedicated demo workspace, Manager/Lead accounts, tracked repository rows, PRs,
+PR features, optional workflow deployment rows, project links, Lead assignments,
+and a metrics recalculation job. It does not create demo tables or fabricate
+metric snapshots.
+
+Details and cleanup commands are in `docs/development-github-importer.md`.

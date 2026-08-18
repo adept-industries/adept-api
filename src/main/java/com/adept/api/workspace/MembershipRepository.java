@@ -22,6 +22,8 @@ public interface MembershipRepository extends JpaRepository<Membership, UUID> {
 
     Optional<Membership> findByWorkspaceIdAndUserId(UUID workspaceId, UUID userId);
 
+    List<Membership> findAllByUserId(UUID userId);
+
     List<Membership> findAllByUserIdAndStatus(UUID userId, MembershipStatus status);
 
     @Query("""

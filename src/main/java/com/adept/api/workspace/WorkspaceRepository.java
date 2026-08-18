@@ -14,6 +14,8 @@ public interface WorkspaceRepository extends JpaRepository<Workspace, UUID> {
 
     boolean existsBySlug(String slug);
 
+    Optional<Workspace> findBySlug(String slug);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT w FROM Workspace w WHERE w.id = :id")
     Optional<Workspace> findByIdForUpdate(@Param("id") UUID id);
