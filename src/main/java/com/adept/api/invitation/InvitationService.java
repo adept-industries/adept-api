@@ -277,7 +277,11 @@ public class InvitationService {
             .sorted()
             .toList();
 
-        boolean existingAccount = userRepository.existsByEmailIgnoreCase(invitation.getEmail());
+        Optional<User> existingUserOpt = userRepository.findByEmailIgnoreCase(invitation.getEmail());
+        boolean existingAccount = existingUserOpt.isPresent();
+        boolean hasPassword = existingUserOpt
+            .map(u -> u.getPasswordHash() != null && !u.getPasswordHash().isBlank())
+            .orElse(false);
 
         return new InvitationPreviewResponse(
             invitation.getEmail(),
@@ -285,7 +289,8 @@ public class InvitationService {
             invitation.getRole(),
             repositories,
             invitation.getExpiresAt(),
-            existingAccount
+            existingAccount,
+            hasPassword
         );
     }
 
