@@ -461,6 +461,55 @@ class InvitationLifecycleIntegrationTest extends PartCIntegrationTestSupport {
             .andExpect(jsonPath("$.code").value("MANAGER_REQUIRED"));
     }
 
+    @Test
+    void unassigningFromOnlyRepoCleansOrphanInvitationAndAllowsFreshInviteToAnotherRepo() throws Exception {
+        ManagerSession manager = createManager("clean-mgr");
+        UUID repo1 = insertRepository(manager.workspaceId(), manager.membershipId(), "clean-repo-1");
+        UUID repo2 = insertRepository(manager.workspaceId(), manager.membershipId(), "clean-repo-2");
+        String inviteeEmail = uniqueEmail("clean-invitee").toLowerCase(Locale.ROOT);
+
+        mailSender.reset();
+        // 1. Invite to Repo 1
+        MvcResult inviteResult1 = invite(manager.token(), repo1, inviteeEmail).andExpect(status().isOk()).andReturn();
+        UUID assignmentId1 = UUID.fromString(body(inviteResult1).path("assignmentId").asText());
+        UUID invitationId = UUID.fromString(body(inviteResult1).path("invitationId").asText());
+        String token1 = awaitToken(inviteeEmail, "You've been invited to join " + manager.workspaceName() + " on Adept");
+
+        // 2. Unassign from Repo 1 (0 repos remaining) -> should clean up orphan invitation
+        CsrfPair csrf = fetchCsrf(mockMvc);
+        mockMvc.perform(delete("/api/v1/repositories/" + repo1 + "/lead-assignments/" + assignmentId1)
+                .header("Origin", FRONTEND_ORIGIN)
+                .header("Authorization", "Bearer " + manager.token())
+                .header("X-XSRF-TOKEN", csrf.token())
+                .cookie(new Cookie("XSRF-TOKEN", csrf.token())))
+            .andExpect(status().isNoContent());
+
+        // Old invitation is deleted
+        assertThat(rowCount("workspace_invitations", "id = ?", invitationId)).isZero();
+
+        // Old token preview now returns 404 INVITATION_NOT_FOUND
+        mockMvc.perform(get("/api/v1/invitations/preview")
+                .param("token", token1))
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.code").value("INVITATION_NOT_FOUND"));
+
+        mailSender.reset();
+        // 3. Invite to Repo 2 -> creates a fresh invitation and sends a fresh email for Repo 2!
+        MvcResult inviteResult2 = invite(manager.token(), repo2, inviteeEmail).andExpect(status().isOk()).andReturn();
+        UUID invitationId2 = UUID.fromString(body(inviteResult2).path("invitationId").asText());
+        assertThat(invitationId2).isNotEqualTo(invitationId);
+
+        String token2 = awaitToken(inviteeEmail, "You've been invited to join " + manager.workspaceName() + " on Adept");
+        assertThat(token2).isNotEmpty();
+
+        // Preview with token2 shows Repo 2
+        mockMvc.perform(get("/api/v1/invitations/preview")
+                .param("token", token2))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.email").value(inviteeEmail))
+            .andExpect(jsonPath("$.repositories[0]").value("adept-invite-test/clean-repo-2"));
+    }
+
     private ResultActions invite(String token, UUID repositoryId, String email) throws Exception {
         CsrfPair csrf = fetchCsrf(mockMvc);
         return mockMvc.perform(post("/api/v1/repositories/" + repositoryId + "/lead-assignments")

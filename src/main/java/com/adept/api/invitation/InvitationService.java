@@ -167,8 +167,10 @@ public class InvitationService {
             }
         }
 
-        WorkspaceInvitation invitation = invitationRepository
-            .findPendingByWorkspaceIdAndEmailForUpdate(workspaceId, normalizedEmail)
+        Optional<WorkspaceInvitation> existingInvitationOpt = invitationRepository
+            .findPendingByWorkspaceIdAndEmailForUpdate(workspaceId, normalizedEmail);
+
+        WorkspaceInvitation invitation = existingInvitationOpt
             .orElseGet(() -> createPendingInvitation(repository, managerMembership, normalizedEmail, context));
 
         Optional<RepositoryLeadAssignment> existingAssignmentOpt =
@@ -223,8 +225,18 @@ public class InvitationService {
             .filter(a -> a.getWorkspace().getId().equals(workspaceId) && a.getRepository().getId().equals(repositoryId))
             .orElseThrow(() -> new ApiException(ProblemCode.REPOSITORY_NOT_FOUND));
 
+        WorkspaceInvitation pendingInvitation = assignment.getInvitation();
+
         leadAssignmentRepository.delete(assignment);
         leadAssignmentRepository.flush();
+
+        if (pendingInvitation != null) {
+            List<RepositoryLeadAssignment> remaining = leadAssignmentRepository.findAllByInvitationId(pendingInvitation.getId());
+            if (remaining.isEmpty() && pendingInvitation.getStatus() == InvitationStatus.PENDING) {
+                invitationRepository.delete(pendingInvitation);
+                invitationRepository.flush();
+            }
+        }
 
         Map<String, Object> metadata;
         if (assignment.getLeadMembership() != null) {
