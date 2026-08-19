@@ -11,6 +11,7 @@ public record InvitationPreviewResponse(
     MembershipRole role,
     List<String> repositories,
     Instant expiresAt,
-    boolean existingAccount
+    boolean existingAccount,
+    boolean hasPassword
 ) {
 }
