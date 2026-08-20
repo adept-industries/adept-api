@@ -57,7 +57,7 @@ class DatabaseMigrationSmokeTest {
 
     @Test
     void contextLoadsAndHibernateValidatesFlywaySchema() {
-        assertThat(flyway.info().applied()).hasSize(12);
+        assertThat(flyway.info().applied()).hasSize(11);
 
         Integer serverVersion = jdbc.queryForObject(
             "SELECT current_setting('server_version_num')::integer", Integer.class);
@@ -74,12 +74,6 @@ class DatabaseMigrationSmokeTest {
             "SELECT to_regclass('public.project_repositories')::text", String.class)).isEqualTo("project_repositories");
         assertThat(jdbc.queryForObject(
             "SELECT to_regclass('public.google_auth_accounts')::text", String.class)).isEqualTo("google_auth_accounts");
-        assertThat(jdbc.queryForObject(
-            "SELECT to_regclass('public.pr_feature_snapshots')::text", String.class)).isEqualTo("pr_feature_snapshots");
-        assertThat(jdbc.queryForObject(
-            "SELECT to_regclass('public.pr_outcomes')::text", String.class)).isEqualTo("pr_outcomes");
-        assertThat(jdbc.queryForObject(
-            "SELECT to_regclass('public.model_registry')::text", String.class)).isEqualTo("model_registry");
         assertThat(jdbc.queryForObject("""
             SELECT is_nullable
             FROM information_schema.columns
@@ -110,6 +104,6 @@ class DatabaseMigrationSmokeTest {
         var secondRun = flyway.migrate();
 
         assertThat(secondRun.migrationsExecuted).isZero();
-        assertThat(flyway.info().applied()).hasSize(12);
+        assertThat(flyway.info().applied()).hasSize(11);
     }
 }

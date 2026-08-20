@@ -142,7 +142,7 @@ public class PullRequestRiskService {
                     com.adept.api.job.ProcessingJob job = new com.adept.api.job.ProcessingJob();
                     job.setWorkspace(repository.getWorkspace());
                     job.setRepository(repository);
-                    job.setJobType(com.adept.api.common.domain.ProcessingJobType.EVALUATE_PR_RISK);
+                    job.setJobType(com.adept.api.common.domain.ProcessingJobType.PROCESS_GITHUB_EVENT);
                     job.setStatus(com.adept.api.common.domain.ProcessingJobStatus.PENDING);
                     job.setPriority(10);
                     job.setAvailableAt(Instant.now());

@@ -201,9 +201,9 @@ jobs:
           docker compose --env-file .env \
             -f adept-api/infra/local/compose.yaml \
             exec -T engine-api \
-            python -c 'import json, urllib.request; payload = json.load(urllib.request.urlopen("http://localhost:8000/ready", timeout=3)); assert payload["status"] == "READY", payload'
+            python -c 'import json, urllib.request; payload = json.load(urllib.request.urlopen("http://localhost:8000/ready", timeout=3)); assert payload == {"status": "READY", "schemaVersion": "11"}, payload'
 
-      - name: Verify PostgreSQL 18 and twelve Flyway migrations
+      - name: Verify PostgreSQL 18 and eleven Flyway migrations
         shell: bash
         run: |
           postgres_version_number="$(
@@ -225,7 +225,7 @@ jobs:
               | tr -d '[:space:]'
           )"
           echo "Successful migration count: $migration_count"
-          test "$migration_count" = "12"
+          test "$migration_count" = "11"
 
       - name: Verify migration idempotency after API restart
         shell: bash
@@ -234,20 +234,26 @@ jobs:
             -f adept-api/infra/local/compose.yaml \
             --profile full restart api
 
-          curl --fail --silent --show-error \
-            --retry 60 --retry-delay 2 --retry-max-time 120 \
-            --retry-connrefused --retry-all-errors \
-            http://localhost:8080/actuator/health/readiness >/dev/null
+          api_ready=false
+          for attempt in {1..60}; do
+            if curl -fsS http://localhost:8080/actuator/health/readiness >/dev/null 2>&1; then
+              echo "API became ready after restart on attempt $attempt"
+              api_ready=true
+              break
+            fi
+            sleep 2
+          done
+          test "$api_ready" = "true"
 
-          restart_migration_count="$(
+          migration_count="$(
             docker compose --env-file .env \
               -f adept-api/infra/local/compose.yaml \
               exec -T postgres sh -c \
               'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "SELECT count(*) FROM flyway_schema_history WHERE success;"' \
               | tr -d '[:space:]'
           )"
-          echo "Successful migration count after restart: $restart_migration_count"
-          test "$restart_migration_count" = "12"
+          echo "Migration count after API restart: $migration_count"
+          test "$migration_count" = "11"
 
       - name: Compare committed OpenAPI contracts
         if: github.event_name == 'workflow_dispatch'

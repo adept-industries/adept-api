@@ -223,12 +223,12 @@ public class GithubWebhookService {
 
         pullRequestRepository.save(pullRequest);
 
-        // Enqueue EVALUATE_PR_RISK processing job for engine worker
+        // Enqueue PROCESS_GITHUB_EVENT processing job for engine worker
         ProcessingJob job = new ProcessingJob();
         job.setWorkspace(repository.getWorkspace());
         job.setRepository(repository);
         job.setRawEvent(rawEvent);
-        job.setJobType(ProcessingJobType.EVALUATE_PR_RISK);
+        job.setJobType(ProcessingJobType.PROCESS_GITHUB_EVENT);
         job.setStatus(ProcessingJobStatus.PENDING);
         job.setPriority(10); // High priority
         job.setAvailableAt(Instant.now());
@@ -244,7 +244,7 @@ public class GithubWebhookService {
 
         return Map.of(
             "status", "queued",
-            "jobType", "EVALUATE_PR_RISK",
+            "jobType", "PROCESS_GITHUB_EVENT",
             "repositoryId", repository.getId(),
             "prNumber", prNumber,
             "action", action
@@ -278,7 +278,7 @@ public class GithubWebhookService {
                 job.setWorkspace(repository.getWorkspace());
                 job.setRepository(repository);
                 job.setRawEvent(rawEvent);
-                job.setJobType(ProcessingJobType.EVALUATE_PR_RISK);
+                job.setJobType(ProcessingJobType.PROCESS_GITHUB_EVENT);
                 job.setStatus(ProcessingJobStatus.PENDING);
                 job.setPriority(10);
                 job.setAvailableAt(Instant.now());
@@ -292,7 +292,7 @@ public class GithubWebhookService {
                 rawEvent.setStatus(WebhookStatus.QUEUED);
                 rawWebhookEventRepository.save(rawEvent);
 
-                return Map.of("status", "queued", "jobType", "EVALUATE_PR_RISK", "prNumber", prNumber);
+                return Map.of("status", "queued", "jobType", "PROCESS_GITHUB_EVENT", "prNumber", prNumber);
             }
         }
 

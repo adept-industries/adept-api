@@ -202,12 +202,12 @@ class DatabaseConstraintTest {
     }
 
     @Test
-    void processingJobAcceptsPrRiskJobTypes() {
+    void processingJobAcceptsStandardJobTypes() {
         TenantFixture tenant = createTenantFixture();
         int rows = jdbc.update("""
             INSERT INTO processing_jobs (
                 workspace_id, repository_id, job_type, status
-            ) VALUES (?, ?, 'EVALUATE_PR_RISK', 'PENDING')
+            ) VALUES (?, ?, 'PROCESS_GITHUB_EVENT', 'PENDING')
             """, tenant.workspaceId(), tenant.repositoryId());
         assertThat(rows).isOne();
 

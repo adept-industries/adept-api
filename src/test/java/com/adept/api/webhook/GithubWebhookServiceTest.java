@@ -122,15 +122,15 @@ class GithubWebhookServiceTest {
         assertThat(savedPr.getState()).isEqualTo(PullRequestState.OPEN);
         assertThat(savedPr.getAdditions()).isEqualTo(450);
 
-        // Verify EVALUATE_PR_RISK job was enqueued
+        // Verify PROCESS_GITHUB_EVENT job was enqueued
         ArgumentCaptor<ProcessingJob> jobCaptor = ArgumentCaptor.forClass(ProcessingJob.class);
         verify(processingJobRepository).save(jobCaptor.capture());
         ProcessingJob savedJob = jobCaptor.getValue();
-        assertThat(savedJob.getJobType()).isEqualTo(ProcessingJobType.EVALUATE_PR_RISK);
+        assertThat(savedJob.getJobType()).isEqualTo(ProcessingJobType.PROCESS_GITHUB_EVENT);
         assertThat(savedJob.getStatus()).isEqualTo(ProcessingJobStatus.PENDING);
         assertThat(savedJob.getPayload().get("prNumber")).isEqualTo(42);
 
         assertThat(result.get("status")).isEqualTo("queued");
-        assertThat(result.get("jobType")).isEqualTo("EVALUATE_PR_RISK");
+        assertThat(result.get("jobType")).isEqualTo("PROCESS_GITHUB_EVENT");
     }
 }
