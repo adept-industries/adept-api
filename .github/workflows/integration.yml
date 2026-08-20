@@ -49,11 +49,32 @@ jobs:
         with:
           path: adept-api
 
+      - name: Resolve engine ref
+        id: engine-ref
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          COMPANION_REF: ${{ github.head_ref }}
+          REQUESTED_REF: ${{ inputs.engine_ref }}
+        run: |
+          selected_ref="${REQUESTED_REF:-main}"
+
+          if [ "$EVENT_NAME" = "pull_request" ] && [ -n "$COMPANION_REF" ]; then
+            if git ls-remote --exit-code \
+              https://github.com/adept-industries/adept-engine.git \
+              "refs/heads/$COMPANION_REF" >/dev/null 2>&1; then
+              selected_ref="$COMPANION_REF"
+            fi
+          fi
+
+          echo "Using engine ref: $selected_ref"
+          echo "ref=$selected_ref" >> "$GITHUB_OUTPUT"
+
       - name: Check out engine
         uses: actions/checkout@v6
         with:
           repository: adept-industries/adept-engine
-          ref: ${{ inputs.engine_ref || 'main' }}
+          ref: ${{ steps.engine-ref.outputs.ref }}
           path: adept-engine
 
       - name: Resolve frontend ref
@@ -180,9 +201,9 @@ jobs:
           docker compose --env-file .env \
             -f adept-api/infra/local/compose.yaml \
             exec -T engine-api \
-            python -c 'import json, urllib.request; payload = json.load(urllib.request.urlopen("http://localhost:8000/ready", timeout=3)); assert payload == {"status": "READY", "schemaVersion": "11"}, payload'
+            python -c 'import json, urllib.request; payload = json.load(urllib.request.urlopen("http://localhost:8000/ready", timeout=3)); assert payload == {"status": "READY", "schemaVersion": "12"}, payload'
 
-      - name: Verify PostgreSQL 18 and eleven Flyway migrations
+      - name: Verify PostgreSQL 18 and twelve Flyway migrations
         shell: bash
         run: |
           postgres_version_number="$(
@@ -204,7 +225,7 @@ jobs:
               | tr -d '[:space:]'
           )"
           echo "Successful migration count: $migration_count"
-          test "$migration_count" = "11"
+          test "$migration_count" = "12"
 
       - name: Verify migration idempotency after API restart
         shell: bash
@@ -232,7 +253,7 @@ jobs:
               | tr -d '[:space:]'
           )"
           echo "Migration count after API restart: $migration_count"
-          test "$migration_count" = "11"
+          test "$migration_count" = "12"
 
       - name: Compare committed OpenAPI contracts
         if: github.event_name == 'workflow_dispatch'

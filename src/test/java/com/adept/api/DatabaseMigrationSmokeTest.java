@@ -57,7 +57,7 @@ class DatabaseMigrationSmokeTest {
 
     @Test
     void contextLoadsAndHibernateValidatesFlywaySchema() {
-        assertThat(flyway.info().applied()).hasSize(11);
+        assertThat(flyway.info().applied()).hasSize(12);
 
         Integer serverVersion = jdbc.queryForObject(
             "SELECT current_setting('server_version_num')::integer", Integer.class);
@@ -100,10 +100,24 @@ class DatabaseMigrationSmokeTest {
                   AND column_name = 'created_at'
             )
             """, Boolean.class)).isTrue();
+        assertThat(jdbc.queryForObject("""
+            SELECT EXISTS (
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'jira_integrations'
+                  AND column_name = 'webhook_token_hash'
+                  AND is_nullable = 'YES'
+            )
+            """, Boolean.class)).isTrue();
+        assertThat(jdbc.queryForObject(
+            "SELECT to_regclass('public.uq_processing_jobs_jira_webhook_renewal') IS NOT NULL",
+            Boolean.class
+        )).isTrue();
 
         var secondRun = flyway.migrate();
 
         assertThat(secondRun.migrationsExecuted).isZero();
-        assertThat(flyway.info().applied()).hasSize(11);
+        assertThat(flyway.info().applied()).hasSize(12);
     }
 }

@@ -72,6 +72,10 @@ public final class TokenHasher {
         return hash(Domain.INTEGRATION_STATE, rawState);
     }
 
+    public String hashJiraWebhookToken(String rawToken) {
+        return hash(Domain.JIRA_WEBHOOK, rawToken);
+    }
+
     public enum Domain {
         REFRESH("adept:v1:refresh:"),
         VERIFY("adept:v1:verify:"),
@@ -80,7 +84,8 @@ public final class TokenHasher {
         AUDIT_IP("adept:v1:audit-ip:"),
         AUDIT_EMAIL("adept:v1:audit-email:"),
         USER_AGENT("adept:v1:user-agent:"),
-        INTEGRATION_STATE("adept:v1:integration-state:");
+        INTEGRATION_STATE("adept:v1:integration-state:"),
+        JIRA_WEBHOOK("adept:v1:jira-webhook:");
 
         private final String prefix;
 

@@ -83,23 +83,6 @@ public class WebhookController {
         return ResponseEntity.status(HttpStatus.ACCEPTED).contentType(MediaType.APPLICATION_JSON).build();
     }
 
-    /**
-     * Receives a Jira webhook delivery.
-     * The integrationId acts as a secure, unguessable token since Jira does not support HMAC.
-     */
-    @PostMapping("/jira/{integrationId}")
-    public ResponseEntity<Void> receiveJiraWebhook(
-            @org.springframework.web.bind.annotation.PathVariable java.util.UUID integrationId,
-            HttpServletRequest request) throws IOException {
-        
-        byte[] rawBody = readBodyBytes(request);
-        Map<String, Object> safeHeaders = collectSafeHeaders(request);
-
-        webhookService.ingestJiraWebhook(integrationId, rawBody, safeHeaders);
-
-        return ResponseEntity.status(HttpStatus.ACCEPTED).contentType(MediaType.APPLICATION_JSON).build();
-    }
-
     // ---------------------------------------------------------------------------
     // Private helpers
     // ---------------------------------------------------------------------------
@@ -108,17 +91,17 @@ public class WebhookController {
         int contentLength = request.getContentLength();
         if (contentLength > MAX_BODY_BYTES) {
             throw new ApiException(ProblemCode.PAYLOAD_TOO_LARGE,
-                "GitHub webhook payload exceeds the 10 MiB limit");
+                "Webhook payload exceeds the 10 MiB limit");
         }
 
         byte[] body = request.getInputStream().readNBytes(MAX_BODY_BYTES + 1);
         if (body.length > MAX_BODY_BYTES) {
             throw new ApiException(ProblemCode.PAYLOAD_TOO_LARGE,
-                "GitHub webhook payload exceeds the 10 MiB limit");
+                "Webhook payload exceeds the 10 MiB limit");
         }
         if (body.length == 0) {
             throw new ApiException(ProblemCode.MALFORMED_REQUEST,
-                "GitHub webhook body is empty");
+                "Webhook body is empty");
         }
         return body;
     }

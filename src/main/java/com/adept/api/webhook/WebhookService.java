@@ -6,6 +6,7 @@ import java.time.Instant;
 import java.util.HexFormat;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import javax.crypto.Mac;
@@ -13,7 +14,6 @@ import javax.crypto.spec.SecretKeySpec;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,14 +25,17 @@ import com.adept.api.common.domain.WebhookStatus;
 import com.adept.api.common.error.ApiException;
 import com.adept.api.common.error.ProblemCode;
 import com.adept.api.config.AppProperties;
-import com.adept.api.integration.github.GithubIntegration;
-import com.adept.api.integration.github.GithubIntegrationRepository;
+import com.adept.api.crypto.SecureTokenGenerator;
+import com.adept.api.crypto.TokenHasher;
 import com.adept.api.integration.github.GitRepository;
 import com.adept.api.integration.github.GitRepositoryRepository;
-import com.adept.api.job.ProcessingJob;
-import com.adept.api.job.ProcessingJobRepository;
+import com.adept.api.integration.github.GithubIntegration;
+import com.adept.api.integration.github.GithubIntegrationRepository;
 import com.adept.api.integration.jira.JiraIntegration;
 import com.adept.api.integration.jira.JiraIntegrationRepository;
+import com.adept.api.integration.jira.JiraProjectRepository;
+import com.adept.api.job.ProcessingJob;
+import com.adept.api.job.ProcessingJobRepository;
 
 import tools.jackson.databind.ObjectMapper;
 
@@ -42,13 +45,30 @@ import tools.jackson.databind.ObjectMapper;
  * 2. Deduplicates on delivery ID so repeated deliveries are idempotent.
  * 3. Stores raw_webhook_events and processing_jobs in one transaction.
  */
-@ConditionalOnProperty(name = "app.github.enabled", havingValue = "true")
 @Service
 public class WebhookService {
 
     private static final Logger log = LoggerFactory.getLogger(WebhookService.class);
     private static final String HMAC_ALGORITHM = "HmacSHA256";
     private static final String SIGNATURE_PREFIX = "sha256=";
+    private static final String DUMMY_JIRA_TOKEN_HASH = "0".repeat(64);
+    private static final Set<String> GITHUB_INSTALLATION_LIFECYCLE_ACTIONS = Set.of(
+        "created",
+        "deleted",
+        "suspend",
+        "unsuspend",
+        "new_permissions_accepted"
+    );
+    private static final Set<String> GITHUB_CATALOG_LIFECYCLE_EVENTS = Set.of(
+        "installation",
+        "installation_repositories",
+        "repository"
+    );
+    private static final Set<String> JIRA_ISSUE_EVENTS = Set.of(
+        "jira:issue_created",
+        "jira:issue_updated",
+        "jira:issue_deleted"
+    );
 
     private final AppProperties properties;
     private final RawWebhookEventRepository rawWebhookEventRepository;
@@ -56,6 +76,8 @@ public class WebhookService {
     private final GithubIntegrationRepository githubIntegrationRepository;
     private final GitRepositoryRepository gitRepositoryRepository;
     private final JiraIntegrationRepository jiraIntegrationRepository;
+    private final JiraProjectRepository jiraProjectRepository;
+    private final TokenHasher tokenHasher;
     private final ObjectMapper objectMapper;
 
     public WebhookService(
@@ -65,6 +87,8 @@ public class WebhookService {
             GithubIntegrationRepository githubIntegrationRepository,
             GitRepositoryRepository gitRepositoryRepository,
             JiraIntegrationRepository jiraIntegrationRepository,
+            JiraProjectRepository jiraProjectRepository,
+            TokenHasher tokenHasher,
             ObjectMapper objectMapper) {
         this.properties = properties;
         this.rawWebhookEventRepository = rawWebhookEventRepository;
@@ -72,6 +96,8 @@ public class WebhookService {
         this.githubIntegrationRepository = githubIntegrationRepository;
         this.gitRepositoryRepository = gitRepositoryRepository;
         this.jiraIntegrationRepository = jiraIntegrationRepository;
+        this.jiraProjectRepository = jiraProjectRepository;
+        this.tokenHasher = tokenHasher;
         this.objectMapper = objectMapper;
     }
 
@@ -118,9 +144,17 @@ public class WebhookService {
             Optional<GithubIntegration> integrationOpt =
                 githubIntegrationRepository.findByInstallationId(installationId);
 
-            if (integrationOpt.isPresent()
-                    && integrationOpt.get().getStatus() == IntegrationStatus.ACTIVE) {
-                integration = integrationOpt.get();
+            GithubIntegration resolvedIntegration = integrationOpt.orElse(null);
+            boolean active = resolvedIntegration != null
+                && resolvedIntegration.getStatus() == IntegrationStatus.ACTIVE;
+            boolean suspendedLifecycleEvent = resolvedIntegration != null
+                && resolvedIntegration.getStatus() == IntegrationStatus.SUSPENDED
+                && "installation".equals(eventType)
+                && action != null
+                && GITHUB_INSTALLATION_LIFECYCLE_ACTIONS.contains(action);
+
+            if (active || suspendedLifecycleEvent) {
+                integration = resolvedIntegration;
 
                 if (githubRepoId != null) {
                     repository = gitRepositoryRepository
@@ -128,17 +162,51 @@ public class WebhookService {
                         .orElse(null);
                 }
             } else {
-                // No active integration found — store the event as IGNORED, no job created.
+                // Unknown/revoked integrations and ordinary events for a suspended
+                // installation remain ignored. Installation lifecycle events must
+                // still reach the worker so an unsuspend can reactivate the row.
                 log.warn(
                     "GitHub webhook received for unknown/inactive installation={} deliveryId={}",
                     installationId, deliveryId
                 );
                 RawWebhookEvent ignoredEvent = buildRawEvent(
-                    null, null, deliveryId, eventType, action, headers, payload, WebhookStatus.IGNORED
+                    resolvedIntegration != null ? resolvedIntegration.getWorkspace() : null,
+                    null,
+                    deliveryId,
+                    eventType,
+                    action,
+                    headers,
+                    payload,
+                    WebhookStatus.IGNORED
                 );
                 rawWebhookEventRepository.save(ignoredEvent);
                 return false;
             }
+        }
+
+        // A catalogued repository can remain installed while a manager disables
+        // Adept tracking. Keep installation/repository lifecycle events flowing so
+        // the local catalog can be repaired or reactivated, but do not create data
+        // processing jobs for PR, push, workflow, or deployment traffic.
+        if (repository != null
+                && !repository.isTrackingEnabled()
+                && !GITHUB_CATALOG_LIFECYCLE_EVENTS.contains(eventType)) {
+            log.info(
+                "GitHub webhook ignored for tracking-disabled repository={} eventType={} deliveryId={}",
+                repository.getId(), eventType, deliveryId
+            );
+            RawWebhookEvent ignoredEvent = buildRawEvent(
+                integration.getWorkspace(),
+                repository,
+                deliveryId,
+                eventType,
+                action,
+                headers,
+                payload,
+                WebhookStatus.IGNORED
+            );
+            rawWebhookEventRepository.save(ignoredEvent);
+            return false;
         }
 
         // Step 5: Atomically save the raw event (QUEUED) and its processing job (PENDING).
@@ -176,37 +244,62 @@ public class WebhookService {
     @Transactional
     public boolean ingestJiraWebhook(
             UUID integrationId,
+            String rawWebhookToken,
             byte[] rawBody,
             Map<String, Object> headers) {
 
-        // Step 1: Verify the integration exists (the UUID acts as the token)
+        // Step 1: Authenticate the opaque per-integration callback credential before parsing.
         Optional<JiraIntegration> integrationOpt = jiraIntegrationRepository.findById(integrationId);
-        if (integrationOpt.isEmpty() || integrationOpt.get().getStatus() != IntegrationStatus.ACTIVE) {
-            log.warn("Jira webhook received for unknown/inactive integration={}", integrationId);
-            throw new ApiException(ProblemCode.WEBHOOK_INSTALLATION_NOT_FOUND, "Jira integration not found");
+        String suppliedToken = rawWebhookToken == null ? "" : rawWebhookToken;
+        String suppliedHash = tokenHasher.hashJiraWebhookToken(suppliedToken);
+        String expectedHash = integrationOpt
+            .map(JiraIntegration::getWebhookTokenHash)
+            .filter(hash -> hash != null && !hash.isBlank())
+            .orElse(DUMMY_JIRA_TOKEN_HASH);
+        boolean tokenMatches = MessageDigest.isEqual(
+            expectedHash.getBytes(StandardCharsets.US_ASCII),
+            suppliedHash.getBytes(StandardCharsets.US_ASCII)
+        );
+        boolean tokenWellFormed = SecureTokenGenerator.isWellFormed(rawWebhookToken);
+        boolean integrationActive = integrationOpt
+            .map(integration -> integration.getStatus() == IntegrationStatus.ACTIVE)
+            .orElse(false);
+        if (!(tokenMatches & tokenWellFormed & integrationActive)) {
+            log.warn("Rejected unauthenticated Jira webhook integration={}", integrationId);
+            throw new ApiException(
+                ProblemCode.WEBHOOK_SIGNATURE_INVALID,
+                "Jira webhook token is invalid"
+            );
         }
-        JiraIntegration integration = integrationOpt.get();
+        JiraIntegration integration = integrationOpt.orElseThrow();
 
         // Step 2: Parse payload to determine event type and delivery ID
         @SuppressWarnings("unchecked")
         Map<String, Object> payload = parsePayload(rawBody);
         String eventType = (String) payload.getOrDefault("webhookEvent", "unknown");
 
-        // Jira doesn't always send a standard delivery ID. Try to extract timestamp + issue ID as fallback.
-        String deliveryId = null;
-        Object timestampObj = payload.get("timestamp");
-        String timestampStr = timestampObj != null ? String.valueOf(timestampObj) : Instant.now().toString();
+        // The dynamic webhook must subscribe site-wide because Jira does not
+        // support Adept's per-project selection directly. Drop unsupported,
+        // unknown, and tracking-disabled projects before retaining their issue
+        // payload so workspace selection remains a data-retention boundary.
+        String jiraProjectId = extractJiraProjectId(payload);
+        boolean trackedProject = JIRA_ISSUE_EVENTS.contains(eventType)
+            && jiraProjectId != null
+            && jiraProjectRepository
+                .existsByJiraIntegrationIdAndJiraProjectIdAndTrackingEnabledTrue(
+                    integration.getId(),
+                    jiraProjectId
+                );
+        if (!trackedProject) {
+            log.info(
+                "Jira webhook ignored outside tracked project scope integration={} eventType={}",
+                integration.getId(),
+                eventType
+            );
+            return false;
+        }
 
-        Object issueObj = payload.get("issue");
-        if (issueObj instanceof Map<?, ?> issueMap) {
-            Object id = issueMap.get("id");
-            if (id != null) {
-                deliveryId = "jira-" + eventType + "-" + id + "-" + timestampStr;
-            }
-        }
-        if (deliveryId == null) {
-            deliveryId = "jira-" + eventType + "-" + UUID.randomUUID().toString();
-        }
+        String deliveryId = jiraDeliveryId(integrationId, rawBody, headers);
 
         // Step 3: Deduplicate
         if (rawWebhookEventRepository.existsBySourceAndDeliveryId(WebhookSource.JIRA, deliveryId)) {
@@ -223,7 +316,7 @@ public class WebhookService {
         event.setHeaders(headers);
         event.setPayload(payload);
         event.setStatus(WebhookStatus.QUEUED);
-        event.setSignatureValid(true); 
+        event.setSignatureValid(true);
         event.setReceivedAt(Instant.now());
         rawWebhookEventRepository.save(event);
 
@@ -236,7 +329,8 @@ public class WebhookService {
             "deliveryId", deliveryId,
             "eventType", eventType,
             "rawEventId", event.getId().toString(),
-            "jiraIntegrationId", integration.getId().toString()
+            "jiraIntegrationId", integration.getId().toString(),
+            "jiraProjectId", jiraProjectId
         ));
         job.setAvailableAt(Instant.now());
         processingJobRepository.save(job);
@@ -296,8 +390,28 @@ public class WebhookService {
             return objectMapper.readValue(rawBody, Map.class);
         } catch (Exception e) {
             throw new ApiException(ProblemCode.MALFORMED_REQUEST,
-                "GitHub webhook payload could not be parsed as JSON");
+                "Webhook payload could not be parsed as JSON");
         }
+    }
+
+    private String jiraDeliveryId(
+            UUID integrationId,
+            byte[] rawBody,
+            Map<String, Object> headers) {
+        Object identifier = headers.get("x-atlassian-webhook-identifier");
+        byte[] uniqueInput = identifier == null || identifier.toString().isBlank()
+            ? rawBody
+            : identifier.toString().getBytes(StandardCharsets.UTF_8);
+        byte[] integrationBytes = integrationId.toString().getBytes(StandardCharsets.US_ASCII);
+        MessageDigest digest;
+        try {
+            digest = MessageDigest.getInstance("SHA-256");
+        } catch (java.security.NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 is unavailable", exception);
+        }
+        digest.update(integrationBytes);
+        digest.update((byte) ':');
+        return "jira-" + HexFormat.of().formatHex(digest.digest(uniqueInput));
     }
 
     private Long extractInstallationId(Map<String, Object> payload) {
@@ -320,6 +434,23 @@ public class WebhookService {
             }
         }
         return null;
+    }
+
+    private String extractJiraProjectId(Map<String, Object> payload) {
+        Object issue = payload.get("issue");
+        if (!(issue instanceof Map<?, ?> issueMap)) {
+            return null;
+        }
+        Object fields = issueMap.get("fields");
+        if (!(fields instanceof Map<?, ?> fieldsMap)) {
+            return null;
+        }
+        Object project = fieldsMap.get("project");
+        if (!(project instanceof Map<?, ?> projectMap)) {
+            return null;
+        }
+        Object projectId = projectMap.get("id");
+        return projectId == null ? null : projectId.toString();
     }
 
     private RawWebhookEvent buildRawEvent(

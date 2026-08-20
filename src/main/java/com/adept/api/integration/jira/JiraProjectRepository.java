@@ -15,6 +15,11 @@ public interface JiraProjectRepository extends JpaRepository<JiraProject, UUID> 
 
     Optional<JiraProject> findByJiraIntegrationIdAndJiraProjectId(UUID jiraIntegrationId, String jiraProjectId);
 
+    boolean existsByJiraIntegrationIdAndJiraProjectIdAndTrackingEnabledTrue(
+        UUID jiraIntegrationId,
+        String jiraProjectId
+    );
+
     List<JiraProject> findAllByWorkspaceId(UUID workspaceId);
 
     List<JiraProject> findAllByWorkspaceIdAndTrackingEnabledTrue(UUID workspaceId);
