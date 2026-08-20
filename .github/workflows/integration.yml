@@ -49,11 +49,32 @@ jobs:
         with:
           path: adept-api
 
+      - name: Resolve engine ref
+        id: engine-ref
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          COMPANION_REF: ${{ github.head_ref }}
+          REQUESTED_REF: ${{ inputs.engine_ref }}
+        run: |
+          selected_ref="${REQUESTED_REF:-main}"
+
+          if [ "$EVENT_NAME" = "pull_request" ] && [ -n "$COMPANION_REF" ]; then
+            if git ls-remote --exit-code \
+              https://github.com/adept-industries/adept-engine.git \
+              "refs/heads/$COMPANION_REF" >/dev/null 2>&1; then
+              selected_ref="$COMPANION_REF"
+            fi
+          fi
+
+          echo "Using engine ref: $selected_ref"
+          echo "ref=$selected_ref" >> "$GITHUB_OUTPUT"
+
       - name: Check out engine
         uses: actions/checkout@v6
         with:
           repository: adept-industries/adept-engine
-          ref: ${{ inputs.engine_ref || 'main' }}
+          ref: ${{ steps.engine-ref.outputs.ref }}
           path: adept-engine
 
       - name: Resolve frontend ref
