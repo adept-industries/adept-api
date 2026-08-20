@@ -39,8 +39,10 @@ public final class OriginValidationFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
+        String uri = request.getRequestURI();
         return !UNSAFE_METHODS.contains(request.getMethod())
-            || !request.getRequestURI().startsWith("/api/v1/");
+            || !uri.startsWith("/api/v1/")
+            || uri.startsWith("/api/v1/webhooks");
     }
 
     @Override

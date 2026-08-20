@@ -40,6 +40,30 @@ public class PullRequestRiskController {
         this.currentPrincipal = currentPrincipal;
     }
 
+    @GetMapping("/pull-requests")
+    public ResponseEntity<List<com.adept.api.risk.dto.PullRequestSummaryResponse>> listPullRequests(
+            @PathVariable UUID repositoryId) {
+        AuthenticatedPrincipal principal = currentPrincipal.require();
+        GitRepository repo = repositoryScopeService.requireReadableRepository(principal, repositoryId);
+        return ResponseEntity.ok(pullRequestRiskService.listPullRequestsSummary(principal.workspaceId(), repo.getId()));
+    }
+
+    @PostMapping("/pull-requests/sync")
+    public ResponseEntity<List<com.adept.api.risk.dto.PullRequestSummaryResponse>> syncPullRequests(
+            @PathVariable UUID repositoryId) {
+        AuthenticatedPrincipal principal = currentPrincipal.require();
+        GitRepository repo = repositoryScopeService.requireReadableRepository(principal, repositoryId);
+        return ResponseEntity.ok(pullRequestRiskService.syncPullRequestsFromGithub(principal.workspaceId(), repo.getId()));
+    }
+
+    @GetMapping("/risk-alerts/recent")
+    public ResponseEntity<List<PullRequestRiskResponse>> getRecentRiskAlerts(
+            @PathVariable UUID repositoryId) {
+        AuthenticatedPrincipal principal = currentPrincipal.require();
+        GitRepository repo = repositoryScopeService.requireReadableRepository(principal, repositoryId);
+        return ResponseEntity.ok(pullRequestRiskService.getRecentRiskAlerts(principal.workspaceId(), repo.getId()));
+    }
+
     @GetMapping("/pull-requests/{prNumber}/risk")
     public ResponseEntity<PullRequestRiskResponse> getPullRequestRisk(
             @PathVariable UUID repositoryId,

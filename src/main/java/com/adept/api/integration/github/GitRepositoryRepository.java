@@ -34,6 +34,10 @@ public interface GitRepositoryRepository
         long githubRepoId
     );
 
+    Optional<GitRepository> findFirstByGithubRepoId(long githubRepoId);
+
+    Optional<GitRepository> findFirstByFullName(String fullName);
+
     List<GitRepository> findAllByWorkspaceId(UUID workspaceId);
 
     List<GitRepository> findAllByGithubIntegrationId(UUID githubIntegrationId);

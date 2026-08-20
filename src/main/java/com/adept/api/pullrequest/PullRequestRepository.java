@@ -15,6 +15,8 @@ public interface PullRequestRepository extends JpaRepository<PullRequest, UUID> 
 
     Optional<PullRequest> findByRepositoryIdAndNumber(UUID repositoryId, int number);
 
+    List<PullRequest> findAllByRepositoryIdOrderByOpenedAtDesc(UUID repositoryId);
+
     @Query("""
         select pr
         from PullRequest pr
