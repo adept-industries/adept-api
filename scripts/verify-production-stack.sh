@@ -64,6 +64,20 @@ if [[ "$published_caddy_ports" != "80,443" ]]; then
   exit 1
 fi
 
+echo "==> Verifying engine worker provider credential wiring"
+jq -e '
+  [
+    "GITHUB_APP_ID",
+    "GITHUB_APP_PRIVATE_KEY_BASE64",
+    "JIRA_CLIENT_ID",
+    "JIRA_CLIENT_SECRET",
+    "APP_INTEGRATION_ENCRYPTION_ACTIVE_KEY_VERSION",
+    "APP_INTEGRATION_ENCRYPTION_KEY_V1_BASE64",
+    "ENGINE_JOB_LOCK_TIMEOUT_SECONDS"
+  ] - (.services["engine-worker"].environment | keys)
+  | length == 0
+' <<<"$resolved_config" >/dev/null
+
 echo "==> Validating Caddy configuration"
 caddy_image="$(jq -r '.services.caddy.image' <<<"$resolved_config")"
 docker run --rm \

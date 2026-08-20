@@ -247,11 +247,12 @@ class InvitationLifecycleIntegrationTest extends PartCIntegrationTestSupport {
         invite(manager.token(), repo, existingEmail).andExpect(status().isOk());
         String rawToken = awaitToken(existingEmail, "You've been invited to join " + manager.workspaceName() + " on Adept");
 
-        // Preview shows existingAccount = true
+        // Preview shows existingAccount = true and hasPassword = true
         mockMvc.perform(get("/api/v1/invitations/preview")
                 .param("token", rawToken))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.existingAccount").value(true));
+            .andExpect(jsonPath("$.existingAccount").value(true))
+            .andExpect(jsonPath("$.hasPassword").value(true));
 
         // Accept with password
         CsrfPair csrf = fetchCsrf(mockMvc);
@@ -278,6 +279,73 @@ class InvitationLifecycleIntegrationTest extends PartCIntegrationTestSupport {
             existingUserId
         );
         assertThat(memId).isNotNull();
+    }
+
+    @Test
+    void googleUserWithoutPasswordCanPreviewAndAcceptWithAuthenticatedSession() throws Exception {
+        ManagerSession manager = createManager("goog-mgr");
+        UUID repo = insertRepository(manager.workspaceId(), manager.membershipId(), "goog-repo");
+        String googleUserEmail = uniqueEmail("google-lead").toLowerCase(Locale.ROOT);
+
+        // Insert a user registered via Google (password_hash is null)
+        UUID googleUserId = UUID.randomUUID();
+        jdbc.update("""
+            INSERT INTO users (
+                id, email, password_hash, display_name, status, email_verified_at,
+                token_version, created_at, updated_at, version
+            ) VALUES (?, ?, NULL, 'Google Lead User', 'ACTIVE', now(), 0, now(), now(), 0)
+            """, googleUserId, googleUserEmail);
+
+        jdbc.update("""
+            INSERT INTO google_auth_accounts (
+                user_id, google_subject, google_email, last_authenticated_at
+            ) VALUES (?, ?, ?, now())
+            """, googleUserId, "goog-sub-" + UUID.randomUUID(), googleUserEmail);
+
+        mailSender.reset();
+        invite(manager.token(), repo, googleUserEmail).andExpect(status().isOk());
+        String rawToken = awaitToken(googleUserEmail, "You've been invited to join " + manager.workspaceName() + " on Adept");
+
+        // Preview shows existingAccount = true and hasPassword = false
+        mockMvc.perform(get("/api/v1/invitations/preview")
+                .param("token", rawToken))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.existingAccount").value(true))
+            .andExpect(jsonPath("$.hasPassword").value(false));
+
+        // Create a personal workspace for this Google user so they can have a valid session
+        UUID googleUserPersonalWsId = UUID.randomUUID();
+        jdbc.update("""
+            INSERT INTO workspaces (id, name, slug, timezone, created_at, updated_at, version)
+            VALUES (?, 'Google Lead Personal', ?, 'UTC', now(), now(), 0)
+            """, googleUserPersonalWsId, "google-lead-personal-" + UUID.randomUUID());
+        UUID googleUserPersonalMemId = UUID.randomUUID();
+        jdbc.update("""
+            INSERT INTO memberships (id, workspace_id, user_id, role, status, created_at, updated_at, version)
+            VALUES (?, ?, ?, 'MANAGER', 'ACTIVE', now(), now(), 0)
+            """, googleUserPersonalMemId, googleUserPersonalWsId, googleUserId);
+
+        String googleUserJwt = jwtService.issue(
+            new AuthenticatedPrincipal(googleUserId, googleUserPersonalMemId, googleUserPersonalWsId, MembershipRole.MANAGER, 0)
+        );
+
+        // Accept invitation using authenticated session (no password needed)
+        CsrfPair csrf = fetchCsrf(mockMvc);
+        mockMvc.perform(post("/api/v1/invitations/accept")
+                .header("Origin", FRONTEND_ORIGIN)
+                .header("Authorization", "Bearer " + googleUserJwt)
+                .header("X-XSRF-TOKEN", csrf.token())
+                .cookie(new Cookie("XSRF-TOKEN", csrf.token()))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                        "token": "%s"
+                    }
+                    """.formatted(rawToken)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.user.email").value(googleUserEmail))
+            .andExpect(jsonPath("$.currentMembership.role").value("LEAD"))
+            .andExpect(jsonPath("$.currentMembership.workspaceId").value(manager.workspaceId().toString()));
     }
 
     @Test
@@ -391,6 +459,55 @@ class InvitationLifecycleIntegrationTest extends PartCIntegrationTestSupport {
                 .cookie(new Cookie("XSRF-TOKEN", csrf.token())))
             .andExpect(status().isForbidden())
             .andExpect(jsonPath("$.code").value("MANAGER_REQUIRED"));
+    }
+
+    @Test
+    void unassigningFromOnlyRepoCleansOrphanInvitationAndAllowsFreshInviteToAnotherRepo() throws Exception {
+        ManagerSession manager = createManager("clean-mgr");
+        UUID repo1 = insertRepository(manager.workspaceId(), manager.membershipId(), "clean-repo-1");
+        UUID repo2 = insertRepository(manager.workspaceId(), manager.membershipId(), "clean-repo-2");
+        String inviteeEmail = uniqueEmail("clean-invitee").toLowerCase(Locale.ROOT);
+
+        mailSender.reset();
+        // 1. Invite to Repo 1
+        MvcResult inviteResult1 = invite(manager.token(), repo1, inviteeEmail).andExpect(status().isOk()).andReturn();
+        UUID assignmentId1 = UUID.fromString(body(inviteResult1).path("assignmentId").asText());
+        UUID invitationId = UUID.fromString(body(inviteResult1).path("invitationId").asText());
+        String token1 = awaitToken(inviteeEmail, "You've been invited to join " + manager.workspaceName() + " on Adept");
+
+        // 2. Unassign from Repo 1 (0 repos remaining) -> should clean up orphan invitation
+        CsrfPair csrf = fetchCsrf(mockMvc);
+        mockMvc.perform(delete("/api/v1/repositories/" + repo1 + "/lead-assignments/" + assignmentId1)
+                .header("Origin", FRONTEND_ORIGIN)
+                .header("Authorization", "Bearer " + manager.token())
+                .header("X-XSRF-TOKEN", csrf.token())
+                .cookie(new Cookie("XSRF-TOKEN", csrf.token())))
+            .andExpect(status().isNoContent());
+
+        // Old invitation is deleted
+        assertThat(rowCount("workspace_invitations", "id = ?", invitationId)).isZero();
+
+        // Old token preview now returns 404 INVITATION_NOT_FOUND
+        mockMvc.perform(get("/api/v1/invitations/preview")
+                .param("token", token1))
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.code").value("INVITATION_NOT_FOUND"));
+
+        mailSender.reset();
+        // 3. Invite to Repo 2 -> creates a fresh invitation and sends a fresh email for Repo 2!
+        MvcResult inviteResult2 = invite(manager.token(), repo2, inviteeEmail).andExpect(status().isOk()).andReturn();
+        UUID invitationId2 = UUID.fromString(body(inviteResult2).path("invitationId").asText());
+        assertThat(invitationId2).isNotEqualTo(invitationId);
+
+        String token2 = awaitToken(inviteeEmail, "You've been invited to join " + manager.workspaceName() + " on Adept");
+        assertThat(token2).isNotEmpty();
+
+        // Preview with token2 shows Repo 2
+        mockMvc.perform(get("/api/v1/invitations/preview")
+                .param("token", token2))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.email").value(inviteeEmail))
+            .andExpect(jsonPath("$.repositories[0]").value("adept-invite-test/clean-repo-2"));
     }
 
     private ResultActions invite(String token, UUID repositoryId, String email) throws Exception {

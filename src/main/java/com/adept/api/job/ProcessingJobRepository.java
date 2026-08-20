@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface ProcessingJobRepository
@@ -24,5 +25,43 @@ public interface ProcessingJobRepository
     )
     List<ProcessingJob> lockClaimableJobs(
         @Param("limit") int limit
+    );
+
+    @Query(
+        value = """
+            SELECT *
+            FROM processing_jobs
+            WHERE job_type = 'RENEW_JIRA_WEBHOOK'
+              AND status IN ('PENDING', 'FAILED', 'RUNNING')
+              AND payload ->> 'jiraIntegrationId' = :integrationId
+            ORDER BY CASE WHEN status = 'RUNNING' THEN 0 ELSE 1 END,
+                     created_at ASC,
+                     id ASC
+            LIMIT 1
+            FOR UPDATE
+            """,
+        nativeQuery = true
+    )
+    Optional<ProcessingJob> findScheduledJiraWebhookRenewalForUpdate(
+        @Param("integrationId") String integrationId
+    );
+
+    @Query(
+        value = """
+            SELECT *
+            FROM processing_jobs
+            WHERE job_type = 'SYNC_JIRA_PROJECTS'
+              AND status IN ('PENDING', 'FAILED', 'RUNNING')
+              AND payload ->> 'jiraIntegrationId' = :integrationId
+            ORDER BY CASE WHEN status = 'RUNNING' THEN 0 ELSE 1 END,
+                     created_at ASC,
+                     id ASC
+            LIMIT 1
+            FOR UPDATE
+            """,
+        nativeQuery = true
+    )
+    Optional<ProcessingJob> findActiveJiraProjectSyncForUpdate(
+        @Param("integrationId") String integrationId
     );
 }

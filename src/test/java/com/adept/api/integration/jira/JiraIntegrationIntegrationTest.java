@@ -2,6 +2,8 @@ package com.adept.api.integration.jira;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -14,6 +16,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -29,6 +32,7 @@ import com.adept.api.auth.dto.SignupRequest;
 import com.adept.api.auth.dto.SignupResponse;
 import com.adept.api.common.domain.MembershipRole;
 import com.adept.api.crypto.IntegrationEncryptionService;
+import com.adept.api.crypto.TokenHasher;
 import com.adept.api.security.AuthenticatedPrincipal;
 import com.adept.api.security.JwtService;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -56,6 +60,9 @@ class JiraIntegrationIntegrationTest extends PartCIntegrationTestSupport {
 
     @Autowired
     private IntegrationEncryptionService encryptionService;
+
+    @Autowired
+    private TokenHasher tokenHasher;
 
     @MockitoBean
     private JiraOAuthClient jiraOAuthClient;
@@ -127,7 +134,7 @@ class JiraIntegrationIntegrationTest extends PartCIntegrationTestSupport {
                 "mock-access-token",
                 "mock-refresh-token",
                 3600,
-                new String[]{"read:jira-work", "offline_access"}
+                new String[]{"read:jira-work", "manage:jira-webhook", "offline_access"}
             )
         );
         when(jiraOAuthClient.getAccessibleResources("mock-access-token")).thenReturn(
@@ -146,6 +153,8 @@ class JiraIntegrationIntegrationTest extends PartCIntegrationTestSupport {
                 new JiraApiClient.JiraProjectDetails("10002", "OPS", "Platform Ops", "software")
             )
         );
+        when(jiraApiClient.registerWebhook(eq("cloud-123"), eq("mock-access-token"), anyString()))
+            .thenReturn(1000L);
 
         mockMvc.perform(get("/api/v1/integrations/jira/callback")
                 .param("code", authCode)
@@ -155,12 +164,44 @@ class JiraIntegrationIntegrationTest extends PartCIntegrationTestSupport {
 
         // Verify tokens were encrypted in database
         Map<String, Object> integrationRow = jdbc.queryForMap(
-            "SELECT access_token_enc, refresh_token_enc, encryption_key_version FROM jira_integrations WHERE cloud_id = 'cloud-123'"
+            """
+            SELECT access_token_enc, refresh_token_enc, encryption_key_version,
+                   webhook_id, webhook_token_hash, webhook_expires_at
+            FROM jira_integrations
+            WHERE cloud_id = 'cloud-123'
+            """
         );
         String encAccess = (String) integrationRow.get("access_token_enc");
         int keyVersion = ((Number) integrationRow.get("encryption_key_version")).intValue();
         assertThat(encAccess).isNotEqualTo("mock-access-token");
         assertThat(encryptionService.decrypt(encAccess, keyVersion)).isEqualTo("mock-access-token");
+        assertThat(integrationRow.get("webhook_id")).isEqualTo(1000L);
+        assertThat(integrationRow.get("webhook_token_hash").toString()).matches("^[0-9a-f]{64}$");
+        assertThat(integrationRow.get("webhook_expires_at")).isNotNull();
+
+        var callbackCaptor = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(jiraApiClient).registerWebhook(
+            eq("cloud-123"),
+            eq("mock-access-token"),
+            callbackCaptor.capture()
+        );
+        String callbackUrl = callbackCaptor.getValue();
+        assertThat(callbackUrl).startsWith("http://localhost:8080/api/v1/webhooks/jira/");
+        String rawWebhookToken = callbackUrl.substring(callbackUrl.indexOf("?token=") + 7);
+        assertThat(rawWebhookToken).matches(Pattern.compile("^[A-Za-z0-9_-]{43}$"));
+        assertThat(integrationRow.get("webhook_token_hash"))
+            .isEqualTo(tokenHasher.hashJiraWebhookToken(rawWebhookToken));
+        assertThat(jdbc.queryForObject(
+            """
+            SELECT count(*)
+            FROM processing_jobs
+            WHERE job_type = 'RENEW_JIRA_WEBHOOK'
+              AND payload ->> 'jiraIntegrationId' = (
+                  SELECT id::text FROM jira_integrations WHERE cloud_id = 'cloud-123'
+              )
+            """,
+            Integer.class
+        )).isOne();
 
         // 3. Verify Integration status via API
         MvcResult integrationResult = mockMvc.perform(get("/api/v1/integrations/jira")
@@ -172,6 +213,24 @@ class JiraIntegrationIntegrationTest extends PartCIntegrationTestSupport {
             .andReturn();
 
         UUID integrationId = UUID.fromString(body(integrationResult).path("id").asText());
+
+        CsrfPair syncCsrf = fetchCsrf(mockMvc);
+        mockMvc.perform(post("/api/v1/integrations/jira/" + integrationId + "/sync")
+                .header("Origin", FRONTEND_ORIGIN)
+                .header("Authorization", "Bearer " + managerToken)
+                .header("X-XSRF-TOKEN", syncCsrf.token())
+                .cookie(new Cookie("XSRF-TOKEN", syncCsrf.token())))
+            .andExpect(status().isAccepted());
+        assertThat(jdbc.queryForObject(
+            """
+            SELECT count(*)
+            FROM processing_jobs
+            WHERE job_type = 'SYNC_JIRA_PROJECTS'
+              AND payload ->> 'jiraIntegrationId' = ?
+            """,
+            Integer.class,
+            integrationId.toString()
+        )).isOne();
 
         // 4. List Discovered Projects
         MvcResult projectsResult = mockMvc.perform(get("/api/v1/jira/projects")
@@ -232,6 +291,12 @@ class JiraIntegrationIntegrationTest extends PartCIntegrationTestSupport {
             integrationId
         );
         assertThat(jiraStatus).isEqualTo("REVOKED");
+        Map<String, Object> disconnectedWebhook = jdbc.queryForMap(
+            "SELECT webhook_id, webhook_token_hash, webhook_expires_at FROM jira_integrations WHERE id = ?",
+            integrationId
+        );
+        assertThat(disconnectedWebhook.values()).containsOnlyNulls();
+        verify(jiraApiClient).deleteWebhook("cloud-123", "mock-access-token", 1000L);
     }
 
     private UUID insertTestRepository(UUID workspaceId, UUID managerMembershipId) {

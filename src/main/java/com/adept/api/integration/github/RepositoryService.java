@@ -113,9 +113,11 @@ public class RepositoryService {
             if (!oldTracking && newTracking) {
                 // Tracking was just enabled -> insert BACKFILL_REPOSITORY job
                 int backfillDays = 90;
-                RepositorySettingsDto currentSettings = parseSettings(repo.getSettings());
-                if (currentSettings != null && currentSettings.backfillDays() != null) {
-                    backfillDays = currentSettings.backfillDays();
+                RepositorySettingsDto effectiveSettings = request.settings() != null
+                    ? request.settings()
+                    : parseSettings(repo.getSettings());
+                if (effectiveSettings != null && effectiveSettings.backfillDays() != null) {
+                    backfillDays = effectiveSettings.backfillDays();
                 }
 
                 ProcessingJob backfillJob = new ProcessingJob();

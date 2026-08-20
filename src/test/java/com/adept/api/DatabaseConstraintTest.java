@@ -306,6 +306,38 @@ class DatabaseConstraintTest {
     }
 
     @Test
+    void jiraWebhookHashesAndScheduledRenewalsEnforceTheirSecurityInvariants() {
+        EnumFixture fixture = createEnumFixture();
+        UUID integrationId = fixture.jiraIntegrationId();
+        String validHash = "a".repeat(64);
+
+        assertThat(jdbc.update(
+            "UPDATE jira_integrations SET webhook_token_hash = ? WHERE id = ?",
+            validHash,
+            integrationId
+        )).isOne();
+        assertThatThrownBy(() -> jdbc.update(
+            "UPDATE jira_integrations SET webhook_token_hash = 'not-a-hash' WHERE id = ?",
+            integrationId
+        )).isInstanceOf(DataIntegrityViolationException.class);
+
+        assertThat(insertJiraWebhookRenewal(fixture.tenant(), integrationId, "PENDING"))
+            .isNotNull();
+        assertThatThrownBy(() ->
+            insertJiraWebhookRenewal(fixture.tenant(), integrationId, "FAILED"))
+            .isInstanceOf(DataIntegrityViolationException.class);
+
+        assertThat(jdbc.update("""
+            UPDATE processing_jobs
+            SET status = 'RUNNING', locked_at = now(), locked_by = 'test-worker'
+            WHERE job_type = 'RENEW_JIRA_WEBHOOK'
+              AND payload ->> 'jiraIntegrationId' = ?
+            """, integrationId.toString())).isOne();
+        assertThat(insertJiraWebhookRenewal(fixture.tenant(), integrationId, "PENDING"))
+            .isNotNull();
+    }
+
+    @Test
     void deletingAssignmentTargetsDeletesOnlyTheirOwnAssignments() {
         AssignmentFixture fixture = createAssignmentFixture();
         UUID assignmentId = insertMembershipAssignment(fixture);
@@ -513,6 +545,26 @@ class DatabaseConstraintTest {
             RETURNING id
             """, UUID.class,
             tenant.workspaceId(), tenant.repositoryId(), rawEventId, jobType);
+    }
+
+    private UUID insertJiraWebhookRenewal(
+        TenantFixture tenant,
+        UUID integrationId,
+        String status
+    ) {
+        return jdbc.queryForObject("""
+            INSERT INTO processing_jobs (
+                workspace_id, job_type, status, payload, available_at
+            ) VALUES (?, 'RENEW_JIRA_WEBHOOK', ?, jsonb_build_object(
+                'workspaceId', ?,
+                'jiraIntegrationId', ?
+            ), now() + interval '25 days')
+            RETURNING id
+            """, UUID.class,
+            tenant.workspaceId(),
+            status,
+            tenant.workspaceId().toString(),
+            integrationId.toString());
     }
 
     private UUID insertPullRequest(TenantFixture tenant) {
