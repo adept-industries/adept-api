@@ -21,7 +21,9 @@ import com.adept.api.risk.dto.RiskyPullRequestResponse;
 import com.adept.api.security.AuthenticatedPrincipal;
 import com.adept.api.security.CurrentPrincipal;
 import com.adept.api.security.RepositoryScopeService;
+import io.swagger.v3.oas.annotations.Hidden;
 
+@Hidden
 @Validated
 @RestController
 @RequestMapping("/api/v1/repositories/{repositoryId}")
