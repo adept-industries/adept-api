@@ -36,6 +36,7 @@ public class JiraIntegration extends BaseEntity {
 
     @Column(name = "webhook_id") private Long webhookId;
     @Column(name = "webhook_expires_at") private Instant webhookExpiresAt;
+    @Column(name = "webhook_token_hash", length = 64) private String webhookTokenHash;
     @Column(name = "last_synced_at") private Instant lastSyncedAt;
 
     @ManyToOne(fetch = FetchType.LAZY)

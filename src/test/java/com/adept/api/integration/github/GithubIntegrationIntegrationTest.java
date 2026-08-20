@@ -206,6 +206,15 @@ class GithubIntegrationIntegrationTest extends PartCIntegrationTestSupport {
             repoId
         );
         assertThat(jobCount).isEqualTo(1);
+        assertThat(jdbc.queryForObject(
+            """
+            SELECT (payload ->> 'backfillDays')::integer
+            FROM processing_jobs
+            WHERE job_type = 'BACKFILL_REPOSITORY' AND repository_id = ?
+            """,
+            Integer.class,
+            repoId
+        )).isEqualTo(60);
 
         // 6. Lead Candidates Lookup
         when(githubApiClient.listLeadCandidates(anyLong(), anyString(), anyString())).thenReturn(

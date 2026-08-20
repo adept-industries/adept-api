@@ -4,11 +4,12 @@ The Adept API is the Java backend and sole owner of the shared PostgreSQL databa
 
 ## Overview & Current Status
 
-Phase 2 authentication, session management, workspace switching, workspace management, project grouping, and OpenAPI contract generation are fully implemented:
-- **Framework & Runtime**: Spring Boot 4.1 on Java 25, Flyway V1–V11, Hibernate validation, PostgreSQL 18.
+The API implementation through Phase 5 covers authentication, workspaces, projects, provider integrations, secure webhook ingestion, and OpenAPI contract generation. Phase 5 acceptance remains pending until the coordinated API and engine verification suites pass:
+- **Framework & Runtime**: Spring Boot 4.1 on Java 25, Flyway V1–V12, Hibernate validation, PostgreSQL 18.
 - **Authentication**: JWT access tokens, HttpOnly refresh cookies (`adept_refresh`), CSRF protection (`XSRF-TOKEN` / `X-XSRF-TOKEN`), BCrypt password hashing.
 - **Workspace Management**: Managers can create additional tenant workspaces, switch between memberships, update workspace settings, and request controlled workspace deletion.
 - **Projects**: Projects group repositories inside one workspace. Managers manage projects and repository links; Leads see only projects containing repositories assigned to them.
+- **Integrations & Webhooks**: Managers connect GitHub and Jira, configure tracked repositories and mappings, and receive verified, duplicate-safe provider deliveries that are stored with durable processing jobs in one transaction.
 - **OpenAPI**: Contracts configured via `springdoc-openapi` and exported deterministically to `docs/openapi/adept-api-v1.json`.
 
 ## Local Sibling Layout
@@ -80,7 +81,18 @@ Verification, resend, password-reset, login, refresh, and logout requests must u
 - Create another workspace with `POST /api/v1/workspaces`; the creator becomes its Manager.
 - Manage project groupings through `/api/v1/projects`. Project choice filters repository-based views but does not replace workspace switching.
 - Controlled workspace deletion (`DELETE /api/v1/workspaces/current`) requires Manager role, recent password or Google authentication, and exact confirmation-slug matching.
-- A successful deletion request marks the workspace `DELETING`, suspends its active integrations, and enqueues one pending `DELETE_WORKSPACE` job. Phase 2 does not include the job handler, so it does not hard-delete the workspace.
+- A successful deletion request marks the workspace `DELETING`, suspends its active integrations, and enqueues one unscoped `DELETE_WORKSPACE` job. The engine hard-deletes only a workspace already in `DELETING`; cascading tenant data is removed while global user/session data remains intact.
+
+## Jira Dynamic Webhooks
+
+- The Jira OAuth application must grant `read:jira-work`, `manage:jira-webhook`, and `offline_access`; `read:jira-user` is also requested for the current catalog flow.
+- Completing OAuth registers an Atlassian dynamic webhook for issue created, updated, and deleted events. The callback is `/api/v1/webhooks/jira/{integrationId}?token={opaqueToken}`.
+- The 32-byte callback token is generated once and sent only to Atlassian. Adept stores a domain-separated, peppered HMAC-SHA-256 in `jira_integrations.webhook_token_hash`, compares hashes in constant time before parsing a payload, and never stores the query token in webhook headers or job payloads.
+- Authenticated issue events are retained only when `issue.fields.project.id` belongs to that integration and the Jira project is tracking-enabled. Unsupported, unknown, and disabled-project payloads are discarded before raw-event persistence.
+- `X-Atlassian-Webhook-Identifier` is the idempotency key when present. A body digest is the fallback, and exactly one raw event and processing job are retained for a repeated delivery.
+- Dynamic webhooks expire after 30 days. Adept verifies that a stored ID is still present in Atlassian's paginated webhook catalog before refreshing it, schedules one retryable renewal five days before expiry, and reuses the existing future renewal instead of creating duplicates. A reconnect replaces a missing remote webhook, and callback failures compensate newly registered webhooks so their one-time tokens are not orphaned.
+- Jira integrations connected before V12 have no callback-token hash or API-registered dynamic webhook. V12 marks those rows `ERROR`; a Manager must disconnect and reconnect each one once after rollout.
+- Managers can request an idempotent durable catalog refresh with `POST /api/v1/integrations/jira/{integrationId}/sync`. The engine paginates Atlassian projects and preserves tracking choices for projects that still exist.
 
 ## OpenAPI Contract Generation
 
@@ -117,4 +129,4 @@ any application/AWS secret.
 
 Flyway files under `src/main/resources/db/migration` are the schema source of truth. Hibernate uses `ddl-auto: validate`. Never edit an already-shared migration. Generate local ERD with `./scripts/generate-erd.sh`.
 
-The authentication/workspace baseline ends at V8, project grouping is isolated in V9, Google authentication is isolated in V10, and recent-authentication session metadata is isolated in V11. The migration inventory is V1–V11.
+The authentication/workspace baseline ends at V8, project grouping is isolated in V9, Google authentication is isolated in V10, recent-authentication session metadata is isolated in V11, and hashed Jira webhook credentials are isolated in V12. The migration inventory is V1–V12.

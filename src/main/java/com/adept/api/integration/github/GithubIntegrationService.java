@@ -300,7 +300,6 @@ public class GithubIntegrationService {
         for (GitRepository localRepo : localRepos) {
             if (!remoteRepoIds.contains(localRepo.getGithubRepoId())) {
                 localRepo.setTrackingEnabled(false);
-                localRepo.setArchived(true);
                 gitRepositoryRepository.save(localRepo);
             }
         }

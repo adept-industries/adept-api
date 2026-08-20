@@ -1,13 +1,19 @@
 package com.adept.api.integration.jira;
 
+import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientResponseException;
 
 import com.adept.api.common.error.ApiException;
 import com.adept.api.common.error.ProblemCode;
@@ -17,6 +23,11 @@ import com.adept.api.common.error.ProblemCode;
 public class JiraApiClient {
 
     private static final String ATLASSIAN_API_BASE_URL = "https://api.atlassian.com";
+    private static final List<String> ADEPT_WEBHOOK_EVENTS = List.of(
+        "jira:issue_created",
+        "jira:issue_updated",
+        "jira:issue_deleted"
+    );
 
     private final RestClient restClient;
 
@@ -76,6 +87,199 @@ public class JiraApiClient {
                 ProblemCode.INTEGRATION_PROVIDER_ERROR,
                 "Failed to fetch Jira projects: " + exception.getMessage()
             );
+        }
+    }
+
+    /** Registers the single dynamic webhook used to ingest Jira issue changes. */
+    public long registerWebhook(String cloudId, String accessToken, String callbackUrl) {
+        try {
+            Map<String, Object> payload = Map.of(
+                "url", callbackUrl,
+                "webhooks", List.of(Map.of(
+                    "events", ADEPT_WEBHOOK_EVENTS,
+                    // Jira requires the property; an empty JQL filter matches every issue.
+                    "jqlFilter", ""
+                ))
+            );
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> response = restClient.post()
+                .uri("/ex/jira/{cloudId}/rest/api/3/webhook", cloudId)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(payload)
+                .retrieve()
+                .body(Map.class);
+
+            Map<String, Object> result = firstWebhookResult(response);
+            Object createdWebhookId = result.get("createdWebhookId");
+            if (!(createdWebhookId instanceof Number number)) {
+                throw new ApiException(
+                    ProblemCode.INTEGRATION_PROVIDER_ERROR,
+                    "Atlassian did not register the Jira webhook"
+                );
+            }
+            return number.longValue();
+        } catch (ApiException exception) {
+            throw exception;
+        } catch (Exception exception) {
+            throw providerFailure("register Jira webhook", exception);
+        }
+    }
+
+    /** Returns whether Atlassian still lists the stored dynamic webhook ID. */
+    public boolean webhookExists(String cloudId, String accessToken, long webhookId) {
+        int startAt = 0;
+        for (int pageNumber = 0; pageNumber < 1_000; pageNumber++) {
+            try {
+                int pageStart = startAt;
+                @SuppressWarnings("unchecked")
+                Map<String, Object> response = restClient.get()
+                    .uri(uriBuilder -> uriBuilder
+                        .path("/ex/jira/{cloudId}/rest/api/3/webhook")
+                        .queryParam("startAt", pageStart)
+                        .queryParam("maxResults", 100)
+                        .build(cloudId))
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+                    .retrieve()
+                    .body(Map.class);
+
+                List<?> values = response == null
+                    ? null
+                    : response.get("values") instanceof List<?> list ? list : null;
+                if (values == null) {
+                    throw invalidWebhookListResponse();
+                }
+                boolean found = values.stream().anyMatch(value ->
+                    value instanceof Map<?, ?> webhook
+                        && webhook.get("id") instanceof Number id
+                        && id.longValue() == webhookId
+                );
+                if (found) {
+                    return true;
+                }
+                if (Boolean.TRUE.equals(response.get("isLast"))) {
+                    return false;
+                }
+
+                int pageSize = response.get("maxResults") instanceof Number number
+                    ? number.intValue()
+                    : values.size();
+                if (pageSize <= 0) {
+                    throw invalidWebhookListResponse();
+                }
+                startAt += pageSize;
+            } catch (ApiException exception) {
+                throw exception;
+            } catch (Exception exception) {
+                throw providerFailure("list Jira webhooks", exception);
+            }
+        }
+        throw invalidWebhookListResponse();
+    }
+
+    /** Extends a dynamic webhook by another 30 days and returns Atlassian's expiry. */
+    public Instant refreshWebhook(String cloudId, String accessToken, long webhookId) {
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> response = restClient.put()
+                .uri("/ex/jira/{cloudId}/rest/api/3/webhook/refresh", cloudId)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(Map.of("webhookIds", List.of(webhookId)))
+                .retrieve()
+                .body(Map.class);
+
+            Object expirationDate = response == null ? null : response.get("expirationDate");
+            if (!(expirationDate instanceof String value) || value.isBlank()) {
+                throw new ApiException(
+                    ProblemCode.INTEGRATION_PROVIDER_ERROR,
+                    "Atlassian did not return the Jira webhook expiration date"
+                );
+            }
+            return parseAtlassianInstant(value);
+        } catch (RestClientResponseException exception) {
+            if (isMissingWebhook(exception)) {
+                throw new JiraWebhookNotFoundException();
+            }
+            throw providerFailure("refresh Jira webhook", exception);
+        } catch (ApiException exception) {
+            throw exception;
+        } catch (Exception exception) {
+            throw providerFailure("refresh Jira webhook", exception);
+        }
+    }
+
+    /** Best-effort caller support for disconnecting or replacing a dynamic webhook. */
+    public void deleteWebhook(String cloudId, String accessToken, long webhookId) {
+        try {
+            restClient.method(HttpMethod.DELETE)
+                .uri("/ex/jira/{cloudId}/rest/api/3/webhook", cloudId)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(Map.of("webhookIds", List.of(webhookId)))
+                .retrieve()
+                .toBodilessEntity();
+        } catch (RestClientResponseException exception) {
+            // Deletion is idempotent from Adept's perspective.
+            if (isMissingWebhook(exception)) {
+                return;
+            }
+            throw providerFailure("delete Jira webhook", exception);
+        } catch (Exception exception) {
+            throw providerFailure("delete Jira webhook", exception);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> firstWebhookResult(Map<String, Object> response) {
+        Object resultsObject = response == null ? null : response.get("webhookRegistrationResult");
+        if (!(resultsObject instanceof List<?> results)
+                || results.isEmpty()
+                || !(results.getFirst() instanceof Map<?, ?> result)) {
+            throw new ApiException(
+                ProblemCode.INTEGRATION_PROVIDER_ERROR,
+                "Atlassian returned an invalid Jira webhook registration response"
+            );
+        }
+        return (Map<String, Object>) result;
+    }
+
+    private ApiException invalidWebhookListResponse() {
+        return new ApiException(
+            ProblemCode.INTEGRATION_PROVIDER_ERROR,
+            "Atlassian returned an invalid Jira webhook list response"
+        );
+    }
+
+    private Instant parseAtlassianInstant(String value) {
+        try {
+            return Instant.parse(value);
+        } catch (java.time.format.DateTimeParseException ignored) {
+            return OffsetDateTime.parse(
+                value,
+                DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSxx")
+            ).toInstant();
+        }
+    }
+
+    private ApiException providerFailure(String operation, Exception ignored) {
+        return new ApiException(
+            ProblemCode.INTEGRATION_PROVIDER_ERROR,
+            // Provider failures can echo the registration body. Never propagate
+            // their message because that body contains the one-time callback token.
+            "Failed to " + operation
+        );
+    }
+
+    private boolean isMissingWebhook(RestClientResponseException exception) {
+        int statusCode = exception.getStatusCode().value();
+        return statusCode == 404 || statusCode == 410;
+    }
+
+    static final class JiraWebhookNotFoundException extends RuntimeException {
+        JiraWebhookNotFoundException() {
+            super(null, null, false, false);
         }
     }
 

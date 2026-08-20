@@ -87,6 +87,21 @@ public class JiraIntegrationController {
         return ResponseEntity.noContent().build();
     }
 
+    @PostMapping("/api/v1/integrations/jira/{integrationId}/sync")
+    public ResponseEntity<Void> syncProjects(@PathVariable UUID integrationId) {
+        AuthenticatedPrincipal principal = currentPrincipal.require();
+        Membership membership = activeMembershipService
+            .getActiveMembership(principal.userId(), principal.workspaceId())
+            .orElseThrow(() -> new ApiException(ProblemCode.NO_ACTIVE_MEMBERSHIP));
+
+        jiraIntegrationService.requestProjectSync(
+            principal.workspaceId(),
+            integrationId,
+            membership
+        );
+        return ResponseEntity.accepted().build();
+    }
+
     @GetMapping("/api/v1/jira/projects")
     public ResponseEntity<List<JiraProjectResponse>> listProjects() {
         AuthenticatedPrincipal principal = currentPrincipal.require();

@@ -199,4 +199,35 @@ class GithubIntegrationServiceTest {
             any()
         );
     }
+
+    @Test
+    @DisplayName("sync disables repositories removed from the installation without marking them archived")
+    void syncRemovedRepositoryDisablesTrackingButPreservesArchiveState() {
+        GithubIntegration integration = new GithubIntegration();
+        integration.setId(UUID.randomUUID());
+        integration.setWorkspace(testWorkspace);
+        integration.setInstallationId(777L);
+        integration.setStatus(IntegrationStatus.ACTIVE);
+
+        GitRepository repository = new GitRepository();
+        repository.setId(UUID.randomUUID());
+        repository.setWorkspace(testWorkspace);
+        repository.setGithubIntegration(integration);
+        repository.setGithubRepoId(999L);
+        repository.setTrackingEnabled(true);
+        repository.setArchived(false);
+
+        when(githubIntegrationRepository.findByIdAndWorkspaceId(
+                integration.getId(), testWorkspace.getId()))
+            .thenReturn(Optional.of(integration));
+        when(githubApiClient.listInstallationRepositories(777L)).thenReturn(List.of());
+        when(gitRepositoryRepository.findAllByGithubIntegrationId(integration.getId()))
+            .thenReturn(List.of(repository));
+
+        service.syncRepositories(testWorkspace.getId(), integration.getId(), managerMembership);
+
+        assertThat(repository.isTrackingEnabled()).isFalse();
+        assertThat(repository.isArchived()).isFalse();
+        verify(gitRepositoryRepository).save(repository);
+    }
 }

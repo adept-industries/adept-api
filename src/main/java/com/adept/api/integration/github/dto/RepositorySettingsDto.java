@@ -9,7 +9,7 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Pattern;
 
 public record RepositorySettingsDto(
-    @Pattern(regexp = "^(WORKFLOW_RUN|DEPLOYMENT|PUSH)$", message = "deploymentSignal must be WORKFLOW_RUN, DEPLOYMENT, or PUSH")
+    @Pattern(regexp = "^(WORKFLOW_RUN|DEPLOYMENT)$", message = "deploymentSignal must be WORKFLOW_RUN or DEPLOYMENT")
     String deploymentSignal,
 
     List<String> productionEnvironmentPatterns,
