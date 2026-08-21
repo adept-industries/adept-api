@@ -1,6 +1,5 @@
 package com.adept.api.mail;
 
-import java.util.concurrent.Executor;
 import java.util.concurrent.ThreadPoolExecutor;
 
 import org.slf4j.Logger;
@@ -17,12 +16,14 @@ public class MailAsyncConfig {
     private static final Logger log = LoggerFactory.getLogger(MailAsyncConfig.class);
 
     @Bean(name = "accountMailExecutor")
-    Executor accountMailExecutor() {
+    ThreadPoolTaskExecutor accountMailExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
         executor.setThreadNamePrefix("account-mail-");
         executor.setCorePoolSize(2);
         executor.setMaxPoolSize(2);
         executor.setQueueCapacity(100);
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(5);
         executor.setRejectedExecutionHandler((runnable, threadPoolExecutor) -> {
             log.warn(
                 "account_mail_rejected active={} queued={}",

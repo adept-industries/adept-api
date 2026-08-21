@@ -20,9 +20,9 @@ spring:
     name: adept-api
   datasource:
     # HikariCP maintains a reusable pool of PostgreSQL connections.
-    url: ${SPRING_DATASOURCE_URL}
-    username: ${SPRING_DATASOURCE_USERNAME}
-    password: ${SPRING_DATASOURCE_PASSWORD}
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/adept}
+    username: ${SPRING_DATASOURCE_USERNAME:adept}
+    password: ${SPRING_DATASOURCE_PASSWORD:change_me_local_only}
     hikari:
       maximum-pool-size: ${DB_MAX_POOL_SIZE:10}
       minimum-idle: ${DB_MIN_IDLE:2}
@@ -49,8 +49,8 @@ spring:
     default-property-inclusion: non_null
     time-zone: UTC
   mail:
-    host: ${SPRING_MAIL_HOST}
-    port: ${SPRING_MAIL_PORT}
+    host: ${SPRING_MAIL_HOST:localhost}
+    port: ${SPRING_MAIL_PORT:1025}
     username: ${SPRING_MAIL_USERNAME:}
     password: ${SPRING_MAIL_PASSWORD:}
     properties:
@@ -84,9 +84,9 @@ springdoc:
 
 app:
   # "app" is Adept's own configuration namespace bound to AppProperties.
-  frontend-base-url: ${APP_FRONTEND_BASE_URL}
+  frontend-base-url: ${APP_FRONTEND_BASE_URL:http://localhost:3000}
   public-api-base-url: ${APP_PUBLIC_API_BASE_URL:http://localhost:8080}
-  email-from: ${APP_EMAIL_FROM}
+  email-from: ${APP_EMAIL_FROM:Adept Local <no-reply@adept.local>}
   auth:
     bcrypt-cost: 12
     verification-token-ttl: PT24H
@@ -108,7 +108,7 @@ app:
       maximum-entries: 100000
   jwt:
     # The decoded secret signs access tokens; issuer/audience prevent token mixups.
-    secret-base64: ${APP_JWT_SECRET_BASE64}
+    secret-base64: ${APP_JWT_SECRET_BASE64:nZsoi0kKLN9C2BTdQnrztz5IWn5W/QJP+qJyl+Tr8vg=}
     issuer: adept-api
     audience: adept-frontend
     access-token-ttl: PT15M
@@ -124,12 +124,12 @@ app:
     client-secret: ${GOOGLE_CLIENT_SECRET:}
     redirect-uri: ${GOOGLE_REDIRECT_URI:http://localhost:8080/api/v1/auth/google/callback/google}
     onboarding-ttl: PT10M
-  token-hash-pepper-base64: ${APP_TOKEN_HASH_PEPPER_BASE64}
+  token-hash-pepper-base64: ${APP_TOKEN_HASH_PEPPER_BASE64:fpktI50M2HELTOHsTQ8AathWGEWziXntwQOuHMvjHjg=}
   integration-encryption:
     # Keep old key versions while rows still exist that were encrypted with them.
-    active-key-version: ${APP_INTEGRATION_ENCRYPTION_ACTIVE_KEY_VERSION}
+    active-key-version: ${APP_INTEGRATION_ENCRYPTION_ACTIVE_KEY_VERSION:1}
     keys:
-      1: ${APP_INTEGRATION_ENCRYPTION_KEY_V1_BASE64}
+      1: ${APP_INTEGRATION_ENCRYPTION_KEY_V1_BASE64:Le2essSPD8iFToVem0r6QKSNS7I0dp8G0IwG4I5PhOU=}
   github:
     # Keep provider clients disabled until real credentials are configured.
     enabled: ${GITHUB_INTEGRATION_ENABLED:false}
@@ -147,4 +147,4 @@ app:
     callback-url: ${JIRA_CALLBACK_URL:http://localhost:8080/api/v1/integrations/jira/callback}
   engine:
     base-url: ${APP_ENGINE_BASE_URL:http://localhost:8000}
-    internal-token: ${APP_INTERNAL_ENGINE_TOKEN}
+    internal-token: ${APP_INTERNAL_ENGINE_TOKEN:MqXAuyUpL4XZAdLJUAOye3ddOv3zwUKmsgafe1Mjsac=}

@@ -28,17 +28,29 @@ public final class TestAppProperties {
         return create(jwt(Duration.ofMinutes(15)), refreshToken(true), rateLimit);
     }
 
+    public static AppProperties createWithBcryptCost(int bcryptCost) {
+        return create(jwt(Duration.ofMinutes(15)), refreshToken(true), rateLimit(), bcryptCost);
+    }
+
     public static AppProperties create(
             AppProperties.Jwt jwt,
             AppProperties.RefreshToken refreshToken,
             AppProperties.RateLimit rateLimit) {
+        return create(jwt, refreshToken, rateLimit, 4);
+    }
+
+    private static AppProperties create(
+            AppProperties.Jwt jwt,
+            AppProperties.RefreshToken refreshToken,
+            AppProperties.RateLimit rateLimit,
+            int bcryptCost) {
         return new AppProperties(
             URI.create("http://localhost:3000"),
             URI.create("http://localhost:8080"),
             "Adept Test <test@adept.local>",
             jwt,
             new AppProperties.Auth(
-                12,
+                bcryptCost,
                 Duration.ofHours(24),
                 Duration.ofHours(1),
                 Duration.ofMinutes(5),

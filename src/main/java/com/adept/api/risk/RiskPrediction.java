@@ -29,4 +29,5 @@ public class RiskPrediction extends BaseEntity {
     @Column(name = "threshold_used", precision = 7, scale = 6) private BigDecimal thresholdUsed;
     @JdbcTypeCode(SqlTypes.JSON) @Column(name = "top_factors", nullable = false, columnDefinition = "jsonb") private List<Map<String,Object>> topFactors = List.of();
     @Column(name = "predicted_at", nullable = false) private Instant predictedAt = Instant.now();
+    @Transient private String stage = "live";
 }

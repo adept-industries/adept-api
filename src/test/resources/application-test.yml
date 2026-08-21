@@ -1,3 +1,8 @@
+spring:
+  mail:
+    host: localhost
+    port: 1025
+
 springdoc:
   api-docs:
     enabled: true
@@ -5,5 +10,29 @@ springdoc:
     enabled: true
 
 app:
+  frontend-base-url: http://localhost:3000
+  public-api-base-url: http://localhost:8080
+  email-from: Adept Test <test@adept.local>
+  auth:
+    bcrypt-cost: 4
+  jwt:
+    secret-base64: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+  token-hash-pepper-base64: BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA=
+  integration-encryption:
+    active-key-version: 1
+    keys:
+      1: CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCA=
+  engine:
+    base-url: http://localhost:8000
+    internal-token: test-only
+  github:
+    app-id: "1"
+    app-slug: adept-test
+    private-key-base64: dGVzdC1vbmx5
+    webhook-secret: test-only
+  jira:
+    client-id: test-only
+    client-secret: test-only
+    callback-url: http://localhost/callback
   refresh-token:
     cookie-secure: false

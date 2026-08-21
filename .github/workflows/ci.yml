@@ -77,6 +77,7 @@ jobs:
         run: ./scripts/verify-production-stack.sh
 
       - name: Build and test
+        timeout-minutes: 20
         run: ./mvnw -B clean verify
 
       - name: Build API image

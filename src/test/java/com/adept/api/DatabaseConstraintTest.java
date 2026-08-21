@@ -202,6 +202,24 @@ class DatabaseConstraintTest {
     }
 
     @Test
+    void processingJobAcceptsStandardJobTypes() {
+        TenantFixture tenant = createTenantFixture();
+        int rows = jdbc.update("""
+            INSERT INTO processing_jobs (
+                workspace_id, repository_id, job_type, status
+            ) VALUES (?, ?, 'PROCESS_GITHUB_EVENT', 'PENDING')
+            """, tenant.workspaceId(), tenant.repositoryId());
+        assertThat(rows).isOne();
+
+        int rows2 = jdbc.update("""
+            INSERT INTO processing_jobs (
+                workspace_id, repository_id, job_type, status
+            ) VALUES (?, ?, 'RECALCULATE_METRICS', 'PENDING')
+            """, tenant.workspaceId(), tenant.repositoryId());
+        assertThat(rows2).isOne();
+    }
+
+    @Test
     void leadAssignmentRequiresExactlyOneTarget() {
         AssignmentFixture fixture = createAssignmentFixture();
 

@@ -124,6 +124,7 @@ public class SecurityConfig {
             .logout(AbstractHttpConfigurer::disable)
             .cors(AbstractHttpConfigurer::disable)
             .csrf(csrf -> {
+                csrf.ignoringRequestMatchers("/api/v1/webhooks/**");
                 csrf.spa();
                 csrf.csrfTokenRepository(csrfTokenRepository);
                 // Providers cannot send a CSRF token; webhook credentials are the trust boundary.
@@ -154,7 +155,9 @@ public class SecurityConfig {
                     "/api/v1/auth/workspaces",
                     "/api/v1/auth/forgot-password",
                     "/api/v1/auth/reset-password",
-                    "/api/v1/auth/google/onboarding"
+                    "/api/v1/auth/google/onboarding",
+                    "/api/v1/webhooks/github",
+                    "/api/v1/webhooks/**"
                 ).permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/auth/me", "/api/v1/auth/test-me").authenticated()
                 .requestMatchers(HttpMethod.POST,

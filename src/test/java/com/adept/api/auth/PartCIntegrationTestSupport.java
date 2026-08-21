@@ -39,6 +39,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
     "app.frontend-base-url=http://localhost:3000",
     "app.public-api-base-url=http://localhost:8080",
     "app.email-from=Adept Test <test@adept.local>",
+    "app.auth.bcrypt-cost=4",
     "app.jwt.secret-base64=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
     "app.token-hash-pepper-base64=BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA=",
     "app.integration-encryption.active-key-version=1",

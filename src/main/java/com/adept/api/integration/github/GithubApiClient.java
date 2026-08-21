@@ -242,6 +242,20 @@ public class GithubApiClient {
         return null;
     }
 
+    public List<Map<String, Object>> listPullRequests(long installationId, String owner, String repo) {
+        String installationToken = tokenService.getInstallationToken(installationId);
+        try {
+            List<Map<String, Object>> prs = restClient.get()
+                .uri("/repos/{owner}/{repo}/pulls?state=all&per_page=30&sort=updated&direction=desc", owner, repo)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + installationToken)
+                .retrieve()
+                .body(new ParameterizedTypeReference<List<Map<String, Object>>>() {});
+            return prs != null ? prs : List.of();
+        } catch (Exception exception) {
+            return List.of();
+        }
+    }
+
     public record GithubInstallationDetails(
         long installationId,
         long accountExternalId,
