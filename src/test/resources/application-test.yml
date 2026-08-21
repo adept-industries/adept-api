@@ -13,6 +13,8 @@ app:
   frontend-base-url: http://localhost:3000
   public-api-base-url: http://localhost:8080
   email-from: Adept Test <test@adept.local>
+  auth:
+    bcrypt-cost: 4
   jwt:
     secret-base64: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
   token-hash-pepper-base64: BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA=

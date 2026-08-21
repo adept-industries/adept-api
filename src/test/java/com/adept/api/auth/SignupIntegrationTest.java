@@ -77,7 +77,7 @@ class SignupIntegrationTest extends PartCIntegrationTestSupport {
             email
         );
         assertThat(passwordService.matchesAuthenticationCandidate(VALID_PASSWORD, passwordHash)).isTrue();
-        assertThat(passwordHash).startsWith("$2").contains("$12$").doesNotContain(VALID_PASSWORD);
+        assertThat(passwordHash).startsWith("$2").contains("$04$").doesNotContain(VALID_PASSWORD);
         assertThat(response).doesNotContain("passwordHash", VALID_PASSWORD);
         assertThat(count("users")).isOne();
         assertThat(count("workspaces")).isOne();

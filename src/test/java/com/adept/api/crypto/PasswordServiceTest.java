@@ -13,7 +13,7 @@ class PasswordServiceTest {
 
     @Test
     void realBcryptUsesCostTwelveAndHonorsTheSeventyTwoByteCreationBoundary() {
-        PasswordService service = new PasswordService(TestAppProperties.create(), new PasswordPolicy());
+        PasswordService service = new PasswordService(TestAppProperties.createWithBcryptCost(12), new PasswordPolicy());
         String boundaryPassword = "x".repeat(72);
 
         String hash = service.encodeNewPassword(boundaryPassword);

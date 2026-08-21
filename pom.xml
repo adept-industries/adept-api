@@ -30,6 +30,8 @@
         <java.version>25</java.version>
         <jjwt.version>0.13.0</jjwt.version>
         <springdoc.version>3.0.3</springdoc.version>
+        <surefire.fork.timeout.seconds>900</surefire.fork.timeout.seconds>
+        <surefire.fork.exit.timeout.seconds>30</surefire.fork.exit.timeout.seconds>
     </properties>
     <dependencies>
         <dependency>
@@ -185,6 +187,14 @@
                             <artifactId>spring-boot-configuration-processor</artifactId>
                         </path>
                     </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <forkedProcessTimeoutInSeconds>${surefire.fork.timeout.seconds}</forkedProcessTimeoutInSeconds>
+                    <forkedProcessExitTimeoutInSeconds>${surefire.fork.exit.timeout.seconds}</forkedProcessExitTimeoutInSeconds>
                 </configuration>
             </plugin>
         </plugins>
