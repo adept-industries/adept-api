@@ -97,8 +97,8 @@ public class JiraApiClient {
                 "url", callbackUrl,
                 "webhooks", List.of(Map.of(
                     "events", ADEPT_WEBHOOK_EVENTS,
-                    // Jira requires the property; an empty JQL filter matches every issue.
-                    "jqlFilter", ""
+                    // Jira rejects empty string; "project != null" matches every issue.
+                    "jqlFilter", "project != null"
                 ))
             );
 
