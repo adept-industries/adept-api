@@ -114,9 +114,13 @@ public class JiraApiClient {
             Map<String, Object> result = firstWebhookResult(response);
             Object createdWebhookId = result.get("createdWebhookId");
             if (!(createdWebhookId instanceof Number number)) {
+                Object errors = result.get("errors");
+                String detail = errors instanceof List<?> list && !list.isEmpty()
+                    ? "Atlassian rejected the Jira webhook: " + String.join("; ", list.stream().map(Object::toString).toList())
+                    : "Atlassian did not register the Jira webhook";
                 throw new ApiException(
                     ProblemCode.INTEGRATION_PROVIDER_ERROR,
-                    "Atlassian did not register the Jira webhook"
+                    detail
                 );
             }
             return number.longValue();
@@ -124,6 +128,64 @@ public class JiraApiClient {
             throw exception;
         } catch (Exception exception) {
             throw providerFailure("register Jira webhook", exception);
+        }
+    }
+
+    /** Lists all active dynamic webhook IDs registered by this OAuth app. */
+    public List<Long> listWebhookIds(String cloudId, String accessToken) {
+        List<Long> ids = new ArrayList<>();
+        int startAt = 0;
+        for (int pageNumber = 0; pageNumber < 1_000; pageNumber++) {
+            try {
+                int pageStart = startAt;
+                @SuppressWarnings("unchecked")
+                Map<String, Object> response = restClient.get()
+                    .uri(uriBuilder -> uriBuilder
+                        .path("/ex/jira/{cloudId}/rest/api/3/webhook")
+                        .queryParam("startAt", pageStart)
+                        .queryParam("maxResults", 100)
+                        .build(cloudId))
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+                    .retrieve()
+                    .body(Map.class);
+
+                List<?> values = response == null
+                    ? null
+                    : response.get("values") instanceof List<?> list ? list : null;
+                if (values == null) {
+                    break;
+                }
+                for (Object value : values) {
+                    if (value instanceof Map<?, ?> webhook && webhook.get("id") instanceof Number id) {
+                        ids.add(id.longValue());
+                    }
+                }
+                if (Boolean.TRUE.equals(response.get("isLast")) || values.isEmpty()) {
+                    break;
+                }
+                int pageSize = response.get("maxResults") instanceof Number number
+                    ? number.intValue()
+                    : values.size();
+                if (pageSize <= 0) {
+                    break;
+                }
+                startAt += pageSize;
+            } catch (Exception exception) {
+                break;
+            }
+        }
+        return ids;
+    }
+
+    /** Deletes all dynamic webhooks registered by this OAuth app. */
+    public void deleteAllWebhooks(String cloudId, String accessToken) {
+        try {
+            List<Long> ids = listWebhookIds(cloudId, accessToken);
+            for (Long id : ids) {
+                deleteWebhook(cloudId, accessToken, id);
+            }
+        } catch (Exception ignored) {
+            // Best effort cleanup
         }
     }
 
