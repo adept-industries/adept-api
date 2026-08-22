@@ -508,6 +508,8 @@ public class JiraIntegrationService {
             }
         }
 
+        jiraApiClient.deleteAllWebhooks(integration.getCloudId(), accessToken);
+
         String rawWebhookToken = tokenGenerator.generate();
         String callbackUrl = UriComponentsBuilder
             .fromUri(properties.publicApiBaseUrl())
