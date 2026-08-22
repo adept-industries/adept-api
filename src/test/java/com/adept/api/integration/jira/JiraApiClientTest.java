@@ -50,7 +50,7 @@ class JiraApiClientTest {
                       "jira:issue_updated",
                       "jira:issue_deleted"
                     ],
-                    "jqlFilter": ""
+                    "jqlFilter": "project != null"
                   }]
                 }
                 """))
