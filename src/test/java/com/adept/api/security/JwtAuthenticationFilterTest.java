@@ -38,6 +38,8 @@ class JwtAuthenticationFilterTest {
         assertThat(filter.shouldNotFilter(request("/api/v1/auth/me"))).isFalse();
         assertThat(filter.shouldNotFilter(request("/api/v1/workspaces"))).isFalse();
         assertThat(filter.shouldNotFilter(request("/api/v1/workspaces/current"))).isFalse();
+        assertThat(filter.shouldNotFilter(request("/api/v1/metrics/summary"))).isFalse();
+        assertThat(filter.shouldNotFilter(request("/api/v1/metrics/series"))).isFalse();
 
         AuthenticationEntryPoint entryPoint = mock(AuthenticationEntryPoint.class);
         JwtAuthenticationFilter rejectingFilter = new JwtAuthenticationFilter(
