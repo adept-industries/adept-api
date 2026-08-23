@@ -169,6 +169,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/v1/invitations", "/api/v1/invitations/**").authenticated()
                 .requestMatchers("/api/v1/workspaces", "/api/v1/workspaces/**").authenticated()
                 .requestMatchers("/api/v1/projects", "/api/v1/projects/**").authenticated()
+                .requestMatchers("/api/v1/metrics", "/api/v1/metrics/**").authenticated()
                 .requestMatchers("/api/v1/integrations", "/api/v1/integrations/**").authenticated()
                 .requestMatchers("/api/v1/repositories", "/api/v1/repositories/**").authenticated()
                 .requestMatchers("/api/v1/jira", "/api/v1/jira/**").authenticated()
