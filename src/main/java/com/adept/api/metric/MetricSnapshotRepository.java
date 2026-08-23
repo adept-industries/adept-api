@@ -20,8 +20,8 @@ public interface MetricSnapshotRepository
         where m.workspace.id = :workspaceId
           and m.repository.id in :repositoryIds
           and m.metricType = :metricType
-          and m.periodStart >= :from
-          and m.periodEnd <= :to
+          and m.periodEnd >= :from
+          and m.periodStart <= :to
         order by m.periodStart
         """)
     List<MetricSnapshot> findDashboardSeries(
@@ -38,8 +38,8 @@ public interface MetricSnapshotRepository
         where m.workspace.id = :workspaceId
           and m.repository.id in :repositoryIds
           and m.granularity = :granularity
-          and m.periodStart >= :from
-          and m.periodEnd <= :to
+          and m.periodEnd >= :from
+          and m.periodStart <= :to
         order by m.periodStart
         """)
     List<MetricSnapshot> findSnapshots(
@@ -57,8 +57,8 @@ public interface MetricSnapshotRepository
           and m.repository.id in :repositoryIds
           and m.metricType = :metricType
           and m.granularity = :granularity
-          and m.periodStart >= :from
-          and m.periodEnd <= :to
+          and m.periodEnd >= :from
+          and m.periodStart <= :to
         order by m.periodStart
         """)
     List<MetricSnapshot> findSnapshotsByMetricType(
