@@ -63,4 +63,19 @@ public interface GitRepositoryRepository
         @Param("membershipId") UUID membershipId,
         Pageable pageable
     );
+
+    @Query("""
+        select r
+        from GitRepository r
+        join RepositoryLeadAssignment a on a.repository = r
+        where r.workspace.id = :workspaceId
+          and a.leadMembership.id = :membershipId
+          and r.trackingEnabled = true
+          and r.archived = false
+        order by lower(r.fullName), r.id
+        """)
+    List<GitRepository> findAllLeadReadableRepositories(
+        @Param("workspaceId") UUID workspaceId,
+        @Param("membershipId") UUID membershipId
+    );
 }

@@ -1,5 +1,6 @@
 package com.adept.api.metric;
 
+import com.adept.api.common.domain.MetricGranularity;
 import com.adept.api.common.domain.MetricType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -27,6 +28,44 @@ public interface MetricSnapshotRepository
         @Param("workspaceId") UUID workspaceId,
         @Param("repositoryIds") Collection<UUID> repositoryIds,
         @Param("metricType") MetricType metricType,
+        @Param("from") Instant from,
+        @Param("to") Instant to
+    );
+
+    @Query("""
+        select m
+        from MetricSnapshot m
+        where m.workspace.id = :workspaceId
+          and m.repository.id in :repositoryIds
+          and m.granularity = :granularity
+          and m.periodStart >= :from
+          and m.periodEnd <= :to
+        order by m.periodStart
+        """)
+    List<MetricSnapshot> findSnapshots(
+        @Param("workspaceId") UUID workspaceId,
+        @Param("repositoryIds") Collection<UUID> repositoryIds,
+        @Param("granularity") MetricGranularity granularity,
+        @Param("from") Instant from,
+        @Param("to") Instant to
+    );
+
+    @Query("""
+        select m
+        from MetricSnapshot m
+        where m.workspace.id = :workspaceId
+          and m.repository.id in :repositoryIds
+          and m.metricType = :metricType
+          and m.granularity = :granularity
+          and m.periodStart >= :from
+          and m.periodEnd <= :to
+        order by m.periodStart
+        """)
+    List<MetricSnapshot> findSnapshotsByMetricType(
+        @Param("workspaceId") UUID workspaceId,
+        @Param("repositoryIds") Collection<UUID> repositoryIds,
+        @Param("metricType") MetricType metricType,
+        @Param("granularity") MetricGranularity granularity,
         @Param("from") Instant from,
         @Param("to") Instant to
     );
