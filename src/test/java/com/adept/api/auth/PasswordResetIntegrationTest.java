@@ -100,7 +100,11 @@ class PasswordResetIntegrationTest extends PartCIntegrationTestSupport {
         String expiredEmail = uniqueEmail("reset-expired");
         signup(expiredEmail);
         String expired = issueReset(expiredEmail);
-        jdbc.update("UPDATE user_action_tokens SET expires_at = CURRENT_TIMESTAMP WHERE token_hash = ?",
+        jdbc.update("""
+            UPDATE user_action_tokens
+            SET expires_at = CURRENT_TIMESTAMP - INTERVAL '1 second'
+            WHERE token_hash = ?
+            """,
             actionTokenService.hash(ActionTokenPurpose.RESET_PASSWORD, expired));
 
         String consumedEmail = uniqueEmail("reset-consumed");

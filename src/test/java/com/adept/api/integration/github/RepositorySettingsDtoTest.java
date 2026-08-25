@@ -32,8 +32,11 @@ class RepositorySettingsDtoTest {
     private RepositorySettingsDto settings(String deploymentSignal) {
         return new RepositorySettingsDto(
             deploymentSignal,
+            List.of("main"),
             List.of("production"),
             List.of("deploy"),
+            "GITHUB",
+            List.of(),
             MetricGranularity.WEEK,
             90
         );

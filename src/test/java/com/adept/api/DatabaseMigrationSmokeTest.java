@@ -57,7 +57,7 @@ class DatabaseMigrationSmokeTest {
 
     @Test
     void contextLoadsAndHibernateValidatesFlywaySchema() {
-        assertThat(flyway.info().applied()).hasSize(12);
+        assertThat(flyway.info().applied()).hasSize(13);
 
         Integer serverVersion = jdbc.queryForObject(
             "SELECT current_setting('server_version_num')::integer", Integer.class);
@@ -68,6 +68,9 @@ class DatabaseMigrationSmokeTest {
             "SELECT to_regclass('public.users')::text", String.class)).isEqualTo("users");
         assertThat(jdbc.queryForObject(
             "SELECT to_regclass('public.audit_logs')::text", String.class)).isEqualTo("audit_logs");
+        assertThat(jdbc.queryForObject(
+            "SELECT to_regclass('public.pull_request_commits')::text", String.class))
+            .isEqualTo("pull_request_commits");
         assertThat(jdbc.queryForObject(
             "SELECT to_regclass('public.projects')::text", String.class)).isEqualTo("projects");
         assertThat(jdbc.queryForObject(
@@ -114,10 +117,18 @@ class DatabaseMigrationSmokeTest {
             "SELECT to_regclass('public.uq_processing_jobs_jira_webhook_renewal') IS NOT NULL",
             Boolean.class
         )).isTrue();
+        assertThat(jdbc.queryForObject(
+            "SELECT to_regclass('public.uq_incidents_failed_deployment') IS NOT NULL",
+            Boolean.class
+        )).isTrue();
+        assertThat(jdbc.queryForObject(
+            "SELECT to_regclass('public.uq_processing_job_pending_metric_recalculation') IS NOT NULL",
+            Boolean.class
+        )).isTrue();
 
         var secondRun = flyway.migrate();
 
         assertThat(secondRun.migrationsExecuted).isZero();
-        assertThat(flyway.info().applied()).hasSize(12);
+        assertThat(flyway.info().applied()).hasSize(13);
     }
 }

@@ -4,12 +4,13 @@ The Adept API is the Java backend and sole owner of the shared PostgreSQL databa
 
 ## Overview & Current Status
 
-The API implementation through Phase 5 covers authentication, workspaces, projects, provider integrations, secure webhook ingestion, and OpenAPI contract generation. Phase 5 acceptance remains pending until the coordinated API and engine verification suites pass:
-- **Framework & Runtime**: Spring Boot 4.1 on Java 25, Flyway V1–V12, Hibernate validation, PostgreSQL 18.
+The API implementation through Phase 6 covers authentication, workspaces, projects, provider integrations, secure webhook ingestion, repository-scoped DORA metrics, and complete OpenAPI contract generation.
+- **Framework & Runtime**: Spring Boot 4.1 on Java 25, Flyway V1–V13, Hibernate validation, PostgreSQL 18.
 - **Authentication**: JWT access tokens, HttpOnly refresh cookies (`adept_refresh`), CSRF protection (`XSRF-TOKEN` / `X-XSRF-TOKEN`), BCrypt password hashing.
 - **Workspace Management**: Managers can create additional tenant workspaces, switch between memberships, update workspace settings, and request controlled workspace deletion.
 - **Projects**: Projects group repositories inside one workspace. Managers manage projects and repository links; Leads see only projects containing repositories assigned to them.
 - **Integrations & Webhooks**: Managers connect GitHub and Jira, configure tracked repositories and mappings, and receive verified, duplicate-safe provider deliveries that are stored with durable processing jobs in one transaction.
+- **DORA Metrics**: Summary and series endpoints enforce Manager/Lead repository scope, use half-open time ranges, aggregate exact `dora-v2` observations, and report calculation time, workspace timezone, version, and staleness.
 - **OpenAPI**: Contracts configured via `springdoc-openapi` and exported deterministically to `docs/openapi/adept-api-v1.json`.
 
 ## Local Sibling Layout
@@ -129,4 +130,4 @@ any application/AWS secret.
 
 Flyway files under `src/main/resources/db/migration` are the schema source of truth. Hibernate uses `ddl-auto: validate`. Never edit an already-shared migration. Generate local ERD with `./scripts/generate-erd.sh`.
 
-The authentication/workspace baseline ends at V8, project grouping is isolated in V9, Google authentication is isolated in V10, recent-authentication session metadata is isolated in V11, and hashed Jira webhook credentials are isolated in V12. The migration inventory is V1–V12.
+The authentication/workspace baseline ends at V8, project grouping is isolated in V9, Google authentication is isolated in V10, recent-authentication session metadata is isolated in V11, hashed Jira webhook credentials are isolated in V12, and Phase 6 metric correctness support is isolated in V13. The migration inventory is V1–V13.

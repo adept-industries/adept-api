@@ -3,6 +3,7 @@ package com.adept.api.metric;
 import java.time.Instant;
 import java.util.UUID;
 
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -30,7 +31,7 @@ public class MetricController {
         this.currentPrincipal = currentPrincipal;
     }
 
-    @GetMapping("/summary")
+    @GetMapping(value = "/summary", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<DoraMetricsSummaryResponse> getSummary(
             @RequestParam(required = false) UUID projectId,
             @RequestParam(required = false) UUID repositoryId,
@@ -47,7 +48,7 @@ public class MetricController {
         return ResponseEntity.ok(response);
     }
 
-    @GetMapping("/series")
+    @GetMapping(value = "/series", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<DoraMetricsSeriesResponse> getSeries(
             @RequestParam(required = false) UUID projectId,
             @RequestParam(required = false) UUID repositoryId,
