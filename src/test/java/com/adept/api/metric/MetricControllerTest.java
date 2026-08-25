@@ -67,11 +67,14 @@ class MetricControllerTest {
             2,
             now.minusSeconds(86400 * 30),
             now,
+            "UTC",
+            "dora-v2",
             new MetricSummaryDto(BigDecimal.valueOf(4.5), "deployments/week", 18, MetricRating.HIGH, Map.of()),
             new MetricSummaryDto(BigDecimal.valueOf(1.2), "hours", 12, MetricRating.HIGH, Map.of()),
             new MetricSummaryDto(BigDecimal.valueOf(0.8), "hours", 2, MetricRating.ELITE, Map.of()),
             new MetricSummaryDto(BigDecimal.valueOf(5.0), "percent", 18, MetricRating.ELITE, Map.of()),
-            now
+            now,
+            false
         );
 
         when(metricService.getSummary(principal, null, null, null, null))
@@ -112,7 +115,13 @@ class MetricControllerTest {
             null,
             null,
             1,
+            t1,
+            t2,
+            "UTC",
             MetricGranularity.DAY,
+            "dora-v2",
+            t2,
+            false,
             List.of(item)
         );
 

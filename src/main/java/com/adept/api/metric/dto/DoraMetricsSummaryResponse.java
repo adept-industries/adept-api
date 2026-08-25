@@ -10,9 +10,12 @@ public record DoraMetricsSummaryResponse(
     int repositoryCount,
     Instant periodStart,
     Instant periodEnd,
+    String timezone,
+    String calculationVersion,
     MetricSummaryDto deploymentFrequency,
     MetricSummaryDto changeLeadTime,
     MetricSummaryDto recoveryTime,
     MetricSummaryDto changeFailureRate,
-    Instant calculatedAt
+    Instant calculatedAt,
+    boolean stale
 ) {}

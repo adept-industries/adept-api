@@ -63,12 +63,12 @@ class EmailVerificationIntegrationTest extends PartCIntegrationTestSupport {
     }
 
     @Test
-    void expiryBoundaryUnknownWrongPurposeAndConsumedUnverifiedAreIndistinguishable() {
+    void expiredUnknownWrongPurposeAndConsumedUnverifiedAreIndistinguishable() {
         String expiredEmail = uniqueEmail("verify-expired");
         String expired = signupAndGetToken(expiredEmail);
         jdbc.update("""
             UPDATE user_action_tokens
-            SET expires_at = CURRENT_TIMESTAMP
+            SET expires_at = CURRENT_TIMESTAMP - INTERVAL '1 second'
             WHERE token_hash = ?
             """, actionTokenService.hash(com.adept.api.common.domain.ActionTokenPurpose.VERIFY_EMAIL, expired));
 

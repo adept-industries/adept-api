@@ -1,6 +1,26 @@
 {
   "components": {
     "schemas": {
+      "AcceptInvitationRequest": {
+        "properties": {
+          "displayName": {
+            "maxLength": 100,
+            "minLength": 0,
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          },
+          "token": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "token"
+        ],
+        "type": "object"
+      },
       "ActionTokenRequest": {
         "properties": {
           "token": {
@@ -218,6 +238,116 @@
         ],
         "type": "object"
       },
+      "DoraMetricsSeriesResponse": {
+        "properties": {
+          "calculatedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "calculationVersion": {
+            "type": "string"
+          },
+          "granularity": {
+            "enum": [
+              "DAY",
+              "WEEK",
+              "MONTH"
+            ],
+            "type": "string"
+          },
+          "periodEnd": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "periodStart": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "projectId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "repositoryCount": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "repositoryId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "series": {
+            "items": {
+              "$ref": "#/components/schemas/MetricSeriesItemDto"
+            },
+            "type": "array"
+          },
+          "stale": {
+            "type": "boolean"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "DoraMetricsSummaryResponse": {
+        "properties": {
+          "calculatedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "calculationVersion": {
+            "type": "string"
+          },
+          "changeFailureRate": {
+            "$ref": "#/components/schemas/MetricSummaryDto"
+          },
+          "changeLeadTime": {
+            "$ref": "#/components/schemas/MetricSummaryDto"
+          },
+          "deploymentFrequency": {
+            "$ref": "#/components/schemas/MetricSummaryDto"
+          },
+          "periodEnd": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "periodStart": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "projectId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "recoveryTime": {
+            "$ref": "#/components/schemas/MetricSummaryDto"
+          },
+          "repositoryCount": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "repositoryId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "stale": {
+            "type": "boolean"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "EmailRequest": {
         "properties": {
           "email": {
@@ -246,6 +376,72 @@
           "field",
           "message"
         ],
+        "type": "object"
+      },
+      "GithubConnectUrlResponse": {
+        "properties": {
+          "state": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "GithubIntegrationResponse": {
+        "properties": {
+          "accountLogin": {
+            "type": "string"
+          },
+          "accountType": {
+            "enum": [
+              "ORGANIZATION",
+              "USER"
+            ],
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "installationId": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "installedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "lastSyncedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "repositoryCount": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "repositorySelection": {
+            "enum": [
+              "ALL",
+              "SELECTED"
+            ],
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "ACTIVE",
+              "SUSPENDED",
+              "REVOKED",
+              "ERROR"
+            ],
+            "type": "string"
+          },
+          "workspaceId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
         "type": "object"
       },
       "GoogleOnboardingRequest": {
@@ -279,6 +475,146 @@
         ],
         "type": "object"
       },
+      "InvitationPreviewResponse": {
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "existingAccount": {
+            "type": "boolean"
+          },
+          "expiresAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "hasPassword": {
+            "type": "boolean"
+          },
+          "repositories": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "role": {
+            "enum": [
+              "MANAGER",
+              "LEAD"
+            ],
+            "type": "string"
+          },
+          "workspaceName": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "JiraConnectUrlResponse": {
+        "properties": {
+          "state": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "JiraIntegrationResponse": {
+        "properties": {
+          "cloudId": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "lastSyncedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "projectCount": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "siteUrl": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "ACTIVE",
+              "SUSPENDED",
+              "REVOKED",
+              "ERROR"
+            ],
+            "type": "string"
+          },
+          "workspaceId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "JiraProjectResponse": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "jiraIntegrationId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "jiraProjectId": {
+            "type": "string"
+          },
+          "lastSyncedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "projectKey": {
+            "type": "string"
+          },
+          "projectName": {
+            "type": "string"
+          },
+          "projectType": {
+            "type": "string"
+          },
+          "trackingEnabled": {
+            "type": "boolean"
+          },
+          "workspaceId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "LeadCandidateResponse": {
+        "properties": {
+          "avatarUrl": {
+            "type": "string"
+          },
+          "githubUserId": {
+            "type": "string"
+          },
+          "login": {
+            "type": "string"
+          },
+          "permission": {
+            "type": "string"
+          },
+          "publicEmail": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "LoginRequest": {
         "properties": {
           "email": {
@@ -307,6 +643,21 @@
         },
         "required": [
           "email"
+        ],
+        "type": "object"
+      },
+      "MapRepositoryJiraProjectsRequest": {
+        "properties": {
+          "jiraProjectIds": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "jiraProjectIds"
         ],
         "type": "object"
       },
@@ -369,6 +720,71 @@
           "workspaceName",
           "workspaceSlug"
         ],
+        "type": "object"
+      },
+      "MetricSeriesItemDto": {
+        "properties": {
+          "dimensions": {
+            "additionalProperties": {},
+            "type": "object"
+          },
+          "metricType": {
+            "enum": [
+              "CHANGE_LEAD_TIME_HOURS",
+              "DEPLOYMENT_FREQUENCY",
+              "FAILED_DEPLOYMENT_RECOVERY_TIME_HOURS",
+              "CHANGE_FAILURE_RATE_PERCENT"
+            ],
+            "type": "string"
+          },
+          "periodEnd": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "periodStart": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "sampleSize": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "unit": {
+            "type": "string"
+          },
+          "value": {
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "MetricSummaryDto": {
+        "properties": {
+          "dimensions": {
+            "additionalProperties": {},
+            "type": "object"
+          },
+          "rating": {
+            "enum": [
+              "ELITE",
+              "HIGH",
+              "MEDIUM",
+              "LOW",
+              "UNKNOWN"
+            ],
+            "type": "string"
+          },
+          "sampleSize": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "unit": {
+            "type": "string"
+          },
+          "value": {
+            "type": "number"
+          }
+        },
         "type": "object"
       },
       "PasswordReauthenticationRequest": {
@@ -563,6 +979,111 @@
         ],
         "type": "object"
       },
+      "RepositoryResponse": {
+        "properties": {
+          "archived": {
+            "type": "boolean"
+          },
+          "defaultBranch": {
+            "type": "string"
+          },
+          "fullName": {
+            "type": "string"
+          },
+          "githubIntegrationId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "githubRepoId": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "lastSyncedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "ownerLogin": {
+            "type": "string"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/RepositorySettingsDto"
+          },
+          "trackingEnabled": {
+            "type": "boolean"
+          },
+          "visibility": {
+            "enum": [
+              "PUBLIC",
+              "PRIVATE",
+              "INTERNAL"
+            ],
+            "type": "string"
+          },
+          "workspaceId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "RepositorySettingsDto": {
+        "properties": {
+          "backfillDays": {
+            "format": "int32",
+            "maximum": 365,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "defaultMetricGranularity": {
+            "enum": [
+              "DAY",
+              "WEEK",
+              "MONTH"
+            ],
+            "type": "string"
+          },
+          "deploymentSignal": {
+            "pattern": "^(WORKFLOW_RUN|DEPLOYMENT)$",
+            "type": "string"
+          },
+          "deploymentWorkflowNamePatterns": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "doraExclusions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "incidentSource": {
+            "pattern": "^(GITHUB|JIRA|MANUAL|BOTH)$",
+            "type": "string"
+          },
+          "productionBranchPatterns": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "productionEnvironmentPatterns": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
       "ResetPasswordRequest": {
         "properties": {
           "newPassword": {
@@ -639,6 +1160,17 @@
         ],
         "type": "object"
       },
+      "UpdateJiraProjectRequest": {
+        "properties": {
+          "trackingEnabled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "trackingEnabled"
+        ],
+        "type": "object"
+      },
       "UpdateProjectRequest": {
         "properties": {
           "description": {
@@ -646,6 +1178,17 @@
           },
           "name": {
             "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "UpdateRepositoryRequest": {
+        "properties": {
+          "settings": {
+            "$ref": "#/components/schemas/RepositorySettingsDto"
+          },
+          "trackingEnabled": {
+            "type": "boolean"
           }
         },
         "type": "object"
@@ -803,7 +1346,7 @@
     }
   },
   "info": {
-    "description": "Adept Industries Phase 2 API contract.",
+    "description": "Adept Industries API contract.",
     "title": "Adept API",
     "version": "v1"
   },
@@ -818,7 +1361,7 @@
             "description": "CSRF cookie issued",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -860,7 +1403,7 @@
             "description": "Request accepted",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -881,7 +1424,7 @@
             "description": "Validation failed or the request was malformed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -902,7 +1445,7 @@
             "description": "CSRF, origin, membership, or role authorization failed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -923,7 +1466,7 @@
             "description": "The request body exceeded the 16 KiB limit",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -944,7 +1487,7 @@
             "description": "The request body used an unsupported media type",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -965,7 +1508,7 @@
             "description": "A request rate limit was exceeded",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -1020,7 +1563,7 @@
             "description": "Adept account and session created",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -1047,7 +1590,7 @@
             "description": "Validation failed or the request was malformed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -1074,7 +1617,7 @@
             "description": "Authentication or session validation failed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -1101,7 +1644,7 @@
             "description": "CSRF, origin, membership, or role authorization failed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -1128,7 +1671,7 @@
             "description": "The requested state conflicts with current state",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -1155,7 +1698,7 @@
             "description": "The request body exceeded the 16 KiB limit",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -1182,7 +1725,7 @@
             "description": "The request body used an unsupported media type",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -1209,7 +1752,7 @@
             "description": "A request rate limit was exceeded",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -1262,7 +1805,7 @@
             "description": "Google authorization URL returned",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -1289,7 +1832,7 @@
             "description": "Authentication or session validation failed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -1316,7 +1859,7 @@
             "description": "CSRF, origin, membership, or role authorization failed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -1343,7 +1886,7 @@
             "description": "The scoped resource was not found",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -1370,7 +1913,7 @@
             "description": "A request rate limit was exceeded",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -1416,7 +1959,7 @@
             "description": "Redirect to Google",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -1450,7 +1993,7 @@
             "description": "The scoped resource was not found",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -1477,7 +2020,7 @@
             "description": "A request rate limit was exceeded",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -1534,7 +2077,7 @@
             "description": "Session created",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -1561,7 +2104,7 @@
             "description": "Validation failed or the request was malformed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -1588,7 +2131,7 @@
             "description": "Authentication or session validation failed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -1615,7 +2158,7 @@
             "description": "CSRF, origin, membership, or role authorization failed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -1642,7 +2185,7 @@
             "description": "The request body exceeded the 16 KiB limit",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -1669,7 +2212,7 @@
             "description": "The request body used an unsupported media type",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -1696,7 +2239,7 @@
             "description": "A request rate limit was exceeded",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -1741,7 +2284,7 @@
             "description": "Session cookies cleared",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -1768,7 +2311,7 @@
             "description": "CSRF, origin, membership, or role authorization failed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -1795,7 +2338,7 @@
             "description": "A request rate limit was exceeded",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -1846,7 +2389,7 @@
             "description": "Current identity returned",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -1867,7 +2410,7 @@
             "description": "Authentication or session validation failed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -1888,7 +2431,7 @@
             "description": "CSRF, origin, membership, or role authorization failed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -1935,7 +2478,7 @@
             "description": "Identity verified and a recent session issued",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -1962,7 +2505,7 @@
             "description": "Validation failed or the request was malformed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -1989,7 +2532,7 @@
             "description": "Authentication or session validation failed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -2016,7 +2559,7 @@
             "description": "CSRF, origin, membership, or role authorization failed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -2043,7 +2586,7 @@
             "description": "The request body exceeded the 16 KiB limit",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -2070,7 +2613,7 @@
             "description": "The request body used an unsupported media type",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -2097,7 +2640,7 @@
             "description": "A request rate limit was exceeded",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -2158,7 +2701,7 @@
             "description": "Session refreshed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -2185,7 +2728,7 @@
             "description": "Validation failed or the request was malformed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -2212,7 +2755,7 @@
             "description": "Authentication or session validation failed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -2239,7 +2782,7 @@
             "description": "CSRF, origin, membership, or role authorization failed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -2266,7 +2809,7 @@
             "description": "The request body exceeded the 16 KiB limit",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -2293,7 +2836,7 @@
             "description": "The request body used an unsupported media type",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -2320,7 +2863,7 @@
             "description": "A request rate limit was exceeded",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -2375,7 +2918,7 @@
             "description": "Request accepted",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -2396,7 +2939,7 @@
             "description": "Validation failed or the request was malformed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -2417,7 +2960,7 @@
             "description": "CSRF, origin, membership, or role authorization failed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -2438,7 +2981,7 @@
             "description": "The request body exceeded the 16 KiB limit",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -2459,7 +3002,7 @@
             "description": "The request body used an unsupported media type",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -2480,7 +3023,7 @@
             "description": "A request rate limit was exceeded",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -2528,7 +3071,7 @@
             "description": "Password reset and session cookies cleared",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -2555,7 +3098,7 @@
             "description": "Validation failed or the request was malformed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -2582,7 +3125,7 @@
             "description": "CSRF, origin, membership, or role authorization failed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -2609,7 +3152,7 @@
             "description": "The request body exceeded the 16 KiB limit",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -2636,7 +3179,7 @@
             "description": "The request body used an unsupported media type",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -2663,7 +3206,7 @@
             "description": "A request rate limit was exceeded",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -2724,7 +3267,7 @@
             "description": "Account created",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -2745,7 +3288,7 @@
             "description": "Validation failed or the request was malformed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -2766,7 +3309,7 @@
             "description": "CSRF, origin, membership, or role authorization failed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -2787,7 +3330,7 @@
             "description": "The requested state conflicts with current state",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -2808,7 +3351,7 @@
             "description": "The request body exceeded the 16 KiB limit",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -2829,7 +3372,7 @@
             "description": "The request body used an unsupported media type",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -2850,7 +3393,7 @@
             "description": "A request rate limit was exceeded",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -2906,7 +3449,7 @@
             "description": "Workspace selected",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -2927,7 +3470,7 @@
             "description": "Validation failed or the request was malformed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -2948,7 +3491,7 @@
             "description": "Authentication or session validation failed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -2975,7 +3518,7 @@
             "description": "CSRF, origin, membership, or role authorization failed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -2996,7 +3539,7 @@
             "description": "The scoped resource was not found",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -3017,7 +3560,7 @@
             "description": "A request rate limit was exceeded",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -3066,7 +3609,7 @@
             "description": "Email verified",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -3087,7 +3630,7 @@
             "description": "Validation failed or the request was malformed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -3108,7 +3651,7 @@
             "description": "CSRF, origin, membership, or role authorization failed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -3129,7 +3672,7 @@
             "description": "The request body exceeded the 16 KiB limit",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -3150,7 +3693,7 @@
             "description": "The request body used an unsupported media type",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -3171,7 +3714,7 @@
             "description": "A request rate limit was exceeded",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -3226,7 +3769,7 @@
             "description": "Workspace and authenticated session created",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -3247,7 +3790,7 @@
             "description": "Validation failed or the request was malformed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -3268,7 +3811,7 @@
             "description": "Authentication or session validation failed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -3295,7 +3838,7 @@
             "description": "CSRF, origin, membership, or role authorization failed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -3316,7 +3859,7 @@
             "description": "The requested state conflicts with current state",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -3337,7 +3880,7 @@
             "description": "The request body exceeded the 16 KiB limit",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -3358,7 +3901,7 @@
             "description": "The request body used an unsupported media type",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -3379,7 +3922,7 @@
             "description": "A request rate limit was exceeded",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -3410,6 +3953,649 @@
         ]
       }
     },
+    "/api/v1/integrations/github": {
+      "get": {
+        "operationId": "getIntegration_1",
+        "responses": {
+          "200": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/GithubIntegrationResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "tags": [
+          "github-integration-controller"
+        ]
+      }
+    },
+    "/api/v1/integrations/github/callback": {
+      "get": {
+        "operationId": "handleCallback_1",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "installation_id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [],
+        "tags": [
+          "github-integration-controller"
+        ]
+      }
+    },
+    "/api/v1/integrations/github/connect-url": {
+      "post": {
+        "operationId": "createConnectUrl_1",
+        "responses": {
+          "200": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/GithubConnectUrlResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+            "csrfHeader": []
+          }
+        ],
+        "tags": [
+          "github-integration-controller"
+        ]
+      }
+    },
+    "/api/v1/integrations/github/{integrationId}": {
+      "delete": {
+        "operationId": "disconnect_1",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "integrationId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+            "csrfHeader": []
+          }
+        ],
+        "tags": [
+          "github-integration-controller"
+        ]
+      }
+    },
+    "/api/v1/integrations/github/{integrationId}/sync": {
+      "post": {
+        "operationId": "syncRepositories",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "integrationId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+            "csrfHeader": []
+          }
+        ],
+        "tags": [
+          "github-integration-controller"
+        ]
+      }
+    },
+    "/api/v1/integrations/jira": {
+      "get": {
+        "operationId": "getIntegration",
+        "responses": {
+          "200": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/JiraIntegrationResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "tags": [
+          "jira-integration-controller"
+        ]
+      }
+    },
+    "/api/v1/integrations/jira/callback": {
+      "get": {
+        "operationId": "handleCallback",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [],
+        "tags": [
+          "jira-integration-controller"
+        ]
+      }
+    },
+    "/api/v1/integrations/jira/connect-url": {
+      "post": {
+        "operationId": "createConnectUrl",
+        "responses": {
+          "200": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/JiraConnectUrlResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+            "csrfHeader": []
+          }
+        ],
+        "tags": [
+          "jira-integration-controller"
+        ]
+      }
+    },
+    "/api/v1/integrations/jira/{integrationId}": {
+      "delete": {
+        "operationId": "disconnect",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "integrationId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+            "csrfHeader": []
+          }
+        ],
+        "tags": [
+          "jira-integration-controller"
+        ]
+      }
+    },
+    "/api/v1/integrations/jira/{integrationId}/sync": {
+      "post": {
+        "operationId": "syncProjects",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "integrationId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+            "csrfHeader": []
+          }
+        ],
+        "tags": [
+          "jira-integration-controller"
+        ]
+      }
+    },
+    "/api/v1/invitations/accept": {
+      "post": {
+        "operationId": "accept",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptInvitationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthSessionResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "csrfHeader": []
+          }
+        ],
+        "tags": [
+          "invitation-controller"
+        ]
+      }
+    },
+    "/api/v1/invitations/preview": {
+      "get": {
+        "operationId": "preview",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvitationPreviewResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [],
+        "tags": [
+          "invitation-controller"
+        ]
+      }
+    },
+    "/api/v1/invitations/{invitationId}": {
+      "delete": {
+        "operationId": "delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "invitationId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+            "csrfHeader": []
+          }
+        ],
+        "tags": [
+          "invitation-controller"
+        ]
+      }
+    },
+    "/api/v1/invitations/{invitationId}/resend": {
+      "post": {
+        "operationId": "resend",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "invitationId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+            "csrfHeader": []
+          }
+        ],
+        "tags": [
+          "invitation-controller"
+        ]
+      }
+    },
+    "/api/v1/jira/projects": {
+      "get": {
+        "operationId": "listProjects_1",
+        "responses": {
+          "200": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/JiraProjectResponse"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "tags": [
+          "jira-integration-controller"
+        ]
+      }
+    },
+    "/api/v1/jira/projects/{projectId}": {
+      "patch": {
+        "operationId": "updateProjectTracking",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateJiraProjectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/JiraProjectResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+            "csrfHeader": []
+          }
+        ],
+        "tags": [
+          "jira-integration-controller"
+        ]
+      }
+    },
+    "/api/v1/metrics/series": {
+      "get": {
+        "operationId": "getSeries",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "projectId",
+            "required": false,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "repositoryId",
+            "required": false,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "metricType",
+            "required": false,
+            "schema": {
+              "enum": [
+                "CHANGE_LEAD_TIME_HOURS",
+                "DEPLOYMENT_FREQUENCY",
+                "FAILED_DEPLOYMENT_RECOVERY_TIME_HOURS",
+                "CHANGE_FAILURE_RATE_PERCENT"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "granularity",
+            "required": false,
+            "schema": {
+              "default": "DAY",
+              "enum": [
+                "DAY",
+                "WEEK",
+                "MONTH"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DoraMetricsSeriesResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "tags": [
+          "metric-controller"
+        ]
+      }
+    },
+    "/api/v1/metrics/summary": {
+      "get": {
+        "operationId": "getSummary",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "projectId",
+            "required": false,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "repositoryId",
+            "required": false,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DoraMetricsSummaryResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "tags": [
+          "metric-controller"
+        ]
+      }
+    },
     "/api/v1/projects": {
       "get": {
         "description": "Managers receive all projects. Leads receive only projects containing an actively assigned repository.",
@@ -3429,7 +4615,7 @@
             "description": "Projects returned",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -3450,7 +4636,7 @@
             "description": "Authentication or session validation failed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -3471,7 +4657,7 @@
             "description": "CSRF, origin, membership, or role authorization failed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -3516,7 +4702,7 @@
             "description": "Project created",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -3537,7 +4723,7 @@
             "description": "Validation failed or the request was malformed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -3558,7 +4744,7 @@
             "description": "Authentication or session validation failed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -3579,7 +4765,7 @@
             "description": "CSRF, origin, membership, or role authorization failed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -3600,7 +4786,7 @@
             "description": "The requested state conflicts with current state",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -3621,7 +4807,7 @@
             "description": "The request body exceeded the 16 KiB limit",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -3642,7 +4828,7 @@
             "description": "The request body used an unsupported media type",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -3685,7 +4871,7 @@
             "description": "Project deleted",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -3706,7 +4892,7 @@
             "description": "Authentication or session validation failed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -3727,7 +4913,7 @@
             "description": "CSRF, origin, membership, or role authorization failed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -3748,7 +4934,7 @@
             "description": "The scoped resource was not found",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -3795,7 +4981,7 @@
             "description": "Project returned",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -3816,7 +5002,7 @@
             "description": "Authentication or session validation failed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -3837,7 +5023,7 @@
             "description": "CSRF, origin, membership, or role authorization failed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -3858,7 +5044,7 @@
             "description": "The scoped resource was not found",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -3914,7 +5100,7 @@
             "description": "Project updated",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -3935,7 +5121,7 @@
             "description": "Validation failed or the request was malformed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -3956,7 +5142,7 @@
             "description": "Authentication or session validation failed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -3977,7 +5163,7 @@
             "description": "CSRF, origin, membership, or role authorization failed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -3998,7 +5184,7 @@
             "description": "The scoped resource was not found",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -4019,7 +5205,7 @@
             "description": "The requested state conflicts with current state",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -4040,7 +5226,7 @@
             "description": "The request body exceeded the 16 KiB limit",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -4061,7 +5247,7 @@
             "description": "The request body used an unsupported media type",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -4121,7 +5307,7 @@
             "description": "Project repositories replaced",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -4142,7 +5328,7 @@
             "description": "Validation failed or the request was malformed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -4163,7 +5349,7 @@
             "description": "Authentication or session validation failed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -4184,7 +5370,7 @@
             "description": "CSRF, origin, membership, or role authorization failed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -4205,7 +5391,7 @@
             "description": "The scoped resource was not found",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -4226,7 +5412,7 @@
             "description": "The request body exceeded the 16 KiB limit",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -4247,7 +5433,7 @@
             "description": "The request body used an unsupported media type",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -4267,6 +5453,202 @@
         "summary": "Replace a project's repository set",
         "tags": [
           "project-controller"
+        ]
+      }
+    },
+    "/api/v1/repositories": {
+      "get": {
+        "operationId": "list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "trackingOnly",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RepositoryResponse"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "tags": [
+          "repository-controller"
+        ]
+      }
+    },
+    "/api/v1/repositories/{repositoryId}": {
+      "get": {
+        "operationId": "get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "repositoryId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "tags": [
+          "repository-controller"
+        ]
+      },
+      "patch": {
+        "operationId": "update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "repositoryId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateRepositoryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+            "csrfHeader": []
+          }
+        ],
+        "tags": [
+          "repository-controller"
+        ]
+      }
+    },
+    "/api/v1/repositories/{repositoryId}/jira-projects": {
+      "get": {
+        "operationId": "getMappedJiraProjects",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "repositoryId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/JiraProjectResponse"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "tags": [
+          "repository-controller"
+        ]
+      },
+      "post": {
+        "operationId": "mapJiraProjects",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "repositoryId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MapRepositoryJiraProjectsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+            "csrfHeader": []
+          }
+        ],
+        "tags": [
+          "repository-controller"
         ]
       }
     },
@@ -4299,6 +5681,11 @@
             "description": "OK"
           }
         },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "tags": [
           "repository-controller"
         ]
@@ -4338,7 +5725,7 @@
             "description": "Pending invitation assignment returned",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -4359,7 +5746,7 @@
             "description": "Validation failed or the request was malformed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -4380,7 +5767,7 @@
             "description": "Authentication or session validation failed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -4401,7 +5788,7 @@
             "description": "CSRF, origin, membership, or role authorization failed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -4422,7 +5809,7 @@
             "description": "The scoped resource was not found",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -4443,7 +5830,7 @@
             "description": "The requested state conflicts with current state",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -4464,7 +5851,7 @@
             "description": "The request body exceeded the 16 KiB limit",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -4485,7 +5872,7 @@
             "description": "The request body used an unsupported media type",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -4508,6 +5895,131 @@
         ]
       }
     },
+    "/api/v1/repositories/{repositoryId}/lead-assignments/{assignmentId}": {
+      "delete": {
+        "operationId": "deleteLeadAssignment",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "repositoryId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "assignmentId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+            "csrfHeader": []
+          }
+        ],
+        "tags": [
+          "repository-controller"
+        ]
+      }
+    },
+    "/api/v1/repositories/{repositoryId}/lead-candidates": {
+      "get": {
+        "operationId": "getLeadCandidates",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "repositoryId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/LeadCandidateResponse"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "tags": [
+          "repository-controller"
+        ]
+      }
+    },
+    "/api/v1/webhooks/github": {
+      "post": {
+        "operationId": "receiveGithubWebhook",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [],
+        "tags": [
+          "webhook-controller"
+        ]
+      }
+    },
+    "/api/v1/webhooks/jira/{integrationId}": {
+      "post": {
+        "operationId": "receiveJiraWebhook",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "integrationId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "token",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [],
+        "tags": [
+          "jira-webhook-controller"
+        ]
+      }
+    },
     "/api/v1/workspaces": {
       "get": {
         "operationId": "listWorkspaces",
@@ -4526,7 +6038,7 @@
             "description": "Accessible workspaces returned",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -4547,7 +6059,7 @@
             "description": "Authentication or session validation failed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -4568,7 +6080,7 @@
             "description": "CSRF, origin, membership, or role authorization failed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -4614,7 +6126,7 @@
             "description": "Workspace created",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -4635,7 +6147,7 @@
             "description": "Validation failed or the request was malformed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -4656,7 +6168,7 @@
             "description": "Authentication or session validation failed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -4677,7 +6189,7 @@
             "description": "CSRF, origin, membership, or role authorization failed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -4698,7 +6210,7 @@
             "description": "The requested state conflicts with current state",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -4719,7 +6231,7 @@
             "description": "The request body exceeded the 16 KiB limit",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -4740,7 +6252,7 @@
             "description": "The request body used an unsupported media type",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -4789,7 +6301,7 @@
             "description": "Deletion requested",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -4810,7 +6322,7 @@
             "description": "Validation failed or the request was malformed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -4831,7 +6343,7 @@
             "description": "Authentication or session validation failed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -4852,7 +6364,7 @@
             "description": "CSRF, origin, membership, or role authorization failed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -4873,7 +6385,7 @@
             "description": "The requested state conflicts with current state",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -4894,7 +6406,7 @@
             "description": "The request body exceeded the 16 KiB limit",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -4915,7 +6427,7 @@
             "description": "The request body used an unsupported media type",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -4936,7 +6448,7 @@
             "description": "A request rate limit was exceeded",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -4980,7 +6492,7 @@
             "description": "Current workspace returned",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -5001,7 +6513,7 @@
             "description": "Authentication or session validation failed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -5022,7 +6534,7 @@
             "description": "CSRF, origin, membership, or role authorization failed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -5067,7 +6579,7 @@
             "description": "Workspace updated",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -5088,7 +6600,7 @@
             "description": "Validation failed or the request was malformed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -5109,7 +6621,7 @@
             "description": "Authentication or session validation failed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -5130,7 +6642,7 @@
             "description": "CSRF, origin, membership, or role authorization failed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -5151,7 +6663,7 @@
             "description": "The requested state conflicts with current state",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -5172,7 +6684,7 @@
             "description": "The request body exceeded the 16 KiB limit",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -5193,7 +6705,7 @@
             "description": "The request body used an unsupported media type",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -5241,7 +6753,7 @@
             "description": "Lookup completed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -5262,7 +6774,7 @@
             "description": "Validation failed or the request was malformed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -5283,7 +6795,7 @@
             "description": "Authentication or session validation failed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -5304,7 +6816,7 @@
             "description": "CSRF, origin, membership, or role authorization failed",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -5325,7 +6837,7 @@
             "description": "The request body exceeded the 16 KiB limit",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -5346,7 +6858,7 @@
             "description": "The request body used an unsupported media type",
             "headers": {
               "Cache-Control": {
-                "description": "Sensitive Phase 2 responses are not cached.",
+                "description": "Sensitive responses are not cached.",
                 "schema": {
                   "enum": [
                     "no-store"
@@ -5364,6 +6876,36 @@
           }
         ],
         "summary": "Look up a user by email in the current workspace",
+        "tags": [
+          "workspace-controller"
+        ]
+      }
+    },
+    "/api/v1/workspaces/current/members/{membershipId}": {
+      "delete": {
+        "operationId": "removeMember",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "membershipId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+            "csrfHeader": []
+          }
+        ],
         "tags": [
           "workspace-controller"
         ]

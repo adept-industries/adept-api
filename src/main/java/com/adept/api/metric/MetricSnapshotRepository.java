@@ -20,14 +20,16 @@ public interface MetricSnapshotRepository
         where m.workspace.id = :workspaceId
           and m.repository.id in :repositoryIds
           and m.metricType = :metricType
-          and m.periodEnd >= :from
-          and m.periodStart <= :to
+          and m.calculationVersion = :calculationVersion
+          and m.periodEnd > :from
+          and m.periodStart < :to
         order by m.periodStart
         """)
     List<MetricSnapshot> findDashboardSeries(
         @Param("workspaceId") UUID workspaceId,
         @Param("repositoryIds") Collection<UUID> repositoryIds,
         @Param("metricType") MetricType metricType,
+        @Param("calculationVersion") String calculationVersion,
         @Param("from") Instant from,
         @Param("to") Instant to
     );
@@ -38,14 +40,16 @@ public interface MetricSnapshotRepository
         where m.workspace.id = :workspaceId
           and m.repository.id in :repositoryIds
           and m.granularity = :granularity
-          and m.periodEnd >= :from
-          and m.periodStart <= :to
+          and m.calculationVersion = :calculationVersion
+          and m.periodEnd > :from
+          and m.periodStart < :to
         order by m.periodStart
         """)
     List<MetricSnapshot> findSnapshots(
         @Param("workspaceId") UUID workspaceId,
         @Param("repositoryIds") Collection<UUID> repositoryIds,
         @Param("granularity") MetricGranularity granularity,
+        @Param("calculationVersion") String calculationVersion,
         @Param("from") Instant from,
         @Param("to") Instant to
     );
@@ -57,8 +61,9 @@ public interface MetricSnapshotRepository
           and m.repository.id in :repositoryIds
           and m.metricType = :metricType
           and m.granularity = :granularity
-          and m.periodEnd >= :from
-          and m.periodStart <= :to
+          and m.calculationVersion = :calculationVersion
+          and m.periodEnd > :from
+          and m.periodStart < :to
         order by m.periodStart
         """)
     List<MetricSnapshot> findSnapshotsByMetricType(
@@ -66,6 +71,7 @@ public interface MetricSnapshotRepository
         @Param("repositoryIds") Collection<UUID> repositoryIds,
         @Param("metricType") MetricType metricType,
         @Param("granularity") MetricGranularity granularity,
+        @Param("calculationVersion") String calculationVersion,
         @Param("from") Instant from,
         @Param("to") Instant to
     );

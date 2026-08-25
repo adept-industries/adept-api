@@ -2,6 +2,7 @@ package com.adept.api.security;
 
 import java.util.List;
 import java.util.UUID;
+import java.time.Instant;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -122,6 +123,30 @@ class RepositoryScopeContractIntegrationTest extends PartCIntegrationTestSupport
                 workspace_id, repository_id, lead_membership_id, assigned_by_membership_id
             ) VALUES (?, ?, ?, ?)
             """, workspaceAId, repoA1, leadAMembershipId, managerAMembershipId);
+
+        insertDeploymentFrequencySnapshot(workspaceAId, repoA1, "deployment-a1");
+        insertDeploymentFrequencySnapshot(workspaceAId, repoA2, "deployment-a2");
+
+        mockMvc.perform(get("/api/v1/metrics/summary")
+                .header("Origin", FRONTEND_ORIGIN)
+                .header("Authorization", "Bearer " + managerAToken))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.repositoryCount").value(2))
+            .andExpect(jsonPath("$.deploymentFrequency.sampleSize").value(2))
+            .andExpect(jsonPath("$.calculationVersion").value("dora-v2"));
+
+        mockMvc.perform(get("/api/v1/metrics/summary")
+                .header("Origin", FRONTEND_ORIGIN)
+                .header("Authorization", "Bearer " + leadAToken))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.repositoryCount").value(1))
+            .andExpect(jsonPath("$.deploymentFrequency.sampleSize").value(1));
+
+        mockMvc.perform(get("/api/v1/metrics/summary").param("repositoryId", repoA2.toString())
+                .header("Origin", FRONTEND_ORIGIN)
+                .header("Authorization", "Bearer " + leadAToken))
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.code").value("REPOSITORY_NOT_FOUND"));
 
         // 5. Manager A listing: sees repoA1 and repoA2, does not see repoB1
         MvcResult managerAListResult = mockMvc.perform(get("/api/v1/repositories")
@@ -322,6 +347,30 @@ class RepositoryScopeContractIntegrationTest extends PartCIntegrationTestSupport
             ) VALUES (?, ?, ?, 'LEAD', 'ACTIVE', now(), now(), now(), 0)
             """, membershipId, workspaceId, userId);
         return membershipId;
+    }
+
+    private void insertDeploymentFrequencySnapshot(
+            UUID workspaceId,
+            UUID repositoryId,
+            String observationKey) {
+        Instant observedAt = Instant.now().minusSeconds(60);
+        jdbc.update("""
+            INSERT INTO metric_snapshots (
+                workspace_id, repository_id, metric_type, granularity,
+                period_start, period_end, value, unit, sample_size,
+                calculation_version, dimensions, calculated_at
+            ) VALUES (
+                ?, ?, 'DEPLOYMENT_FREQUENCY', 'DAY',
+                date_trunc('day', now()), date_trunc('day', now()) + interval '1 day',
+                1, 'deployments/day', 1, 'dora-v2', CAST(? AS jsonb), now()
+            )
+            """,
+            workspaceId,
+            repositoryId,
+            """
+                {"observations":[{"key":"%s","at":"%s","value":1.0}]}
+                """.formatted(observationKey, observedAt)
+        );
     }
 
     private String tokenForRole(UUID membershipId, UUID workspaceId, MembershipRole role) {

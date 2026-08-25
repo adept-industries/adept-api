@@ -12,9 +12,16 @@ public record RepositorySettingsDto(
     @Pattern(regexp = "^(WORKFLOW_RUN|DEPLOYMENT)$", message = "deploymentSignal must be WORKFLOW_RUN or DEPLOYMENT")
     String deploymentSignal,
 
+    List<String> productionBranchPatterns,
+
     List<String> productionEnvironmentPatterns,
 
     List<String> deploymentWorkflowNamePatterns,
+
+    @Pattern(regexp = "^(GITHUB|JIRA|MANUAL|BOTH)$", message = "incidentSource must be GITHUB, JIRA, MANUAL, or BOTH")
+    String incidentSource,
+
+    List<String> doraExclusions,
 
     MetricGranularity defaultMetricGranularity,
 
@@ -25,8 +32,11 @@ public record RepositorySettingsDto(
     public static RepositorySettingsDto defaults() {
         return new RepositorySettingsDto(
             "WORKFLOW_RUN",
+            List.of("main", "master", "release/*"),
             List.of("production", "prod"),
-            List.of("deploy-production", "release", "deploy"),
+            List.of("*deploy*", "*production*", "*release*"),
+            "GITHUB",
+            List.of(),
             MetricGranularity.WEEK,
             90
         );

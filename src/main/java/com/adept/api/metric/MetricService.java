@@ -2,11 +2,10 @@ package com.adept.api.metric;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -19,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.adept.api.common.domain.MembershipRole;
 import com.adept.api.common.domain.MetricGranularity;
 import com.adept.api.common.domain.MetricType;
+import com.adept.api.common.error.ApiException;
 import com.adept.api.common.error.NotFoundException;
 import com.adept.api.common.error.ProblemCode;
 import com.adept.api.integration.github.GitRepository;
@@ -31,28 +31,35 @@ import com.adept.api.project.ProjectRepository;
 import com.adept.api.project.ProjectRepositoryLinkRepository;
 import com.adept.api.security.AuthenticatedPrincipal;
 import com.adept.api.security.RepositoryScopeService;
+import com.adept.api.workspace.WorkspaceRepository;
 
 @Service
 @Transactional(readOnly = true)
 public class MetricService {
+
+    static final String CALCULATION_VERSION = "dora-v2";
+    private static final Duration STALE_AFTER = Duration.ofHours(24);
 
     private final MetricSnapshotRepository metricSnapshotRepository;
     private final GitRepositoryRepository gitRepositoryRepository;
     private final ProjectRepository projectRepository;
     private final ProjectRepositoryLinkRepository projectRepositoryLinkRepository;
     private final RepositoryScopeService repositoryScopeService;
+    private final WorkspaceRepository workspaceRepository;
 
     public MetricService(
             MetricSnapshotRepository metricSnapshotRepository,
             GitRepositoryRepository gitRepositoryRepository,
             ProjectRepository projectRepository,
             ProjectRepositoryLinkRepository projectRepositoryLinkRepository,
-            RepositoryScopeService repositoryScopeService) {
+            RepositoryScopeService repositoryScopeService,
+            WorkspaceRepository workspaceRepository) {
         this.metricSnapshotRepository = metricSnapshotRepository;
         this.gitRepositoryRepository = gitRepositoryRepository;
         this.projectRepository = projectRepository;
         this.projectRepositoryLinkRepository = projectRepositoryLinkRepository;
         this.repositoryScopeService = repositoryScopeService;
+        this.workspaceRepository = workspaceRepository;
     }
 
     public DoraMetricsSummaryResponse getSummary(
@@ -61,52 +68,41 @@ public class MetricService {
             UUID repositoryId,
             Instant from,
             Instant to) {
-        List<UUID> repoIds = resolveAccessibleRepositoryIds(principal, projectId, repositoryId);
+        MetricRange range = validateRange(projectId, repositoryId, from, to);
+        List<UUID> repositoryIds = resolveAccessibleRepositoryIds(principal, projectId, repositoryId);
+        String timezone = workspaceTimezone(principal);
 
-        Instant periodEnd = to != null ? to : Instant.now();
-        Instant periodStart = from != null ? from : periodEnd.minus(30, ChronoUnit.DAYS);
-
-        if (repoIds.isEmpty()) {
-            return new DoraMetricsSummaryResponse(
+        List<MetricSnapshot> snapshots = repositoryIds.isEmpty()
+            ? List.of()
+            : metricSnapshotRepository.findSnapshots(
                 principal.workspaceId(),
-                projectId,
-                repositoryId,
-                0,
-                periodStart,
-                periodEnd,
-                MetricSummaryDto.empty("deployments/week"),
-                MetricSummaryDto.empty("hours"),
-                MetricSummaryDto.empty("hours"),
-                MetricSummaryDto.empty("percent"),
-                Instant.now()
+                repositoryIds,
+                MetricGranularity.DAY,
+                CALCULATION_VERSION,
+                range.start(),
+                range.end()
             );
-        }
 
-        List<MetricSnapshot> snapshots = metricSnapshotRepository.findSnapshots(
-            principal.workspaceId(),
-            repoIds,
-            MetricGranularity.DAY,
-            periodStart,
-            periodEnd
-        );
-
-        MetricSummaryDto dfSummary = aggregateDeploymentFrequency(snapshots, periodStart, periodEnd);
-        MetricSummaryDto cltSummary = aggregateChangeLeadTime(snapshots);
-        MetricSummaryDto mttrSummary = aggregateRecoveryTime(snapshots);
-        MetricSummaryDto cfrSummary = aggregateChangeFailureRate(snapshots);
-
+        Instant calculatedAt = latestCalculation(snapshots);
         return new DoraMetricsSummaryResponse(
             principal.workspaceId(),
             projectId,
             repositoryId,
-            repoIds.size(),
-            periodStart,
-            periodEnd,
-            dfSummary,
-            cltSummary,
-            mttrSummary,
-            cfrSummary,
-            Instant.now()
+            repositoryIds.size(),
+            range.start(),
+            range.end(),
+            timezone,
+            CALCULATION_VERSION,
+            aggregateDeploymentFrequency(snapshots, range),
+            aggregateDuration(snapshots, MetricType.CHANGE_LEAD_TIME_HOURS, range),
+            aggregateDuration(
+                snapshots,
+                MetricType.FAILED_DEPLOYMENT_RECOVERY_TIME_HOURS,
+                range
+            ),
+            aggregateChangeFailureRate(snapshots, range),
+            calculatedAt,
+            isStale(calculatedAt)
         );
     }
 
@@ -118,53 +114,81 @@ public class MetricService {
             MetricGranularity granularity,
             Instant from,
             Instant to) {
-        List<UUID> repoIds = resolveAccessibleRepositoryIds(principal, projectId, repositoryId);
-
+        MetricRange range = validateRange(projectId, repositoryId, from, to);
+        List<UUID> repositoryIds = resolveAccessibleRepositoryIds(principal, projectId, repositoryId);
         MetricGranularity effectiveGranularity = granularity != null ? granularity : MetricGranularity.DAY;
-        Instant periodEnd = to != null ? to : Instant.now();
-        Instant periodStart = from != null ? from : periodEnd.minus(30, ChronoUnit.DAYS);
-
-        if (repoIds.isEmpty()) {
-            return new DoraMetricsSeriesResponse(
-                principal.workspaceId(),
-                projectId,
-                repositoryId,
-                0,
-                effectiveGranularity,
-                List.of()
-            );
-        }
+        String timezone = workspaceTimezone(principal);
 
         List<MetricSnapshot> snapshots;
-        if (metricType != null) {
+        if (repositoryIds.isEmpty()) {
+            snapshots = List.of();
+        } else if (metricType != null) {
             snapshots = metricSnapshotRepository.findSnapshotsByMetricType(
                 principal.workspaceId(),
-                repoIds,
+                repositoryIds,
                 metricType,
                 effectiveGranularity,
-                periodStart,
-                periodEnd
+                CALCULATION_VERSION,
+                range.start(),
+                range.end()
             );
         } else {
             snapshots = metricSnapshotRepository.findSnapshots(
                 principal.workspaceId(),
-                repoIds,
+                repositoryIds,
                 effectiveGranularity,
-                periodStart,
-                periodEnd
+                CALCULATION_VERSION,
+                range.start(),
+                range.end()
             );
         }
 
-        List<MetricSeriesItemDto> seriesItems = aggregateSeries(snapshots);
-
+        Instant calculatedAt = latestCalculation(snapshots);
         return new DoraMetricsSeriesResponse(
             principal.workspaceId(),
             projectId,
             repositoryId,
-            repoIds.size(),
+            repositoryIds.size(),
+            range.start(),
+            range.end(),
+            timezone,
             effectiveGranularity,
-            seriesItems
+            CALCULATION_VERSION,
+            calculatedAt,
+            isStale(calculatedAt),
+            aggregateSeries(snapshots, range)
         );
+    }
+
+    private MetricRange validateRange(
+            UUID projectId,
+            UUID repositoryId,
+            Instant from,
+            Instant to) {
+        if (projectId != null && repositoryId != null) {
+            throw new ApiException(
+                ProblemCode.VALIDATION_FAILED,
+                "projectId and repositoryId cannot be supplied together."
+            );
+        }
+        Instant end = to != null ? to : Instant.now();
+        Instant start = from != null ? from : end.minus(30, ChronoUnit.DAYS);
+        if (!start.isBefore(end)) {
+            throw new ApiException(ProblemCode.VALIDATION_FAILED, "from must be before to.");
+        }
+        if (Duration.between(start, end).compareTo(Duration.ofDays(366)) > 0) {
+            throw new ApiException(
+                ProblemCode.VALIDATION_FAILED,
+                "Metric ranges cannot exceed 366 days."
+            );
+        }
+        return new MetricRange(start, end);
+    }
+
+    private String workspaceTimezone(AuthenticatedPrincipal principal) {
+        return workspaceRepository.findById(principal.workspaceId())
+            .orElseThrow(() -> new NotFoundException(ProblemCode.WORKSPACE_NOT_FOUND))
+            .getTimezone();
     }
 
     private List<UUID> resolveAccessibleRepositoryIds(
@@ -183,214 +207,266 @@ public class MetricService {
             if (principal.role() == MembershipRole.MANAGER) {
                 return projectRepositoryLinkRepository.findAllWithRepositoryByProjectId(projectId)
                     .stream()
-                    .map(link -> link.getRepository().getId())
-                    .toList();
-            } else {
-                return projectRepositoryLinkRepository.findAllReadableByLead(projectId, principal.membershipId())
-                    .stream()
-                    .map(link -> link.getRepository().getId())
+                    .map(link -> link.getRepository())
+                    .filter(MetricService::isMetricRepository)
+                    .map(GitRepository::getId)
+                    .distinct()
                     .toList();
             }
+            return projectRepositoryLinkRepository.findAllReadableByLead(
+                    projectId,
+                    principal.membershipId()
+                )
+                .stream()
+                .map(link -> link.getRepository())
+                .filter(MetricService::isMetricRepository)
+                .map(GitRepository::getId)
+                .distinct()
+                .toList();
         }
 
         if (principal.role() == MembershipRole.MANAGER) {
             return gitRepositoryRepository.findAllByWorkspaceId(principal.workspaceId())
                 .stream()
-                .filter(r -> r.isTrackingEnabled() && !r.isArchived())
+                .filter(MetricService::isMetricRepository)
                 .map(GitRepository::getId)
                 .toList();
-        } else {
-            return gitRepositoryRepository.findAllLeadReadableRepositories(
+        }
+        return gitRepositoryRepository.findAllLeadReadableRepositories(
                 principal.workspaceId(),
                 principal.membershipId()
-            ).stream().map(GitRepository::getId).toList();
-        }
+            )
+            .stream()
+            .filter(MetricService::isMetricRepository)
+            .map(GitRepository::getId)
+            .toList();
+    }
+
+    private static boolean isMetricRepository(GitRepository repository) {
+        return repository.isTrackingEnabled() && !repository.isArchived();
     }
 
     private MetricSummaryDto aggregateDeploymentFrequency(
             List<MetricSnapshot> snapshots,
-            Instant periodStart,
-            Instant periodEnd) {
-        List<MetricSnapshot> dfSnaps = snapshots.stream()
-            .filter(s -> s.getMetricType() == MetricType.DEPLOYMENT_FREQUENCY)
-            .toList();
-
-        double totalDeployments = dfSnaps.stream()
-            .mapToDouble(s -> s.getValue().doubleValue())
-            .sum();
-
-        long days = Math.max(1, ChronoUnit.DAYS.between(periodStart, periodEnd));
-        double weeks = Math.max(1.0, days / 7.0);
-        double deploysPerWeek = totalDeployments / weeks;
-
-        BigDecimal roundedVal = BigDecimal.valueOf(deploysPerWeek).setScale(2, RoundingMode.HALF_UP);
-        MetricRating rating = MetricRating.rateDeploymentFrequency(deploysPerWeek);
-
-        Map<String, Object> dims = Map.of(
-            "total_deployments", (int) totalDeployments,
-            "period_days", days
-        );
+            MetricRange range) {
+        int deploymentCount = observations(
+            snapshots,
+            MetricType.DEPLOYMENT_FREQUENCY,
+            range
+        ).size();
+        long periodDays = Math.max(1, Duration.between(range.start(), range.end()).toDays());
+        if (deploymentCount == 0) {
+            return new MetricSummaryDto(
+                BigDecimal.ZERO,
+                "deployments/week",
+                0,
+                MetricRating.UNKNOWN,
+                Map.of("total_deployments", 0, "period_days", periodDays)
+            );
+        }
+        double weeks = Duration.between(range.start(), range.end()).toMillis()
+            / (double) Duration.ofDays(7).toMillis();
+        double deploymentsPerWeek = weeks > 0 ? deploymentCount / weeks : 0.0;
 
         return new MetricSummaryDto(
-            roundedVal,
+            decimal(deploymentsPerWeek),
             "deployments/week",
-            (int) totalDeployments,
-            rating,
-            dims
+            deploymentCount,
+            MetricRating.rateDeploymentFrequency(deploymentsPerWeek),
+            Map.of("total_deployments", deploymentCount, "period_days", periodDays)
         );
     }
 
-    private MetricSummaryDto aggregateChangeLeadTime(List<MetricSnapshot> snapshots) {
-        List<MetricSnapshot> cltSnaps = snapshots.stream()
-            .filter(s -> s.getMetricType() == MetricType.CHANGE_LEAD_TIME_HOURS && s.getSampleSize() > 0)
+    private MetricSummaryDto aggregateDuration(
+            List<MetricSnapshot> snapshots,
+            MetricType metricType,
+            MetricRange range) {
+        List<Double> values = observations(snapshots, metricType, range)
+            .stream()
+            .map(Observation::value)
+            .sorted()
             .toList();
-
-        if (cltSnaps.isEmpty()) {
+        if (values.isEmpty()) {
             return MetricSummaryDto.empty("hours");
         }
 
-        int totalSamples = cltSnaps.stream().mapToInt(MetricSnapshot::getSampleSize).sum();
-        double weightedSum = cltSnaps.stream()
-            .mapToDouble(s -> s.getValue().doubleValue() * s.getSampleSize())
-            .sum();
-
-        double avgHours = totalSamples > 0 ? weightedSum / totalSamples : 0.0;
-        BigDecimal roundedVal = BigDecimal.valueOf(avgHours).setScale(2, RoundingMode.HALF_UP);
-        MetricRating rating = MetricRating.rateChangeLeadTime(avgHours, totalSamples);
-
+        Map<String, Object> dimensions = percentileDimensions(values);
+        double median = (double) dimensions.get("p50");
+        MetricRating rating = metricType == MetricType.CHANGE_LEAD_TIME_HOURS
+            ? MetricRating.rateChangeLeadTime(median, values.size())
+            : MetricRating.rateRecoveryTime(median, values.size());
         return new MetricSummaryDto(
-            roundedVal,
+            decimal(median),
             "hours",
-            totalSamples,
+            values.size(),
             rating,
-            Map.of("p50", roundedVal.doubleValue())
+            dimensions
         );
     }
 
-    private MetricSummaryDto aggregateRecoveryTime(List<MetricSnapshot> snapshots) {
-        List<MetricSnapshot> recSnaps = snapshots.stream()
-            .filter(s -> s.getMetricType() == MetricType.FAILED_DEPLOYMENT_RECOVERY_TIME_HOURS && s.getSampleSize() > 0)
-            .toList();
-
-        if (recSnaps.isEmpty()) {
-            return MetricSummaryDto.empty("hours");
-        }
-
-        int totalSamples = recSnaps.stream().mapToInt(MetricSnapshot::getSampleSize).sum();
-        double weightedSum = recSnaps.stream()
-            .mapToDouble(s -> s.getValue().doubleValue() * s.getSampleSize())
-            .sum();
-
-        double avgHours = totalSamples > 0 ? weightedSum / totalSamples : 0.0;
-        BigDecimal roundedVal = BigDecimal.valueOf(avgHours).setScale(2, RoundingMode.HALF_UP);
-        MetricRating rating = MetricRating.rateRecoveryTime(avgHours, totalSamples);
-
-        return new MetricSummaryDto(
-            roundedVal,
-            "hours",
-            totalSamples,
-            rating,
-            Map.of("p50", roundedVal.doubleValue())
+    private MetricSummaryDto aggregateChangeFailureRate(
+            List<MetricSnapshot> snapshots,
+            MetricRange range) {
+        List<Observation> deployments = observations(
+            snapshots,
+            MetricType.CHANGE_FAILURE_RATE_PERCENT,
+            range
         );
-    }
-
-    private MetricSummaryDto aggregateChangeFailureRate(List<MetricSnapshot> snapshots) {
-        List<MetricSnapshot> cfrSnaps = snapshots.stream()
-            .filter(s -> s.getMetricType() == MetricType.CHANGE_FAILURE_RATE_PERCENT && s.getSampleSize() > 0)
-            .toList();
-
-        if (cfrSnaps.isEmpty()) {
+        if (deployments.isEmpty()) {
             return MetricSummaryDto.empty("percent");
         }
-
-        int totalDeployments = 0;
-        double failedDeployments = 0;
-
-        for (MetricSnapshot s : cfrSnaps) {
-            int samples = s.getSampleSize();
-            totalDeployments += samples;
-            failedDeployments += (s.getValue().doubleValue() / 100.0) * samples;
-        }
-
-        if (totalDeployments == 0) {
-            return MetricSummaryDto.empty("percent");
-        }
-
-        double rate = (failedDeployments / totalDeployments) * 100.0;
-        BigDecimal roundedVal = BigDecimal.valueOf(rate).setScale(2, RoundingMode.HALF_UP);
-        MetricRating rating = MetricRating.rateChangeFailureRate(rate, totalDeployments);
-
+        long failed = deployments.stream().filter(observation -> observation.value() >= 0.5).count();
+        double rate = failed * 100.0 / deployments.size();
         return new MetricSummaryDto(
-            roundedVal,
+            decimal(rate),
             "percent",
-            totalDeployments,
-            rating,
+            deployments.size(),
+            MetricRating.rateChangeFailureRate(rate, deployments.size()),
             Map.of(
-                "total_deployments", totalDeployments,
-                "failed_deployments", (int) Math.round(failedDeployments)
+                "total_deployments", deployments.size(),
+                "failed_deployments", failed
             )
         );
     }
 
-    private List<MetricSeriesItemDto> aggregateSeries(List<MetricSnapshot> snapshots) {
-        // Group by (metricType, periodStart, periodEnd)
-        record BucketKey(MetricType metricType, Instant periodStart, Instant periodEnd, String unit) {}
-
-        Map<BucketKey, List<MetricSnapshot>> groups = new LinkedHashMap<>();
-        for (MetricSnapshot s : snapshots) {
-            BucketKey key = new BucketKey(s.getMetricType(), s.getPeriodStart(), s.getPeriodEnd(), s.getUnit());
-            groups.computeIfAbsent(key, k -> new ArrayList<>()).add(s);
-        }
+    private List<MetricSeriesItemDto> aggregateSeries(
+            List<MetricSnapshot> snapshots,
+            MetricRange requestedRange) {
+        record BucketKey(MetricType type, Instant start, Instant end, String unit) {}
+        Map<BucketKey, List<MetricSnapshot>> buckets = new LinkedHashMap<>();
+        snapshots.stream()
+            .sorted((left, right) -> left.getPeriodStart().compareTo(right.getPeriodStart()))
+            .forEach(snapshot -> {
+                BucketKey key = new BucketKey(
+                    snapshot.getMetricType(),
+                    snapshot.getPeriodStart(),
+                    snapshot.getPeriodEnd(),
+                    snapshot.getUnit()
+                );
+                buckets.computeIfAbsent(key, ignored -> new ArrayList<>()).add(snapshot);
+            });
 
         List<MetricSeriesItemDto> result = new ArrayList<>();
-
-        for (Map.Entry<BucketKey, List<MetricSnapshot>> entry : groups.entrySet()) {
+        for (Map.Entry<BucketKey, List<MetricSnapshot>> entry : buckets.entrySet()) {
             BucketKey key = entry.getKey();
-            List<MetricSnapshot> snaps = entry.getValue();
+            MetricRange bucketRange = new MetricRange(
+                key.start().isAfter(requestedRange.start()) ? key.start() : requestedRange.start(),
+                key.end().isBefore(requestedRange.end()) ? key.end() : requestedRange.end()
+            );
+            List<Observation> values = observations(entry.getValue(), key.type(), bucketRange);
+            Map<String, Object> dimensions = new HashMap<>();
+            double value;
 
-            BigDecimal value;
-            int sampleSize;
-            Map<String, Object> dims = new HashMap<>();
-
-            if (key.metricType() == MetricType.DEPLOYMENT_FREQUENCY) {
-                double total = snaps.stream().mapToDouble(s -> s.getValue().doubleValue()).sum();
-                value = BigDecimal.valueOf(total).setScale(2, RoundingMode.HALF_UP);
-                sampleSize = (int) total;
-            } else if (key.metricType() == MetricType.CHANGE_FAILURE_RATE_PERCENT) {
-                int totalDeploys = 0;
-                double failedDeploys = 0;
-                for (MetricSnapshot s : snaps) {
-                    int n = s.getSampleSize();
-                    totalDeploys += n;
-                    failedDeploys += (s.getValue().doubleValue() / 100.0) * n;
-                }
-                sampleSize = totalDeploys;
-                double rate = totalDeploys > 0 ? (failedDeploys / totalDeploys) * 100.0 : 0.0;
-                value = BigDecimal.valueOf(rate).setScale(2, RoundingMode.HALF_UP);
-                dims.put("total_deployments", totalDeploys);
-                dims.put("failed_deployments", (int) Math.round(failedDeploys));
+            if (key.type() == MetricType.DEPLOYMENT_FREQUENCY) {
+                value = values.size();
+                dimensions.put("total_deployments", values.size());
+            } else if (key.type() == MetricType.CHANGE_FAILURE_RATE_PERCENT) {
+                long failed = values.stream().filter(observation -> observation.value() >= 0.5).count();
+                value = values.isEmpty() ? 0.0 : failed * 100.0 / values.size();
+                dimensions.put("total_deployments", values.size());
+                dimensions.put("failed_deployments", failed);
             } else {
-                // Change Lead Time or Recovery Time: weighted average
-                int totalSamples = snaps.stream().mapToInt(MetricSnapshot::getSampleSize).sum();
-                double weightedSum = snaps.stream()
-                    .mapToDouble(s -> s.getValue().doubleValue() * s.getSampleSize())
-                    .sum();
-                sampleSize = totalSamples;
-                double avg = totalSamples > 0 ? weightedSum / totalSamples : 0.0;
-                value = BigDecimal.valueOf(avg).setScale(2, RoundingMode.HALF_UP);
+                List<Double> durations = values.stream().map(Observation::value).sorted().toList();
+                dimensions.putAll(percentileDimensions(durations));
+                value = durations.isEmpty() ? 0.0 : percentile(durations, 0.5);
             }
 
             result.add(new MetricSeriesItemDto(
-                key.metricType(),
-                key.periodStart(),
-                key.periodEnd(),
-                value,
+                key.type(),
+                key.start(),
+                key.end(),
+                decimal(value),
                 key.unit(),
-                sampleSize,
-                dims
+                values.size(),
+                dimensions
             ));
         }
-
         return result;
+    }
+
+    private List<Observation> observations(
+            List<MetricSnapshot> snapshots,
+            MetricType metricType,
+            MetricRange range) {
+        Map<String, Observation> unique = new LinkedHashMap<>();
+        for (MetricSnapshot snapshot : snapshots) {
+            if (snapshot.getMetricType() != metricType || snapshot.getDimensions() == null) {
+                continue;
+            }
+            Object rawObservations = snapshot.getDimensions().get("observations");
+            if (!(rawObservations instanceof List<?> list)) {
+                continue;
+            }
+            int index = 0;
+            for (Object rawObservation : list) {
+                if (!(rawObservation instanceof Map<?, ?> map)) {
+                    continue;
+                }
+                try {
+                    Instant at = Instant.parse(String.valueOf(map.get("at")));
+                    if (!range.contains(at)) {
+                        continue;
+                    }
+                    double value = Double.parseDouble(String.valueOf(map.get("value")));
+                    Object rawKey = map.get("key");
+                    String key = rawKey == null || String.valueOf(rawKey).isBlank()
+                        ? snapshot.getRepository().getId() + ":" + snapshot.getPeriodStart() + ":" + index
+                        : String.valueOf(rawKey);
+                    unique.putIfAbsent(key, new Observation(key, at, value));
+                } catch (RuntimeException ignored) {
+                    // Malformed observations are excluded instead of corrupting an aggregate.
+                }
+                index++;
+            }
+        }
+        return List.copyOf(unique.values());
+    }
+
+    private static Map<String, Object> percentileDimensions(List<Double> sortedValues) {
+        if (sortedValues.isEmpty()) {
+            return Map.of();
+        }
+        double mean = sortedValues.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
+        return Map.of(
+            "mean", decimal(mean).doubleValue(),
+            "p50", decimal(percentile(sortedValues, 0.50)).doubleValue(),
+            "p75", decimal(percentile(sortedValues, 0.75)).doubleValue(),
+            "p90", decimal(percentile(sortedValues, 0.90)).doubleValue()
+        );
+    }
+
+    private static double percentile(List<Double> sortedValues, double percentile) {
+        if (sortedValues.size() == 1) {
+            return sortedValues.getFirst();
+        }
+        double rank = percentile * (sortedValues.size() - 1);
+        int lower = (int) Math.floor(rank);
+        int upper = Math.min(lower + 1, sortedValues.size() - 1);
+        double weight = rank - lower;
+        return sortedValues.get(lower) * (1.0 - weight) + sortedValues.get(upper) * weight;
+    }
+
+    private static BigDecimal decimal(double value) {
+        return BigDecimal.valueOf(value).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private static Instant latestCalculation(List<MetricSnapshot> snapshots) {
+        return snapshots.stream()
+            .map(MetricSnapshot::getCalculatedAt)
+            .filter(value -> value != null)
+            .max(Instant::compareTo)
+            .orElse(null);
+    }
+
+    private static boolean isStale(Instant calculatedAt) {
+        return calculatedAt == null || calculatedAt.isBefore(Instant.now().minus(STALE_AFTER));
+    }
+
+    private record Observation(String key, Instant at, double value) {}
+
+    private record MetricRange(Instant start, Instant end) {
+        boolean contains(Instant value) {
+            return !value.isBefore(start) && value.isBefore(end);
+        }
     }
 }

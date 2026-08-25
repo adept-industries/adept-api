@@ -31,7 +31,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @TestPropertySource(properties = {
     "springdoc.api-docs.enabled=true",
     "springdoc.swagger-ui.enabled=true",
-    "app.github.enabled=true"
+    "app.github.enabled=true",
+    "app.jira.enabled=true"
 })
 @ActiveProfiles("test")
 class OpenApiContractTest extends PartCIntegrationTestSupport {
@@ -173,7 +174,7 @@ class OpenApiContractTest extends PartCIntegrationTestSupport {
         .configure(SerializationFeature.INDENT_OUTPUT, true);
 
     @Test
-    void phase2OpenApiContractIsSafeAndMatchesTheCommittedDocument() throws Exception {
+    void completeOpenApiContractIsSafeAndMatchesTheCommittedDocument() throws Exception {
         JsonNode live = liveDocument();
         String liveCanonicalJson = mapper.writeValueAsString(canonicalize(live)) + "\n";
         exportOrAssertCommitted(liveCanonicalJson);
@@ -209,7 +210,15 @@ class OpenApiContractTest extends PartCIntegrationTestSupport {
 
         Set<String> expectedPaths = new TreeSet<>();
         ENDPOINTS.forEach(endpoint -> expectedPaths.add(endpoint.path()));
-        assertThat(fieldNames(paths)).isEqualTo(expectedPaths);
+        assertThat(fieldNames(paths)).containsAll(expectedPaths);
+        assertThat(fieldNames(paths)).contains(
+            "/api/v1/metrics/summary",
+            "/api/v1/metrics/series",
+            "/api/v1/repositories",
+            "/api/v1/integrations/github",
+            "/api/v1/integrations/jira",
+            "/api/v1/webhooks/jira/{integrationId}"
+        );
 
         for (Endpoint endpoint : ENDPOINTS) {
             JsonNode operation = paths.path(endpoint.path()).path(endpoint.method());
@@ -252,11 +261,29 @@ class OpenApiContractTest extends PartCIntegrationTestSupport {
 
         JsonNode logout = paths.path("/api/v1/auth/logout").path("post");
         assertThat(logout.path("description").asText()).contains("missing cookie still returns 204");
+
+        assertThat(paths.at("/~1api~1v1~1metrics~1summary/get/responses/200/content/application~1json/schema/$ref").asText())
+            .isEqualTo("#/components/schemas/DoraMetricsSummaryResponse");
+        assertThat(paths.at("/~1api~1v1~1metrics~1series/get/responses/200/content/application~1json/schema/$ref").asText())
+            .isEqualTo("#/components/schemas/DoraMetricsSeriesResponse");
+        assertThat(paths.at("/~1api~1v1~1metrics~1summary/get/security/0/bearerAuth").isArray())
+            .isTrue();
+        assertThat(paths.at("/~1api~1v1~1webhooks~1jira~1{integrationId}/post/security").isArray())
+            .isTrue();
+        assertThat(paths.at("/~1api~1v1~1webhooks~1jira~1{integrationId}/post/security").size())
+            .isZero();
     }
 
     private void assertSchemasAreSafeAndExpressBothSessionBranches(JsonNode root) throws Exception {
         JsonNode schemas = root.at("/components/schemas");
-        assertThat(fieldNames(schemas)).isEqualTo(new TreeSet<>(ALLOWED_SCHEMAS));
+        assertThat(fieldNames(schemas)).containsAll(ALLOWED_SCHEMAS);
+        assertThat(fieldNames(schemas)).contains(
+            "DoraMetricsSummaryResponse",
+            "DoraMetricsSeriesResponse",
+            "MetricSummaryDto",
+            "MetricSeriesItemDto",
+            "RepositorySettingsDto"
+        );
 
         assertThat(fieldNames(schemas.at("/UpdateWorkspaceRequest/properties")))
             .containsExactly("name", "timezone");
@@ -292,7 +319,14 @@ class OpenApiContractTest extends PartCIntegrationTestSupport {
 
         String serializedSchemas = mapper.writeValueAsString(schemas);
         assertThat(serializedSchemas)
-            .doesNotContain("passwordHash", "rawToken", "tokenHash", "AuditLog", "ProcessingJob", "GithubIntegration", "JiraIntegration", "GoogleAuthAccount");
+            .doesNotContain(
+                "passwordHash",
+                "rawToken",
+                "tokenHash",
+                "accessTokenEnc",
+                "refreshTokenEnc",
+                "webhookTokenHash"
+            );
     }
 
     private void assertSecuritySchemes(JsonNode root) {

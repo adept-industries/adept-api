@@ -62,68 +62,6 @@ public class OpenApiConfig {
     private static final String REPOSITORY_LEAD_ASSIGNMENTS =
         "/api/v1/repositories/{repositoryId}/lead-assignments";
 
-    private static final Set<String> PHASE_2_PATHS = Set.of(
-        CSRF,
-        SIGNUP,
-        VERIFY_EMAIL,
-        RESEND_VERIFICATION,
-        LOGIN,
-        PASSWORD_REAUTHENTICATION,
-        REFRESH,
-        LOGOUT,
-        ME,
-        SWITCH_WORKSPACE,
-        SESSION_WORKSPACES,
-        FORGOT_PASSWORD,
-        RESET_PASSWORD,
-        GOOGLE_START,
-        GOOGLE_ONBOARDING,
-        GOOGLE_REAUTHENTICATION_START,
-        WORKSPACES,
-        CURRENT_WORKSPACE,
-        CURRENT_WORKSPACE_MEMBER_LOOKUP,
-        PROJECTS,
-        PROJECT,
-        PROJECT_REPOSITORIES,
-        REPOSITORY_LEAD_ASSIGNMENTS
-    );
-
-    private static final Set<String> PUBLIC_COMPONENT_SCHEMAS = Set.of(
-        "ActionTokenRequest",
-        "AuthSessionResponse",
-        "AuthenticatedSessionResponse",
-        "CreateProjectRequest",
-        "CreateRepositoryLeadInvitationRequest",
-        "CreateWorkspaceRequest",
-        "CurrentWorkspaceMemberLookupResponse",
-        "CurrentWorkspaceResponse",
-        "DeleteWorkspaceRequest",
-        "EmailRequest",
-        "FieldError",
-        "GoogleOnboardingRequest",
-        "GoogleReauthenticationStartResponse",
-        "LoginRequest",
-        "LookupWorkspaceMemberRequest",
-        "MeResponse",
-        "MembershipSummary",
-        "PasswordReauthenticationRequest",
-        "PendingRepositoryLeadInvitationResponse",
-        "ProblemDetail",
-        "ProjectRepositoryResponse",
-        "ProjectResponse",
-        "RefreshRequest",
-        "ReplaceProjectRepositoriesRequest",
-        "ResetPasswordRequest",
-        "SignupRequest",
-        "SignupResponse",
-        "UpdateProjectRequest",
-        "UpdateWorkspaceRequest",
-        "UserSummary",
-        "WorkspaceDeletionResponse",
-        "WorkspaceSelectionSessionResponse",
-        "WorkspaceSummaryResponse"
-    );
-
     @Bean
     public OpenAPI customOpenAPI() {
         Components components = new Components()
@@ -154,18 +92,17 @@ public class OpenApiConfig {
             .info(new Info()
                 .title("Adept API")
                 .version("v1")
-                .description("Adept Industries Phase 2 API contract."))
+                .description("Adept Industries API contract."))
             .components(components);
     }
 
     @Bean
-    public GlobalOpenApiCustomizer phase2ContractCustomizer() {
+    public GlobalOpenApiCustomizer contractCustomizer() {
         return openApi -> {
             if (openApi.getPaths() == null) {
                 return;
             }
 
-            openApi.getPaths().keySet().removeIf(path -> !PHASE_2_PATHS.contains(path));
             configureSchemas(openApi.getComponents());
 
             configure(
@@ -504,7 +441,33 @@ public class OpenApiConfig {
                 Set.of("400", "401", "403", "404", "409", "413", "415"),
                 CookieBehavior.NONE
             );
+
+            configureGeneratedSecurity(openApi);
         };
+    }
+
+    private static void configureGeneratedSecurity(OpenAPI openApi) {
+        openApi.getPaths().forEach((path, pathItem) -> pathItem.readOperationsMap()
+            .forEach((method, generatedOperation) -> {
+                if (generatedOperation.getSecurity() != null) {
+                    return;
+                }
+                if (path.endsWith("/callback")
+                        || path.startsWith("/api/v1/webhooks/")
+                        || "/api/v1/invitations/preview".equals(path)) {
+                    generatedOperation.setSecurity(List.of());
+                    return;
+                }
+                if ("/api/v1/invitations/accept".equals(path)) {
+                    generatedOperation.setSecurity(SecurityProfile.CSRF.requirements());
+                    return;
+                }
+                generatedOperation.setSecurity(
+                    method == PathItem.HttpMethod.GET
+                        ? SecurityProfile.BEARER.requirements()
+                        : SecurityProfile.BEARER_CSRF.requirements()
+                );
+            }));
     }
 
     private static void configureBodyOperation(
@@ -573,7 +536,7 @@ public class OpenApiConfig {
     private static Operation operation(OpenAPI openApi, String path, PathItem.HttpMethod method) {
         PathItem pathItem = openApi.getPaths().get(path);
         if (pathItem == null || pathItem.readOperationsMap().get(method) == null) {
-            throw new IllegalStateException("Missing Phase 2 OpenAPI operation " + method + " " + path);
+            throw new IllegalStateException("Missing required OpenAPI operation " + method + " " + path);
         }
         return pathItem.readOperationsMap().get(method);
     }
@@ -620,7 +583,7 @@ public class OpenApiConfig {
 
     private static void addStandardHeaders(ApiResponse response, CookieBehavior cookies, boolean mayClearRefresh) {
         response.addHeaderObject("Cache-Control", new Header()
-            .description("Sensitive Phase 2 responses are not cached.")
+            .description("Sensitive responses are not cached.")
             .schema(new StringSchema()._enum(List.of("no-store"))));
 
         if (cookies != CookieBehavior.NONE || mayClearRefresh) {
@@ -735,7 +698,6 @@ public class OpenApiConfig {
             componentRef("WorkspaceSelectionSessionResponse")
         )));
 
-        components.getSchemas().keySet().removeIf(schemaName -> !PUBLIC_COMPONENT_SCHEMAS.contains(schemaName));
     }
 
     private static ObjectSchema sessionBranch(boolean selectionRequired) {

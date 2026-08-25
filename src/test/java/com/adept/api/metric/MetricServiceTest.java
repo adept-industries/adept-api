@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.IntStream;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -19,6 +20,7 @@ import com.adept.api.common.domain.MembershipRole;
 import com.adept.api.common.domain.MetricGranularity;
 import com.adept.api.common.domain.MetricType;
 import com.adept.api.common.error.NotFoundException;
+import com.adept.api.common.error.ApiException;
 import com.adept.api.integration.github.GitRepository;
 import com.adept.api.integration.github.GitRepositoryRepository;
 import com.adept.api.metric.dto.DoraMetricsSeriesResponse;
@@ -30,12 +32,14 @@ import com.adept.api.project.ProjectRepositoryLinkRepository;
 import com.adept.api.security.AuthenticatedPrincipal;
 import com.adept.api.security.RepositoryScopeService;
 import com.adept.api.workspace.Workspace;
+import com.adept.api.workspace.WorkspaceRepository;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.lenient;
 
 @ExtendWith(MockitoExtension.class)
 class MetricServiceTest {
@@ -54,6 +58,9 @@ class MetricServiceTest {
 
     @Mock
     private RepositoryScopeService repositoryScopeService;
+
+    @Mock
+    private WorkspaceRepository workspaceRepository;
 
     @InjectMocks
     private MetricService metricService;
@@ -90,6 +97,8 @@ class MetricServiceTest {
 
         workspace = new Workspace();
         workspace.setId(workspaceId);
+        workspace.setTimezone("UTC");
+        lenient().when(workspaceRepository.findById(workspaceId)).thenReturn(Optional.of(workspace));
 
         repository = new GitRepository();
         repository.setId(repositoryId);
@@ -111,11 +120,11 @@ class MetricServiceTest {
         );
 
         assertThat(response.repositoryCount()).isEqualTo(0);
-        assertThat(response.deploymentFrequency().value()).isEqualTo(BigDecimal.ZERO);
+        assertThat(response.deploymentFrequency().value()).isEqualByComparingTo(BigDecimal.ZERO);
         assertThat(response.deploymentFrequency().rating()).isEqualTo(MetricRating.UNKNOWN);
-        assertThat(response.changeLeadTime().value()).isEqualTo(BigDecimal.ZERO);
-        assertThat(response.recoveryTime().value()).isEqualTo(BigDecimal.ZERO);
-        assertThat(response.changeFailureRate().value()).isEqualTo(BigDecimal.ZERO);
+        assertThat(response.changeLeadTime().value()).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(response.recoveryTime().value()).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(response.changeFailureRate().value()).isEqualByComparingTo(BigDecimal.ZERO);
     }
 
     @Test
@@ -133,6 +142,13 @@ class MetricServiceTest {
         dfSnap.setUnit("deployments/day");
         dfSnap.setPeriodStart(from);
         dfSnap.setPeriodEnd(now);
+        dfSnap.setCalculatedAt(now);
+        dfSnap.setDimensions(Map.of(
+            "observations",
+            IntStream.range(0, 14)
+                .mapToObj(index -> observation("df-" + index, now.minusSeconds(3600L + index), 1.0))
+                .toList()
+        ));
 
         MetricSnapshot cltSnap = new MetricSnapshot();
         cltSnap.setMetricType(MetricType.CHANGE_LEAD_TIME_HOURS);
@@ -142,6 +158,13 @@ class MetricServiceTest {
         cltSnap.setUnit("hours");
         cltSnap.setPeriodStart(from);
         cltSnap.setPeriodEnd(now);
+        cltSnap.setCalculatedAt(now);
+        cltSnap.setDimensions(Map.of(
+            "observations",
+            IntStream.range(0, 10)
+                .mapToObj(index -> observation("clt-" + index, now.minusSeconds(7200L + index), 4.5))
+                .toList()
+        ));
 
         MetricSnapshot recSnap = new MetricSnapshot();
         recSnap.setMetricType(MetricType.FAILED_DEPLOYMENT_RECOVERY_TIME_HOURS);
@@ -151,6 +174,14 @@ class MetricServiceTest {
         recSnap.setUnit("hours");
         recSnap.setPeriodStart(from);
         recSnap.setPeriodEnd(now);
+        recSnap.setCalculatedAt(now);
+        recSnap.setDimensions(Map.of(
+            "observations",
+            List.of(
+                observation("recovery-1", now.minusSeconds(3600), 1.0),
+                observation("recovery-2", now.minusSeconds(1800), 2.0)
+            )
+        ));
 
         MetricSnapshot cfrSnap = new MetricSnapshot();
         cfrSnap.setMetricType(MetricType.CHANGE_FAILURE_RATE_PERCENT);
@@ -160,11 +191,23 @@ class MetricServiceTest {
         cfrSnap.setUnit("percent");
         cfrSnap.setPeriodStart(from);
         cfrSnap.setPeriodEnd(now);
+        cfrSnap.setCalculatedAt(now);
+        cfrSnap.setDimensions(Map.of(
+            "observations",
+            IntStream.range(0, 14)
+                .mapToObj(index -> observation(
+                    "cfr-" + index,
+                    now.minusSeconds(10_800L + index),
+                    index == 0 ? 1.0 : 0.0
+                ))
+                .toList()
+        ));
 
         when(metricSnapshotRepository.findSnapshots(
             eq(workspaceId),
             eq(List.of(repositoryId)),
             eq(MetricGranularity.DAY),
+            eq(MetricService.CALCULATION_VERSION),
             any(),
             any()
         )).thenReturn(List.of(dfSnap, cltSnap, recSnap, cfrSnap));
@@ -210,6 +253,7 @@ class MetricServiceTest {
             eq(workspaceId),
             eq(List.of(repositoryId)),
             eq(MetricGranularity.DAY),
+            eq(MetricService.CALCULATION_VERSION),
             any(),
             any()
         )).thenReturn(List.of());
@@ -251,11 +295,21 @@ class MetricServiceTest {
         s1.setValue(BigDecimal.valueOf(3));
         s1.setUnit("deployments/day");
         s1.setSampleSize(3);
+        s1.setCalculatedAt(t2);
+        s1.setDimensions(Map.of(
+            "observations",
+            List.of(
+                observation("deployment-1", t1.plusSeconds(1), 1.0),
+                observation("deployment-2", t1.plusSeconds(2), 1.0),
+                observation("deployment-3", t1.plusSeconds(3), 1.0)
+            )
+        ));
 
         when(metricSnapshotRepository.findSnapshots(
             eq(workspaceId),
             eq(List.of(repositoryId)),
             eq(MetricGranularity.DAY),
+            eq(MetricService.CALCULATION_VERSION),
             any(),
             any()
         )).thenReturn(List.of(s1));
@@ -274,5 +328,96 @@ class MetricServiceTest {
         assertThat(response.series()).hasSize(1);
         assertThat(response.series().get(0).value()).isEqualByComparingTo("3.00");
         assertThat(response.series().get(0).sampleSize()).isEqualTo(3);
+    }
+
+    @Test
+    void recomputesMedianFromUnderlyingObservationsAcrossRepositories() {
+        UUID secondRepositoryId = UUID.randomUUID();
+        GitRepository secondRepository = new GitRepository();
+        secondRepository.setId(secondRepositoryId);
+        secondRepository.setWorkspace(workspace);
+        secondRepository.setTrackingEnabled(true);
+        secondRepository.setArchived(false);
+        when(gitRepositoryRepository.findAllByWorkspaceId(workspaceId))
+            .thenReturn(List.of(repository, secondRepository));
+
+        Instant from = Instant.parse("2026-08-01T00:00:00Z");
+        Instant to = Instant.parse("2026-08-02T00:00:00Z");
+        MetricSnapshot first = durationSnapshot(
+            repository,
+            from,
+            to,
+            List.of(
+                observation("first-1", from.plusSeconds(1), 1.0),
+                observation("first-2", from.plusSeconds(2), 100.0)
+            )
+        );
+        MetricSnapshot second = durationSnapshot(
+            secondRepository,
+            from,
+            to,
+            List.of(observation("second-1", from.plusSeconds(3), 101.0))
+        );
+        when(metricSnapshotRepository.findSnapshots(
+            workspaceId,
+            List.of(repositoryId, secondRepositoryId),
+            MetricGranularity.DAY,
+            MetricService.CALCULATION_VERSION,
+            from,
+            to
+        )).thenReturn(List.of(first, second));
+
+        DoraMetricsSummaryResponse response = metricService.getSummary(
+            managerPrincipal,
+            null,
+            null,
+            from,
+            to
+        );
+
+        assertThat(response.changeLeadTime().value()).isEqualByComparingTo("100.00");
+        assertThat(response.changeLeadTime().sampleSize()).isEqualTo(3);
+    }
+
+    @Test
+    void rejectsAmbiguousScopeAndInvalidRange() {
+        Instant now = Instant.parse("2026-08-01T00:00:00Z");
+        assertThatThrownBy(() -> metricService.getSummary(
+            managerPrincipal,
+            UUID.randomUUID(),
+            repositoryId,
+            now.minusSeconds(1),
+            now
+        )).isInstanceOf(ApiException.class);
+        assertThatThrownBy(() -> metricService.getSummary(
+            managerPrincipal,
+            null,
+            null,
+            now,
+            now
+        )).isInstanceOf(ApiException.class);
+    }
+
+    private MetricSnapshot durationSnapshot(
+            GitRepository targetRepository,
+            Instant from,
+            Instant to,
+            List<Map<String, Object>> observations) {
+        MetricSnapshot snapshot = new MetricSnapshot();
+        snapshot.setRepository(targetRepository);
+        snapshot.setMetricType(MetricType.CHANGE_LEAD_TIME_HOURS);
+        snapshot.setGranularity(MetricGranularity.DAY);
+        snapshot.setPeriodStart(from);
+        snapshot.setPeriodEnd(to);
+        snapshot.setValue(BigDecimal.ZERO);
+        snapshot.setUnit("hours");
+        snapshot.setSampleSize(observations.size());
+        snapshot.setCalculatedAt(to);
+        snapshot.setDimensions(Map.of("observations", observations));
+        return snapshot;
+    }
+
+    private static Map<String, Object> observation(String key, Instant at, double value) {
+        return Map.of("key", key, "at", at.toString(), "value", value);
     }
 }
