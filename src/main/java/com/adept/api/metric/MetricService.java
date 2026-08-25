@@ -37,7 +37,7 @@ import com.adept.api.workspace.WorkspaceRepository;
 @Transactional(readOnly = true)
 public class MetricService {
 
-    static final String CALCULATION_VERSION = "dora-v2";
+    static final String CALCULATION_VERSION = "dora-v3";
     private static final Duration STALE_AFTER = Duration.ofHours(24);
 
     private final MetricSnapshotRepository metricSnapshotRepository;
@@ -83,7 +83,7 @@ public class MetricService {
                 range.end()
             );
 
-        Instant calculatedAt = latestCalculation(snapshots);
+        Instant calculatedAt = completeCalculation(repositoryIds, snapshots);
         return new DoraMetricsSummaryResponse(
             principal.workspaceId(),
             projectId,
@@ -143,7 +143,7 @@ public class MetricService {
             );
         }
 
-        Instant calculatedAt = latestCalculation(snapshots);
+        Instant calculatedAt = completeCalculation(repositoryIds, snapshots);
         return new DoraMetricsSeriesResponse(
             principal.workspaceId(),
             projectId,
@@ -196,7 +196,13 @@ public class MetricService {
             UUID projectId,
             UUID repositoryId) {
         if (repositoryId != null) {
-            repositoryScopeService.requireReadableRepository(principal, repositoryId);
+            GitRepository repository = repositoryScopeService.requireReadableRepository(
+                principal,
+                repositoryId
+            );
+            if (!isMetricRepository(repository)) {
+                throw new NotFoundException(ProblemCode.REPOSITORY_NOT_FOUND);
+            }
             return List.of(repositoryId);
         }
 
@@ -450,11 +456,30 @@ public class MetricService {
         return BigDecimal.valueOf(value).setScale(2, RoundingMode.HALF_UP);
     }
 
-    private static Instant latestCalculation(List<MetricSnapshot> snapshots) {
-        return snapshots.stream()
-            .map(MetricSnapshot::getCalculatedAt)
-            .filter(value -> value != null)
-            .max(Instant::compareTo)
+    private static Instant completeCalculation(
+            List<UUID> repositoryIds,
+            List<MetricSnapshot> snapshots) {
+        if (repositoryIds.isEmpty()) {
+            return null;
+        }
+        Map<UUID, Instant> latestByRepository = new HashMap<>();
+        for (MetricSnapshot snapshot : snapshots) {
+            Instant calculatedAt = snapshot.getCalculatedAt();
+            if (calculatedAt == null || snapshot.getRepository() == null) {
+                continue;
+            }
+            latestByRepository.merge(
+                snapshot.getRepository().getId(),
+                calculatedAt,
+                (left, right) -> left.isAfter(right) ? left : right
+            );
+        }
+        if (!latestByRepository.keySet().containsAll(repositoryIds)) {
+            return null;
+        }
+        return repositoryIds.stream()
+            .map(latestByRepository::get)
+            .min(Instant::compareTo)
             .orElse(null);
     }
 

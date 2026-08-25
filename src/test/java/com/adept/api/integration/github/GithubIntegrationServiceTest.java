@@ -230,4 +230,48 @@ class GithubIntegrationServiceTest {
         assertThat(repository.isArchived()).isFalse();
         verify(gitRepositoryRepository).save(repository);
     }
+
+    @Test
+    @DisplayName("sync disables tracking when GitHub archives a repository")
+    void syncArchivedRepositoryDisablesTracking() {
+        GithubIntegration integration = new GithubIntegration();
+        integration.setId(UUID.randomUUID());
+        integration.setWorkspace(testWorkspace);
+        integration.setInstallationId(777L);
+        integration.setStatus(IntegrationStatus.ACTIVE);
+
+        GitRepository repository = new GitRepository();
+        repository.setId(UUID.randomUUID());
+        repository.setWorkspace(testWorkspace);
+        repository.setGithubIntegration(integration);
+        repository.setGithubRepoId(999L);
+        repository.setTrackingEnabled(true);
+        repository.setArchived(false);
+
+        when(githubIntegrationRepository.findByIdAndWorkspaceId(
+                integration.getId(), testWorkspace.getId()))
+            .thenReturn(Optional.of(integration));
+        when(githubApiClient.listInstallationRepositories(777L)).thenReturn(List.of(
+            new GithubApiClient.GithubRepoDetails(
+                999L,
+                "node-999",
+                "acme-org",
+                "my-repo",
+                "acme-org/my-repo",
+                "main",
+                RepositoryVisibility.PRIVATE,
+                true
+            )
+        ));
+        when(gitRepositoryRepository.findByWorkspaceIdAndGithubRepoId(testWorkspace.getId(), 999L))
+            .thenReturn(Optional.of(repository));
+        when(gitRepositoryRepository.findAllByGithubIntegrationId(integration.getId()))
+            .thenReturn(List.of(repository));
+
+        service.syncRepositories(testWorkspace.getId(), integration.getId(), managerMembership);
+
+        assertThat(repository.isArchived()).isTrue();
+        assertThat(repository.isTrackingEnabled()).isFalse();
+        verify(gitRepositoryRepository).save(repository);
+    }
 }

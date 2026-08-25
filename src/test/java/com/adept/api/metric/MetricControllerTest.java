@@ -68,7 +68,7 @@ class MetricControllerTest {
             now.minusSeconds(86400 * 30),
             now,
             "UTC",
-            "dora-v2",
+            "dora-v3",
             new MetricSummaryDto(BigDecimal.valueOf(4.5), "deployments/week", 18, MetricRating.HIGH, Map.of()),
             new MetricSummaryDto(BigDecimal.valueOf(1.2), "hours", 12, MetricRating.HIGH, Map.of()),
             new MetricSummaryDto(BigDecimal.valueOf(0.8), "hours", 2, MetricRating.ELITE, Map.of()),
@@ -119,7 +119,7 @@ class MetricControllerTest {
             t2,
             "UTC",
             MetricGranularity.DAY,
-            "dora-v2",
+            "dora-v3",
             t2,
             false,
             List.of(item)

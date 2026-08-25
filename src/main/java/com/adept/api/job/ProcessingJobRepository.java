@@ -64,4 +64,10 @@ public interface ProcessingJobRepository
     Optional<ProcessingJob> findActiveJiraProjectSyncForUpdate(
         @Param("integrationId") String integrationId
     );
+
+    boolean existsByRepository_IdAndJobTypeAndStatusIn(
+        UUID repositoryId,
+        com.adept.api.common.domain.ProcessingJobType jobType,
+        List<com.adept.api.common.domain.ProcessingJobStatus> statuses
+    );
 }

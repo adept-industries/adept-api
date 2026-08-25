@@ -216,6 +216,49 @@ class GithubIntegrationIntegrationTest extends PartCIntegrationTestSupport {
             repoId
         )).isEqualTo(60);
 
+        // A partial settings patch preserves every setting that was not supplied.
+        mockMvc.perform(patch("/api/v1/repositories/" + repoId)
+                .header("Origin", FRONTEND_ORIGIN)
+                .header("Authorization", "Bearer " + managerToken)
+                .header("X-XSRF-TOKEN", csrf2.token())
+                .cookie(new Cookie("XSRF-TOKEN", csrf2.token()))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                        "settings": {
+                            "doraExclusions": ["*preview*"]
+                        }
+                    }
+                    """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.settings.backfillDays").value(60))
+            .andExpect(jsonPath("$.settings.deploymentWorkflowNamePatterns[0]").value("deploy-prod"))
+            .andExpect(jsonPath("$.settings.doraExclusions[0]").value("*preview*"));
+
+        assertThat(jdbc.queryForObject(
+            "SELECT count(*) FROM processing_jobs WHERE job_type = 'BACKFILL_REPOSITORY' AND repository_id = ?",
+            Integer.class,
+            repoId
+        )).isEqualTo(1);
+
+        // A Manager can explicitly rebuild after the previous backfill has completed.
+        jdbc.update(
+            "UPDATE processing_jobs SET status = 'SUCCEEDED' WHERE job_type = 'BACKFILL_REPOSITORY' AND repository_id = ?",
+            repoId
+        );
+        mockMvc.perform(post("/api/v1/repositories/" + repoId + "/backfill")
+                .header("Origin", FRONTEND_ORIGIN)
+                .header("Authorization", "Bearer " + managerToken)
+                .header("X-XSRF-TOKEN", csrf2.token())
+                .cookie(new Cookie("XSRF-TOKEN", csrf2.token())))
+            .andExpect(status().isAccepted());
+
+        assertThat(jdbc.queryForObject(
+            "SELECT count(*) FROM processing_jobs WHERE job_type = 'BACKFILL_REPOSITORY' AND repository_id = ?",
+            Integer.class,
+            repoId
+        )).isEqualTo(2);
+
         // 6. Lead Candidates Lookup
         when(githubApiClient.listLeadCandidates(anyLong(), anyString(), anyString())).thenReturn(
             List.of(

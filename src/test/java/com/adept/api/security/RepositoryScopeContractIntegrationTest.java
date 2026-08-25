@@ -133,7 +133,7 @@ class RepositoryScopeContractIntegrationTest extends PartCIntegrationTestSupport
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.repositoryCount").value(2))
             .andExpect(jsonPath("$.deploymentFrequency.sampleSize").value(2))
-            .andExpect(jsonPath("$.calculationVersion").value("dora-v2"));
+            .andExpect(jsonPath("$.calculationVersion").value("dora-v3"));
 
         mockMvc.perform(get("/api/v1/metrics/summary")
                 .header("Origin", FRONTEND_ORIGIN)
@@ -362,7 +362,7 @@ class RepositoryScopeContractIntegrationTest extends PartCIntegrationTestSupport
             ) VALUES (
                 ?, ?, 'DEPLOYMENT_FREQUENCY', 'DAY',
                 date_trunc('day', now()), date_trunc('day', now()) + interval '1 day',
-                1, 'deployments/day', 1, 'dora-v2', CAST(? AS jsonb), now()
+                1, 'deployments/day', 1, 'dora-v3', CAST(? AS jsonb), now()
             )
             """,
             workspaceId,

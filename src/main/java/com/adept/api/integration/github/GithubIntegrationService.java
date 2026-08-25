@@ -278,6 +278,9 @@ public class GithubIntegrationService {
             repo.setDefaultBranch(remote.defaultBranch());
             repo.setVisibility(remote.visibility());
             repo.setArchived(remote.archived());
+            if (remote.archived()) {
+                repo.setTrackingEnabled(false);
+            }
             repo.setLastSyncedAt(now);
 
             if (existingOpt.isEmpty()) {

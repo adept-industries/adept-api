@@ -98,6 +98,22 @@ public class RepositoryController {
         ));
     }
 
+    @PostMapping("/{repositoryId}/backfill")
+    public ResponseEntity<Void> requestBackfill(@PathVariable UUID repositoryId) {
+        AuthenticatedPrincipal principal = currentPrincipal.require();
+        Membership membership = activeMembershipService.getActiveMembership(
+                principal.userId(),
+                principal.workspaceId())
+            .orElseThrow(() -> new ApiException(ProblemCode.NO_ACTIVE_MEMBERSHIP));
+
+        repositoryService.requestBackfill(
+            principal.workspaceId(),
+            repositoryId,
+            membership
+        );
+        return ResponseEntity.accepted().build();
+    }
+
     @GetMapping("/{repositoryId}/lead-candidates")
     public ResponseEntity<List<LeadCandidateResponse>> getLeadCandidates(@PathVariable UUID repositoryId) {
         AuthenticatedPrincipal principal = currentPrincipal.require();

@@ -135,6 +135,7 @@ class MetricServiceTest {
         Instant from = now.minus(30, ChronoUnit.DAYS);
 
         MetricSnapshot dfSnap = new MetricSnapshot();
+        dfSnap.setRepository(repository);
         dfSnap.setMetricType(MetricType.DEPLOYMENT_FREQUENCY);
         dfSnap.setGranularity(MetricGranularity.DAY);
         dfSnap.setValue(BigDecimal.valueOf(14));
@@ -151,6 +152,7 @@ class MetricServiceTest {
         ));
 
         MetricSnapshot cltSnap = new MetricSnapshot();
+        cltSnap.setRepository(repository);
         cltSnap.setMetricType(MetricType.CHANGE_LEAD_TIME_HOURS);
         cltSnap.setGranularity(MetricGranularity.DAY);
         cltSnap.setValue(BigDecimal.valueOf(4.5));
@@ -167,6 +169,7 @@ class MetricServiceTest {
         ));
 
         MetricSnapshot recSnap = new MetricSnapshot();
+        recSnap.setRepository(repository);
         recSnap.setMetricType(MetricType.FAILED_DEPLOYMENT_RECOVERY_TIME_HOURS);
         recSnap.setGranularity(MetricGranularity.DAY);
         recSnap.setValue(BigDecimal.valueOf(1.5));
@@ -184,6 +187,7 @@ class MetricServiceTest {
         ));
 
         MetricSnapshot cfrSnap = new MetricSnapshot();
+        cfrSnap.setRepository(repository);
         cfrSnap.setMetricType(MetricType.CHANGE_FAILURE_RATE_PERCENT);
         cfrSnap.setGranularity(MetricGranularity.DAY);
         cfrSnap.setValue(BigDecimal.valueOf(7.14));
@@ -230,6 +234,7 @@ class MetricServiceTest {
         assertThat(response.recoveryTime().value()).isEqualByComparingTo("1.50");
         assertThat(response.changeFailureRate().sampleSize()).isEqualTo(14);
         assertThat(response.changeFailureRate().rating()).isEqualTo(MetricRating.HIGH);
+        assertThat(response.calculatedAt()).isEqualTo(now);
     }
 
     @Test
@@ -288,6 +293,7 @@ class MetricServiceTest {
         Instant t2 = Instant.parse("2026-08-02T00:00:00Z");
 
         MetricSnapshot s1 = new MetricSnapshot();
+        s1.setRepository(repository);
         s1.setMetricType(MetricType.DEPLOYMENT_FREQUENCY);
         s1.setGranularity(MetricGranularity.DAY);
         s1.setPeriodStart(t1);
@@ -328,6 +334,7 @@ class MetricServiceTest {
         assertThat(response.series()).hasSize(1);
         assertThat(response.series().get(0).value()).isEqualByComparingTo("3.00");
         assertThat(response.series().get(0).sampleSize()).isEqualTo(3);
+        assertThat(response.calculatedAt()).isEqualTo(t2);
     }
 
     @Test
@@ -396,6 +403,71 @@ class MetricServiceTest {
             now,
             now
         )).isInstanceOf(ApiException.class);
+    }
+
+    @Test
+    void pooledFreshnessUsesOldestRepositoryAndRequiresEveryRepository() {
+        UUID secondRepositoryId = UUID.randomUUID();
+        GitRepository secondRepository = new GitRepository();
+        secondRepository.setId(secondRepositoryId);
+        secondRepository.setWorkspace(workspace);
+        secondRepository.setTrackingEnabled(true);
+        secondRepository.setArchived(false);
+        when(gitRepositoryRepository.findAllByWorkspaceId(workspaceId))
+            .thenReturn(List.of(repository, secondRepository));
+
+        Instant from = Instant.parse("2026-08-01T00:00:00Z");
+        Instant to = Instant.parse("2026-08-02T00:00:00Z");
+        Instant oldest = Instant.parse("2026-08-02T00:05:00Z");
+        MetricSnapshot first = durationSnapshot(
+            repository,
+            from,
+            to,
+            List.of(observation("first", from.plusSeconds(1), 1.0))
+        );
+        first.setCalculatedAt(oldest);
+        MetricSnapshot second = durationSnapshot(
+            secondRepository,
+            from,
+            to,
+            List.of(observation("second", from.plusSeconds(2), 2.0))
+        );
+        second.setCalculatedAt(oldest.plusSeconds(300));
+
+        when(metricSnapshotRepository.findSnapshots(
+            workspaceId,
+            List.of(repositoryId, secondRepositoryId),
+            MetricGranularity.DAY,
+            MetricService.CALCULATION_VERSION,
+            from,
+            to
+        )).thenReturn(List.of(first, second), List.of(first));
+
+        DoraMetricsSummaryResponse complete = metricService.getSummary(
+            managerPrincipal, null, null, from, to
+        );
+        DoraMetricsSummaryResponse incomplete = metricService.getSummary(
+            managerPrincipal, null, null, from, to
+        );
+
+        assertThat(complete.calculatedAt()).isEqualTo(oldest);
+        assertThat(incomplete.calculatedAt()).isNull();
+        assertThat(incomplete.stale()).isTrue();
+    }
+
+    @Test
+    void explicitRepositoryScopeRejectsUntrackedRepositories() {
+        repository.setTrackingEnabled(false);
+        when(repositoryScopeService.requireReadableRepository(managerPrincipal, repositoryId))
+            .thenReturn(repository);
+
+        assertThatThrownBy(() -> metricService.getSummary(
+            managerPrincipal,
+            null,
+            repositoryId,
+            null,
+            null
+        )).isInstanceOf(NotFoundException.class);
     }
 
     private MetricSnapshot durationSnapshot(
