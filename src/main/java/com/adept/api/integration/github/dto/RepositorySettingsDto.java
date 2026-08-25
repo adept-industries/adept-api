@@ -6,22 +6,28 @@ import com.adept.api.common.domain.MetricGranularity;
 
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 
 public record RepositorySettingsDto(
     @Pattern(regexp = "^(WORKFLOW_RUN|DEPLOYMENT)$", message = "deploymentSignal must be WORKFLOW_RUN or DEPLOYMENT")
     String deploymentSignal,
 
-    List<String> productionBranchPatterns,
+    @Size(max = 32, message = "productionBranchPatterns cannot contain more than 32 patterns")
+    List<@NotBlank @Size(max = 128) String> productionBranchPatterns,
 
-    List<String> productionEnvironmentPatterns,
+    @Size(max = 32, message = "productionEnvironmentPatterns cannot contain more than 32 patterns")
+    List<@NotBlank @Size(max = 128) String> productionEnvironmentPatterns,
 
-    List<String> deploymentWorkflowNamePatterns,
+    @Size(max = 32, message = "deploymentWorkflowNamePatterns cannot contain more than 32 patterns")
+    List<@NotBlank @Size(max = 128) String> deploymentWorkflowNamePatterns,
 
     @Pattern(regexp = "^(GITHUB|JIRA|MANUAL|BOTH)$", message = "incidentSource must be GITHUB, JIRA, MANUAL, or BOTH")
     String incidentSource,
 
-    List<String> doraExclusions,
+    @Size(max = 32, message = "doraExclusions cannot contain more than 32 patterns")
+    List<@NotBlank @Size(max = 128) String> doraExclusions,
 
     MetricGranularity defaultMetricGranularity,
 
@@ -33,7 +39,7 @@ public record RepositorySettingsDto(
         return new RepositorySettingsDto(
             "WORKFLOW_RUN",
             List.of("main", "master", "release/*"),
-            List.of("production", "prod"),
+            List.of("production", "prod", "live"),
             List.of("*deploy*", "*production*", "*release*"),
             "GITHUB",
             List.of(),

@@ -105,34 +105,24 @@ public class RepositoryService {
             .orElseThrow(() -> new ApiException(ProblemCode.REPOSITORY_NOT_FOUND));
 
         boolean oldTracking = repo.isTrackingEnabled();
+        Map<String, Object> currentEffectiveSettingsMap = mergeSettings(repo.getSettings(), null);
+        Map<String, Object> effectiveSettingsMap = mergeSettings(
+            repo.getSettings(),
+            request.settings()
+        );
+        RepositorySettingsDto effectiveSettings = parseSettings(effectiveSettingsMap);
+        boolean settingsChanged = request.settings() != null
+            && !effectiveSettingsMap.equals(currentEffectiveSettingsMap);
 
         if (request.trackingEnabled() != null) {
             boolean newTracking = request.trackingEnabled();
-            repo.setTrackingEnabled(newTracking);
-
-            if (!oldTracking && newTracking) {
-                // Tracking was just enabled -> insert BACKFILL_REPOSITORY job
-                int backfillDays = 90;
-                RepositorySettingsDto effectiveSettings = request.settings() != null
-                    ? request.settings()
-                    : parseSettings(repo.getSettings());
-                if (effectiveSettings != null && effectiveSettings.backfillDays() != null) {
-                    backfillDays = effectiveSettings.backfillDays();
-                }
-
-                ProcessingJob backfillJob = new ProcessingJob();
-                backfillJob.setWorkspace(repo.getWorkspace());
-                backfillJob.setRepository(repo);
-                backfillJob.setJobType(ProcessingJobType.BACKFILL_REPOSITORY);
-                backfillJob.setStatus(ProcessingJobStatus.PENDING);
-                backfillJob.setPriority(50);
-                backfillJob.setPayload(Map.of(
-                    "repositoryId", repo.getId().toString(),
-                    "backfillDays", backfillDays
-                ));
-                backfillJob.setAvailableAt(clock.instant());
-                processingJobRepository.save(backfillJob);
+            if (newTracking && repo.isArchived()) {
+                throw new ApiException(
+                    ProblemCode.VALIDATION_FAILED,
+                    "Archived repositories cannot be tracked"
+                );
             }
+            repo.setTrackingEnabled(newTracking);
 
             auditService.record(
                 AuditAction.REPOSITORY_TRACKING_UPDATED,
@@ -149,13 +139,7 @@ public class RepositoryService {
         }
 
         if (request.settings() != null) {
-            try {
-                @SuppressWarnings("unchecked")
-                Map<String, Object> settingsMap = objectMapper.convertValue(request.settings(), Map.class);
-                repo.setSettings(settingsMap);
-            } catch (Exception exception) {
-                throw new ApiException(ProblemCode.VALIDATION_FAILED, "Invalid repository settings format");
-            }
+            repo.setSettings(effectiveSettingsMap);
 
             auditService.record(
                 AuditAction.REPOSITORY_SETTINGS_UPDATED,
@@ -166,13 +150,37 @@ public class RepositoryService {
                 repo.getId(),
                 Map.of(
                     "repositoryId", repo.getId().toString(),
-                    "deploymentSignal", request.settings().deploymentSignal()
+                    "deploymentSignal", effectiveSettings.deploymentSignal()
                 )
             );
         }
 
+        boolean trackingEnabled = request.trackingEnabled() != null
+            ? request.trackingEnabled()
+            : oldTracking;
+        if (trackingEnabled && !repo.isArchived() && ((!oldTracking) || settingsChanged)) {
+            enqueueBackfill(repo, effectiveSettings.backfillDays());
+        }
+
         repositoryRepository.save(repo);
         return toResponse(repo);
+    }
+
+    @Transactional
+    public void requestBackfill(
+            UUID workspaceId,
+            UUID repositoryId,
+            Membership membership) {
+        verifyManagerRole(membership);
+        GitRepository repo = repositoryRepository.findByIdAndWorkspaceId(repositoryId, workspaceId)
+            .orElseThrow(() -> new ApiException(ProblemCode.REPOSITORY_NOT_FOUND));
+        if (repo.isArchived() || !repo.isTrackingEnabled()) {
+            throw new ApiException(
+                ProblemCode.VALIDATION_FAILED,
+                "Only tracked, non-archived repositories can be rebuilt"
+            );
+        }
+        enqueueBackfill(repo, parseSettings(repo.getSettings()).backfillDays());
     }
 
     @Transactional(readOnly = true)
@@ -203,6 +211,59 @@ public class RepositoryService {
         }
     }
 
+    private void enqueueBackfill(GitRepository repo, Integer configuredBackfillDays) {
+        boolean alreadyQueued = processingJobRepository.existsByRepository_IdAndJobTypeAndStatusIn(
+            repo.getId(),
+            ProcessingJobType.BACKFILL_REPOSITORY,
+            List.of(ProcessingJobStatus.PENDING, ProcessingJobStatus.FAILED)
+        );
+        if (alreadyQueued) {
+            return;
+        }
+        int backfillDays = configuredBackfillDays != null ? configuredBackfillDays : 90;
+        ProcessingJob backfillJob = new ProcessingJob();
+        backfillJob.setWorkspace(repo.getWorkspace());
+        backfillJob.setRepository(repo);
+        backfillJob.setJobType(ProcessingJobType.BACKFILL_REPOSITORY);
+        backfillJob.setStatus(ProcessingJobStatus.PENDING);
+        backfillJob.setPriority(50);
+        backfillJob.setPayload(Map.of(
+            "repositoryId", repo.getId().toString(),
+            "backfillDays", backfillDays,
+            "rebuildDerivedData", true
+        ));
+        backfillJob.setAvailableAt(clock.instant());
+        processingJobRepository.save(backfillJob);
+    }
+
+    private Map<String, Object> mergeSettings(
+            Map<String, Object> currentSettings,
+            RepositorySettingsDto patch) {
+        Map<String, Object> merged = settingsMap(RepositorySettingsDto.defaults());
+        if (currentSettings != null) {
+            merged.putAll(currentSettings);
+        }
+        if (patch != null) {
+            Map<String, Object> patchMap = settingsMap(patch);
+            patchMap.forEach((key, value) -> {
+                if (value != null) {
+                    merged.put(key, value);
+                }
+            });
+        }
+        return merged;
+    }
+
+    private Map<String, Object> settingsMap(RepositorySettingsDto settings) {
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> converted = objectMapper.convertValue(settings, Map.class);
+            return new HashMap<>(converted);
+        } catch (Exception exception) {
+            throw new ApiException(ProblemCode.VALIDATION_FAILED, "Invalid repository settings format");
+        }
+    }
+
     public RepositoryResponse toResponse(GitRepository repo) {
         return new RepositoryResponse(
             repo.getId(),
@@ -222,11 +283,16 @@ public class RepositoryService {
     }
 
     private RepositorySettingsDto parseSettings(Map<String, Object> settingsMap) {
-        if (settingsMap == null || settingsMap.isEmpty()) {
-            return RepositorySettingsDto.defaults();
-        }
         try {
-            return objectMapper.convertValue(settingsMap, RepositorySettingsDto.class);
+            Map<String, Object> complete = settingsMap(RepositorySettingsDto.defaults());
+            if (settingsMap != null) {
+                settingsMap.forEach((key, value) -> {
+                    if (value != null) {
+                        complete.put(key, value);
+                    }
+                });
+            }
+            return objectMapper.convertValue(complete, RepositorySettingsDto.class);
         } catch (Exception ignored) {
             return RepositorySettingsDto.defaults();
         }

@@ -10,7 +10,7 @@ The API implementation through Phase 6 covers authentication, workspaces, projec
 - **Workspace Management**: Managers can create additional tenant workspaces, switch between memberships, update workspace settings, and request controlled workspace deletion.
 - **Projects**: Projects group repositories inside one workspace. Managers manage projects and repository links; Leads see only projects containing repositories assigned to them.
 - **Integrations & Webhooks**: Managers connect GitHub and Jira, configure tracked repositories and mappings, and receive verified, duplicate-safe provider deliveries that are stored with durable processing jobs in one transaction.
-- **DORA Metrics**: Summary and series endpoints enforce Manager/Lead repository scope, use half-open time ranges, aggregate exact `dora-v2` observations, and report calculation time, workspace timezone, version, and staleness.
+- **DORA Metrics**: Summary and series endpoints enforce Manager/Lead repository scope, use half-open time ranges, aggregate exact `dora-v3` observations, and report calculation time, workspace timezone, version, and staleness.
 - **OpenAPI**: Contracts configured via `springdoc-openapi` and exported deterministically to `docs/openapi/adept-api-v1.json`.
 
 ## Local Sibling Layout
@@ -122,9 +122,13 @@ workflow builds Linux AMD64 and pushes exactly one immutable image tag:
 ghcr.io/adept-industries/adept-api:sha-<full-commit>
 ```
 
-Pull-request runs, failed CI runs, and non-main branches never publish. The
-workflow uses GitHub's short-lived `GITHUB_TOKEN`; it does not require a PAT or
-any application/AWS secret.
+Pull-request runs, failed CI runs, and non-main branches never publish. A
+serialized production job deploys that exact image to AWS Lightsail, waits for
+API health, and only then reports a terminal GitHub Deployment status for the
+tested SHA and the `production` environment. The workflow uses GitHub's
+short-lived `GITHUB_TOKEN` for GHCR and Deployment API access plus the existing
+`LIGHTSAIL_HOST`, `LIGHTSAIL_USER`, and `LIGHTSAIL_SSH_KEY` secrets; no PAT is
+required.
 
 ## Database Ownership
 

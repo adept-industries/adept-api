@@ -61,6 +61,8 @@ public class OpenApiConfig {
     private static final String PROJECT_REPOSITORIES = "/api/v1/projects/{projectId}/repositories";
     private static final String REPOSITORY_LEAD_ASSIGNMENTS =
         "/api/v1/repositories/{repositoryId}/lead-assignments";
+    private static final String REPOSITORY_BACKFILL =
+        "/api/v1/repositories/{repositoryId}/backfill";
 
     @Bean
     public OpenAPI customOpenAPI() {
@@ -439,6 +441,20 @@ public class OpenApiConfig {
                 "PendingRepositoryLeadInvitationResponse",
                 SecurityProfile.BEARER_CSRF,
                 Set.of("400", "401", "403", "404", "409", "413", "415"),
+                CookieBehavior.NONE
+            );
+            configure(
+                openApi,
+                REPOSITORY_BACKFILL,
+                PathItem.HttpMethod.POST,
+                "requestBackfill",
+                "Rebuild a repository's DORA data",
+                "Queues a deduplicated backfill and recalculation for a tracked, non-archived repository.",
+                "202",
+                "Repository rebuild accepted",
+                null,
+                SecurityProfile.BEARER_CSRF,
+                Set.of("400", "401", "403", "404"),
                 CookieBehavior.NONE
             );
 

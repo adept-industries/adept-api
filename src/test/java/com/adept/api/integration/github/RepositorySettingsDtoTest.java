@@ -29,6 +29,22 @@ class RepositorySettingsDtoTest {
         assertThat(validator.validate(settings("MERGE_TO_BRANCH"))).hasSize(1);
     }
 
+    @Test
+    void rejectsBlankOversizedAndExcessivePatterns() {
+        RepositorySettingsDto invalid = new RepositorySettingsDto(
+            "DEPLOYMENT",
+            java.util.Collections.nCopies(33, "main"),
+            List.of(" "),
+            List.of("x".repeat(129)),
+            "GITHUB",
+            List.of(" "),
+            MetricGranularity.WEEK,
+            90
+        );
+
+        assertThat(validator.validate(invalid)).hasSize(4);
+    }
+
     private RepositorySettingsDto settings(String deploymentSignal) {
         return new RepositorySettingsDto(
             deploymentSignal,

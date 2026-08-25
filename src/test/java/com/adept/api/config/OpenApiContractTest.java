@@ -103,6 +103,9 @@ class OpenApiContractTest extends PartCIntegrationTestSupport {
         endpoint("/api/v1/projects/{projectId}/repositories", "put", "replaceProjectRepositories", "200",
             security("bearerAuth", "csrfHeader"), "ReplaceProjectRepositoriesRequest",
             "400", "401", "403", "404", "413", "415"),
+        endpoint("/api/v1/repositories/{repositoryId}/backfill", "post", "requestBackfill", "202",
+            security("bearerAuth", "csrfHeader"), null,
+            "400", "401", "403", "404"),
         endpoint("/api/v1/repositories/{repositoryId}/lead-assignments", "post", "createPendingRepositoryLeadInvitation", "200",
             security("bearerAuth", "csrfHeader"), "CreateRepositoryLeadInvitationRequest",
             "400", "401", "403", "404", "409", "413", "415")

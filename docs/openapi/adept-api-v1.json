@@ -1055,14 +1055,22 @@
           },
           "deploymentWorkflowNamePatterns": {
             "items": {
+              "maxLength": 128,
+              "minLength": 0,
               "type": "string"
             },
+            "maxItems": 32,
+            "minItems": 0,
             "type": "array"
           },
           "doraExclusions": {
             "items": {
+              "maxLength": 128,
+              "minLength": 0,
               "type": "string"
             },
+            "maxItems": 32,
+            "minItems": 0,
             "type": "array"
           },
           "incidentSource": {
@@ -1071,14 +1079,22 @@
           },
           "productionBranchPatterns": {
             "items": {
+              "maxLength": 128,
+              "minLength": 0,
               "type": "string"
             },
+            "maxItems": 32,
+            "minItems": 0,
             "type": "array"
           },
           "productionEnvironmentPatterns": {
             "items": {
+              "maxLength": 128,
+              "minLength": 0,
               "type": "string"
             },
+            "maxItems": 32,
+            "minItems": 0,
             "type": "array"
           }
         },
@@ -5570,6 +5586,133 @@
             "csrfHeader": []
           }
         ],
+        "tags": [
+          "repository-controller"
+        ]
+      }
+    },
+    "/api/v1/repositories/{repositoryId}/backfill": {
+      "post": {
+        "description": "Queues a deduplicated backfill and recalculation for a tracked, non-archived repository.",
+        "operationId": "requestBackfill",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "repositoryId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Repository rebuild accepted",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Validation failed or the request was malformed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Authentication or session validation failed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "CSRF, origin, membership, or role authorization failed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The scoped resource was not found",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+            "csrfHeader": []
+          }
+        ],
+        "summary": "Rebuild a repository's DORA data",
         "tags": [
           "repository-controller"
         ]
