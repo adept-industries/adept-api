@@ -8,7 +8,7 @@ The API implementation through Phase 6 covers authentication, workspaces, projec
 - **Framework & Runtime**: Spring Boot 4.1 on Java 25, Flyway V1–V13, Hibernate validation, PostgreSQL 18.
 - **Authentication**: JWT access tokens, HttpOnly refresh cookies (`adept_refresh`), CSRF protection (`XSRF-TOKEN` / `X-XSRF-TOKEN`), BCrypt password hashing.
 - **Workspace Management**: Managers can create additional tenant workspaces, switch between memberships, update workspace settings, and request controlled workspace deletion.
-- **Projects**: Projects group repositories inside one workspace. Managers manage projects and repository links; Leads see only projects containing repositories assigned to them.
+- **Projects**: Projects group tracked, non-archived repositories inside one workspace. Managers can atomically configure project repository links and each included repository's workspace-scoped Jira mappings; Leads see only projects containing repositories assigned to them. Jira mappings remain repository-level settings when a repository is removed from a project.
 - **Integrations & Webhooks**: Managers connect GitHub and Jira, configure tracked repositories and mappings, and receive verified, duplicate-safe provider deliveries that are stored with durable processing jobs in one transaction.
 - **DORA Metrics**: Summary and series endpoints enforce Manager/Lead repository scope, use half-open time ranges, aggregate exact `dora-v3` observations, and report calculation time, workspace timezone, version, and staleness.
 - **OpenAPI**: Contracts configured via `springdoc-openapi` and exported deterministically to `docs/openapi/adept-api-v1.json`.

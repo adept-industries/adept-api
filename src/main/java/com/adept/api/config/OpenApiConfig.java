@@ -59,6 +59,7 @@ public class OpenApiConfig {
     private static final String PROJECTS = "/api/v1/projects";
     private static final String PROJECT = "/api/v1/projects/{projectId}";
     private static final String PROJECT_REPOSITORIES = "/api/v1/projects/{projectId}/repositories";
+    private static final String PROJECT_CONFIGURATION = "/api/v1/projects/{projectId}/configuration";
     private static final String REPOSITORY_LEAD_ASSIGNMENTS =
         "/api/v1/repositories/{repositoryId}/lead-assignments";
     private static final String REPOSITORY_BACKFILL =
@@ -367,7 +368,7 @@ public class OpenApiConfig {
                 PathItem.HttpMethod.POST,
                 "createProject",
                 "Create a project in the current workspace",
-                null,
+                "Optionally attaches tracked, non-archived repositories and replaces their repository-level Jira mappings atomically.",
                 "201",
                 "Project created",
                 componentRef("ProjectResponse"),
@@ -423,9 +424,23 @@ public class OpenApiConfig {
                 PathItem.HttpMethod.PUT,
                 "replaceProjectRepositories",
                 "Replace a project's repository set",
-                "Every supplied repository must belong to the current workspace.",
+                "Every supplied repository must be tracked, non-archived, and belong to the current workspace. Jira mappings are unchanged.",
                 "200",
                 "Project repositories replaced",
+                componentRef("ProjectResponse"),
+                SecurityProfile.BEARER_CSRF,
+                Set.of("400", "401", "403", "404", "413", "415"),
+                CookieBehavior.NONE
+            );
+            configure(
+                openApi,
+                PROJECT_CONFIGURATION,
+                PathItem.HttpMethod.PUT,
+                "replaceProjectConfiguration",
+                "Replace project repositories and their Jira mappings",
+                "The project repository set and mappings for included repositories are replaced in one transaction. Mappings for repositories removed from the project remain unchanged because they are repository-level settings.",
+                "200",
+                "Project configuration replaced",
                 componentRef("ProjectResponse"),
                 SecurityProfile.BEARER_CSRF,
                 Set.of("400", "401", "403", "404", "413", "415"),
@@ -682,7 +697,11 @@ public class OpenApiConfig {
         require(components, "PendingRepositoryLeadInvitationResponse",
             "assignmentId", "repositoryId", "invitationId", "email", "role", "status", "expiresAt");
         require(components, "WorkspaceDeletionResponse", "workspaceId", "status");
-        require(components, "ProjectRepositoryResponse", "id", "fullName", "trackingEnabled", "archived");
+        require(components, "ProjectJiraProjectResponse", "id", "projectKey", "projectName", "trackingEnabled");
+        require(components, "ProjectRepositoryConfigurationRequest", "repositoryId", "jiraProjectIds");
+        require(components, "ReplaceProjectConfigurationRequest", "repositories");
+        require(components, "ProjectRepositoryResponse",
+            "id", "fullName", "trackingEnabled", "archived", "jiraProjects");
         require(components, "ProjectResponse", "id", "workspaceId", "name", "repositories");
 
         Schema<?> updateRequest = components.getSchemas().get("UpdateWorkspaceRequest");

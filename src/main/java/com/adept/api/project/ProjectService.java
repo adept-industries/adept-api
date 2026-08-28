@@ -1,11 +1,15 @@
 package com.adept.api.project;
 
+import java.time.Clock;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -15,14 +19,22 @@ import com.adept.api.audit.AuditAction;
 import com.adept.api.audit.AuditService;
 import com.adept.api.auth.AccountRequestContext;
 import com.adept.api.common.domain.MembershipRole;
+import com.adept.api.common.error.ApiException;
 import com.adept.api.common.error.ConflictException;
 import com.adept.api.common.error.NotFoundException;
 import com.adept.api.common.error.ProblemCode;
 import com.adept.api.integration.github.GitRepository;
 import com.adept.api.integration.github.GitRepositoryRepository;
+import com.adept.api.integration.jira.JiraProject;
+import com.adept.api.integration.jira.JiraProjectRepository;
+import com.adept.api.integration.jira.RepositoryJiraProject;
+import com.adept.api.integration.jira.RepositoryJiraProjectRepository;
 import com.adept.api.project.dto.CreateProjectRequest;
+import com.adept.api.project.dto.ProjectJiraProjectResponse;
+import com.adept.api.project.dto.ProjectRepositoryConfigurationRequest;
 import com.adept.api.project.dto.ProjectRepositoryResponse;
 import com.adept.api.project.dto.ProjectResponse;
+import com.adept.api.project.dto.ReplaceProjectConfigurationRequest;
 import com.adept.api.project.dto.ReplaceProjectRepositoriesRequest;
 import com.adept.api.project.dto.UpdateProjectRequest;
 import com.adept.api.security.AuthenticatedPrincipal;
@@ -37,23 +49,32 @@ public class ProjectService {
     private final ProjectRepository projectRepository;
     private final ProjectRepositoryLinkRepository linkRepository;
     private final GitRepositoryRepository gitRepositoryRepository;
+    private final JiraProjectRepository jiraProjectRepository;
+    private final RepositoryJiraProjectRepository repositoryJiraProjectRepository;
     private final MembershipRepository membershipRepository;
     private final WorkspaceAuthorizationService workspaceAuthorizationService;
     private final AuditService auditService;
+    private final Clock clock;
 
     public ProjectService(
             ProjectRepository projectRepository,
             ProjectRepositoryLinkRepository linkRepository,
             GitRepositoryRepository gitRepositoryRepository,
+            JiraProjectRepository jiraProjectRepository,
+            RepositoryJiraProjectRepository repositoryJiraProjectRepository,
             MembershipRepository membershipRepository,
             WorkspaceAuthorizationService workspaceAuthorizationService,
-            AuditService auditService) {
+            AuditService auditService,
+            Clock clock) {
         this.projectRepository = projectRepository;
         this.linkRepository = linkRepository;
         this.gitRepositoryRepository = gitRepositoryRepository;
+        this.jiraProjectRepository = jiraProjectRepository;
+        this.repositoryJiraProjectRepository = repositoryJiraProjectRepository;
         this.membershipRepository = membershipRepository;
         this.workspaceAuthorizationService = workspaceAuthorizationService;
         this.auditService = auditService;
+        this.clock = clock;
     }
 
     @Transactional(readOnly = true)
@@ -84,6 +105,10 @@ public class ProjectService {
         if (projectRepository.existsByWorkspaceIdAndNameIgnoreCase(principal.workspaceId(), name)) {
             throw new ConflictException(ProblemCode.PROJECT_CONFLICT);
         }
+        List<RepositoryConfigurationTarget> configuration = resolveConfiguration(
+            principal.workspaceId(),
+            request.repositories()
+        );
 
         Project project = new Project();
         project.setWorkspace(membership.getWorkspace());
@@ -97,7 +122,10 @@ public class ProjectService {
         }
 
         audit(AuditAction.PROJECT_CREATED, project, membership, Map.of(), context);
-        return ProjectResponse.from(project, List.of());
+        if (!configuration.isEmpty()) {
+            applyConfiguration(project, configuration, membership, context);
+        }
+        return response(project, membership);
     }
 
     public ProjectResponse update(
@@ -150,25 +178,8 @@ public class ProjectService {
         Membership membership = requireCurrentMembership(principal);
         Project project = requireProject(principal.workspaceId(), projectId);
         Set<UUID> requestedIds = new HashSet<>(request.repositoryIds());
-        List<GitRepository> repositories = requestedIds.isEmpty()
-            ? List.of()
-            : gitRepositoryRepository.findAllByIdInAndWorkspaceId(requestedIds, principal.workspaceId());
-        if (repositories.size() != requestedIds.size()) {
-            throw new NotFoundException(ProblemCode.REPOSITORY_NOT_FOUND);
-        }
-
-        linkRepository.deleteAllByProjectId(project.getId());
-        linkRepository.flush();
-        List<ProjectRepositoryLink> links = repositories.stream().map(repository -> {
-            ProjectRepositoryLink link = new ProjectRepositoryLink();
-            link.setId(new ProjectRepositoryLinkId(project.getId(), repository.getId()));
-            link.setProject(project);
-            link.setRepository(repository);
-            link.setWorkspace(project.getWorkspace());
-            return link;
-        }).toList();
-        linkRepository.saveAll(links);
-        linkRepository.flush();
+        List<GitRepository> repositories = requireAttachableRepositories(principal.workspaceId(), requestedIds);
+        replaceProjectLinks(project, repositories);
 
         audit(
             AuditAction.PROJECT_REPOSITORIES_UPDATED,
@@ -177,6 +188,22 @@ public class ProjectService {
             Map.of("repositoryCount", repositories.size()),
             context
         );
+        return response(project, membership);
+    }
+
+    public ProjectResponse replaceConfiguration(
+            AuthenticatedPrincipal principal,
+            UUID projectId,
+            ReplaceProjectConfigurationRequest request,
+            AccountRequestContext context) {
+        workspaceAuthorizationService.requireManager(principal);
+        Membership membership = requireCurrentMembership(principal);
+        Project project = requireProject(principal.workspaceId(), projectId);
+        List<RepositoryConfigurationTarget> configuration = resolveConfiguration(
+            principal.workspaceId(),
+            request.repositories()
+        );
+        applyConfiguration(project, configuration, membership, context);
         return response(project, membership);
     }
 
@@ -223,11 +250,171 @@ public class ProjectService {
         List<ProjectRepositoryLink> links = membership.getRole() == MembershipRole.MANAGER
             ? linkRepository.findAllWithRepositoryByProjectId(project.getId())
             : linkRepository.findAllReadableByLead(project.getId(), membership.getId());
+        List<UUID> repositoryIds = links.stream()
+            .map(link -> link.getRepository().getId())
+            .toList();
+        Map<UUID, List<ProjectJiraProjectResponse>> jiraProjectsByRepository = new HashMap<>();
+        if (!repositoryIds.isEmpty()) {
+            repositoryJiraProjectRepository
+                .findAllByRepositoryIdsAndWorkspaceIdWithProject(repositoryIds, project.getWorkspace().getId())
+                .forEach(mapping -> jiraProjectsByRepository
+                    .computeIfAbsent(mapping.getRepository().getId(), ignored -> new ArrayList<>())
+                    .add(ProjectJiraProjectResponse.from(mapping.getJiraProject())));
+        }
         List<ProjectRepositoryResponse> repositories = links.stream()
             .map(ProjectRepositoryLink::getRepository)
-            .map(ProjectRepositoryResponse::from)
+            .map(repository -> ProjectRepositoryResponse.from(
+                repository,
+                jiraProjectsByRepository.getOrDefault(repository.getId(), List.of())
+            ))
             .toList();
         return ProjectResponse.from(project, repositories);
+    }
+
+    private List<RepositoryConfigurationTarget> resolveConfiguration(
+            UUID workspaceId,
+            List<ProjectRepositoryConfigurationRequest> requestedConfiguration) {
+        if (requestedConfiguration == null || requestedConfiguration.isEmpty()) {
+            return List.of();
+        }
+
+        Map<UUID, Set<UUID>> jiraProjectIdsByRepository = new LinkedHashMap<>();
+        for (ProjectRepositoryConfigurationRequest configuredRepository : requestedConfiguration) {
+            if (configuredRepository == null
+                    || configuredRepository.repositoryId() == null
+                    || configuredRepository.jiraProjectIds() == null
+                    || configuredRepository.jiraProjectIds().contains(null)) {
+                throw new ApiException(ProblemCode.VALIDATION_FAILED, "Project repository configuration is incomplete.");
+            }
+            Set<UUID> previous = jiraProjectIdsByRepository.putIfAbsent(
+                configuredRepository.repositoryId(),
+                Set.copyOf(configuredRepository.jiraProjectIds())
+            );
+            if (previous != null) {
+                throw new ApiException(
+                    ProblemCode.VALIDATION_FAILED,
+                    "Each repository can appear only once in project configuration."
+                );
+            }
+        }
+
+        Set<UUID> repositoryIds = jiraProjectIdsByRepository.keySet();
+        List<GitRepository> repositories = requireAttachableRepositories(workspaceId, repositoryIds);
+        Map<UUID, GitRepository> repositoryById = repositories.stream()
+            .collect(Collectors.toMap(GitRepository::getId, repository -> repository));
+
+        Set<UUID> allJiraProjectIds = jiraProjectIdsByRepository.values().stream()
+            .flatMap(Set::stream)
+            .collect(Collectors.toSet());
+        List<JiraProject> jiraProjects = allJiraProjectIds.isEmpty()
+            ? List.of()
+            : jiraProjectRepository.findAllByIdInAndWorkspaceId(allJiraProjectIds, workspaceId);
+        if (jiraProjects.size() != allJiraProjectIds.size()) {
+            throw new NotFoundException(
+                ProblemCode.JIRA_PROJECT_NOT_FOUND,
+                "One or more Jira projects do not exist or belong to another workspace."
+            );
+        }
+        Map<UUID, JiraProject> jiraProjectById = jiraProjects.stream()
+            .collect(Collectors.toMap(JiraProject::getId, jiraProject -> jiraProject));
+
+        return jiraProjectIdsByRepository.entrySet().stream()
+            .map(entry -> new RepositoryConfigurationTarget(
+                repositoryById.get(entry.getKey()),
+                entry.getValue().stream().map(jiraProjectById::get).toList()
+            ))
+            .toList();
+    }
+
+    private List<GitRepository> requireAttachableRepositories(UUID workspaceId, Set<UUID> repositoryIds) {
+        if (repositoryIds.isEmpty()) {
+            return List.of();
+        }
+        List<GitRepository> repositories = gitRepositoryRepository.findAllByIdInAndWorkspaceId(
+            repositoryIds,
+            workspaceId
+        );
+        if (repositories.size() != repositoryIds.size()) {
+            throw new NotFoundException(ProblemCode.REPOSITORY_NOT_FOUND);
+        }
+        if (repositories.stream().anyMatch(repository -> !repository.isTrackingEnabled() || repository.isArchived())) {
+            throw new ApiException(
+                ProblemCode.VALIDATION_FAILED,
+                "Only tracked, non-archived repositories can be attached to a project."
+            );
+        }
+        return repositories;
+    }
+
+    private void applyConfiguration(
+            Project project,
+            List<RepositoryConfigurationTarget> configuration,
+            Membership membership,
+            AccountRequestContext context) {
+        List<GitRepository> repositories = configuration.stream()
+            .map(RepositoryConfigurationTarget::repository)
+            .toList();
+        replaceProjectLinks(project, repositories);
+
+        Set<UUID> configuredRepositoryIds = repositories.stream()
+            .map(GitRepository::getId)
+            .collect(Collectors.toSet());
+        if (!configuredRepositoryIds.isEmpty()) {
+            repositoryJiraProjectRepository.deleteAllByRepositoryIds(configuredRepositoryIds);
+            repositoryJiraProjectRepository.flush();
+        }
+
+        List<RepositoryJiraProject> mappings = configuration.stream()
+            .flatMap(target -> target.jiraProjects().stream()
+                .map(jiraProject -> RepositoryJiraProject.create(target.repository(), jiraProject, clock.instant())))
+            .toList();
+        repositoryJiraProjectRepository.saveAll(mappings);
+        repositoryJiraProjectRepository.flush();
+
+        int mappingCount = 0;
+        for (RepositoryConfigurationTarget target : configuration) {
+            mappingCount += target.jiraProjects().size();
+            auditService.record(
+                AuditAction.REPOSITORY_JIRA_PROJECTS_UPDATED,
+                membership.getUser(),
+                membership,
+                target.repository().getWorkspace(),
+                "REPOSITORY",
+                target.repository().getId(),
+                Map.of(
+                    "repositoryId", target.repository().getId().toString(),
+                    "projectId", project.getId().toString(),
+                    "mappedProjectCount", target.jiraProjects().size()
+                ),
+                context != null ? context.ipAddress() : null,
+                context != null ? context.userAgent() : null
+            );
+        }
+        audit(
+            AuditAction.PROJECT_REPOSITORIES_UPDATED,
+            project,
+            membership,
+            Map.of(
+                "repositoryCount", repositories.size(),
+                "jiraMappingCount", mappingCount
+            ),
+            context
+        );
+    }
+
+    private void replaceProjectLinks(Project project, List<GitRepository> repositories) {
+        linkRepository.deleteAllByProjectId(project.getId());
+        linkRepository.flush();
+        List<ProjectRepositoryLink> links = repositories.stream().map(repository -> {
+            ProjectRepositoryLink link = new ProjectRepositoryLink();
+            link.setId(new ProjectRepositoryLinkId(project.getId(), repository.getId()));
+            link.setProject(project);
+            link.setRepository(repository);
+            link.setWorkspace(project.getWorkspace());
+            return link;
+        }).toList();
+        linkRepository.saveAll(links);
+        linkRepository.flush();
     }
 
     private void audit(
@@ -254,5 +441,11 @@ public class ProjectService {
             return null;
         }
         return description.trim();
+    }
+
+    private record RepositoryConfigurationTarget(
+        GitRepository repository,
+        List<JiraProject> jiraProjects
+    ) {
     }
 }

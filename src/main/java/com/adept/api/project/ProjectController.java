@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.adept.api.auth.AccountRequestContext;
 import com.adept.api.project.dto.CreateProjectRequest;
 import com.adept.api.project.dto.ProjectResponse;
+import com.adept.api.project.dto.ReplaceProjectConfigurationRequest;
 import com.adept.api.project.dto.ReplaceProjectRepositoriesRequest;
 import com.adept.api.project.dto.UpdateProjectRequest;
 import com.adept.api.security.AuthenticatedPrincipal;
@@ -82,6 +83,19 @@ public class ProjectController {
             @Valid @RequestBody ReplaceProjectRepositoriesRequest request,
             HttpServletRequest servletRequest) {
         return ResponseEntity.ok(projectService.replaceRepositories(
+            currentPrincipal.require(),
+            projectId,
+            request,
+            AccountRequestContext.from(servletRequest)
+        ));
+    }
+
+    @PutMapping("/{projectId}/configuration")
+    public ResponseEntity<ProjectResponse> replaceConfiguration(
+            @PathVariable UUID projectId,
+            @Valid @RequestBody ReplaceProjectConfigurationRequest request,
+            HttpServletRequest servletRequest) {
+        return ResponseEntity.ok(projectService.replaceConfiguration(
             currentPrincipal.require(),
             projectId,
             request,
