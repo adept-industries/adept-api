@@ -103,6 +103,9 @@ class OpenApiContractTest extends PartCIntegrationTestSupport {
         endpoint("/api/v1/projects/{projectId}/repositories", "put", "replaceProjectRepositories", "200",
             security("bearerAuth", "csrfHeader"), "ReplaceProjectRepositoriesRequest",
             "400", "401", "403", "404", "413", "415"),
+        endpoint("/api/v1/projects/{projectId}/configuration", "put", "replaceProjectConfiguration", "200",
+            security("bearerAuth", "csrfHeader"), "ReplaceProjectConfigurationRequest",
+            "400", "401", "403", "404", "413", "415"),
         endpoint("/api/v1/repositories/{repositoryId}/backfill", "post", "requestBackfill", "202",
             security("bearerAuth", "csrfHeader"), null,
             "400", "401", "403", "404"),
@@ -130,7 +133,8 @@ class OpenApiContractTest extends PartCIntegrationTestSupport {
         Map.entry("createProject", "#/components/schemas/ProjectResponse"),
         Map.entry("getProject", "#/components/schemas/ProjectResponse"),
         Map.entry("updateProject", "#/components/schemas/ProjectResponse"),
-        Map.entry("replaceProjectRepositories", "#/components/schemas/ProjectResponse")
+        Map.entry("replaceProjectRepositories", "#/components/schemas/ProjectResponse"),
+        Map.entry("replaceProjectConfiguration", "#/components/schemas/ProjectResponse")
     );
 
     private static final Set<String> ALLOWED_SCHEMAS = Set.of(
@@ -154,10 +158,13 @@ class OpenApiContractTest extends PartCIntegrationTestSupport {
         "PasswordReauthenticationRequest",
         "PendingRepositoryLeadInvitationResponse",
         "ProblemDetail",
+        "ProjectJiraProjectResponse",
+        "ProjectRepositoryConfigurationRequest",
         "ProjectRepositoryResponse",
         "ProjectResponse",
         "RefreshRequest",
         "ResetPasswordRequest",
+        "ReplaceProjectConfigurationRequest",
         "ReplaceProjectRepositoriesRequest",
         "SignupRequest",
         "SignupResponse",
