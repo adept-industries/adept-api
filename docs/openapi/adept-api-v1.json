@@ -6245,7 +6245,7 @@
         ]
       },
       "post": {
-        "description": "Creates a new tenant and an active Manager membership for the authenticated Manager.",
+        "description": "Creates a new tenant and an active Manager membership for the authenticated user.",
         "operationId": "createWorkspace",
         "requestBody": {
           "content": {

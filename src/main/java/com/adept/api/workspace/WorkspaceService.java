@@ -188,7 +188,6 @@ public class WorkspaceService {
             AuthenticatedPrincipal principal,
             CreateWorkspaceRequest request,
             AccountRequestContext context) {
-        workspaceAuthorizationService.requireManager(principal);
         Membership currentMembership = revalidateActiveMembership(principal);
         Membership created = createWorkspaceMembership(currentMembership.getUser(), request, context);
         return WorkspaceSummaryResponse.from(created);
