@@ -284,7 +284,7 @@ public class OpenApiConfig {
                 PathItem.HttpMethod.POST,
                 "createWorkspace",
                 "Create another workspace",
-                "Creates a new tenant and an active Manager membership for the authenticated Manager.",
+                "Creates a new tenant and an active Manager membership for the authenticated user.",
                 "201",
                 "Workspace created",
                 componentRef("WorkspaceSummaryResponse"),
