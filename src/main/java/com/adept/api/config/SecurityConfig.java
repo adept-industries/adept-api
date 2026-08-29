@@ -124,11 +124,14 @@ public class SecurityConfig {
             .logout(AbstractHttpConfigurer::disable)
             .cors(AbstractHttpConfigurer::disable)
             .csrf(csrf -> {
-                csrf.ignoringRequestMatchers("/api/v1/webhooks/**");
+                csrf.ignoringRequestMatchers(
+                    "/api/v1/webhooks/**",
+                    "/api/webhooks/**",
+                    "/api/v1/pr-risk/**",
+                    "/api/pr-risk/**"
+                );
                 csrf.spa();
                 csrf.csrfTokenRepository(csrfTokenRepository);
-                // Providers cannot send a CSRF token; webhook credentials are the trust boundary.
-                csrf.ignoringRequestMatchers("/api/v1/webhooks/**");
             })
             .exceptionHandling(exceptions -> exceptions
                 .authenticationEntryPoint(authenticationEntryPoint)
@@ -157,7 +160,14 @@ public class SecurityConfig {
                     "/api/v1/auth/reset-password",
                     "/api/v1/auth/google/onboarding",
                     "/api/v1/webhooks/github",
-                    "/api/v1/webhooks/**"
+                    "/api/v1/webhooks/**",
+                    "/api/webhooks/github",
+                    "/api/webhooks/**"
+                ).permitAll()
+                .requestMatchers(HttpMethod.GET,
+                    "/api/pr-risk/stream",
+                    "/api/v1/pr-risk/stream",
+                    "/api/pr-risk/**"
                 ).permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/auth/me", "/api/v1/auth/test-me").authenticated()
                 .requestMatchers(HttpMethod.POST,
@@ -174,7 +184,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/v1/repositories", "/api/v1/repositories/**").authenticated()
                 .requestMatchers("/api/v1/jira", "/api/v1/jira/**").authenticated()
                 // Webhooks from GitHub are verified by HMAC; no JWT or CSRF is available.
-                .requestMatchers(HttpMethod.POST, "/api/v1/webhooks/github").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/v1/webhooks/github", "/api/webhooks/github", "/api/webhooks/**").permitAll()
                 // Jira callbacks use a separate generated token whose hash is stored per integration.
                 .requestMatchers(HttpMethod.POST, "/api/v1/webhooks/jira/**").permitAll()
                 .anyRequest().denyAll())
