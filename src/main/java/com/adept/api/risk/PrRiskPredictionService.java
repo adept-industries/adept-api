@@ -69,6 +69,18 @@ public class PrRiskPredictionService {
         double changedFiles = 0.0;
 
         if (payload != null) {
+            if (payload.get("features") instanceof Map<?, ?> customFeatures) {
+                Map<String, Object> result = new LinkedHashMap<>();
+                for (Map.Entry<?, ?> entry : customFeatures.entrySet()) {
+                    if (entry.getKey() != null && entry.getValue() instanceof Number n) {
+                        result.put(entry.getKey().toString(), n.doubleValue());
+                    }
+                }
+                if (!result.isEmpty()) {
+                    return result;
+                }
+            }
+
             if (payload.get("pull_request") instanceof Map<?, ?> prMap) {
                 if (prMap.get("additions") instanceof Number n) {
                     additions = n.doubleValue();
