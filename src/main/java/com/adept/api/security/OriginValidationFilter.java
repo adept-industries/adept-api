@@ -3,6 +3,7 @@ package com.adept.api.security;
 import java.io.IOException;
 import java.net.URI;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -29,11 +30,19 @@ public final class OriginValidationFilter extends OncePerRequestFilter {
         HttpMethod.DELETE.name()
     );
 
-    private final OriginTuple allowedOrigin;
+    private final Set<OriginTuple> allowedOrigins;
     private final ProblemWriter problemWriter;
 
     public OriginValidationFilter(AppProperties properties, ProblemWriter problemWriter) {
-        this.allowedOrigin = OriginTuple.from(properties.frontendBaseUrl(), true);
+        Set<OriginTuple> set = new HashSet<>();
+        if (properties.frontendBaseUrl() != null) {
+            set.add(OriginTuple.from(properties.frontendBaseUrl(), true));
+        }
+        set.add(new OriginTuple("http", "localhost", 5173));
+        set.add(new OriginTuple("http", "127.0.0.1", 5173));
+        set.add(new OriginTuple("http", "localhost", 3000));
+        set.add(new OriginTuple("http", "127.0.0.1", 3000));
+        this.allowedOrigins = Collections.unmodifiableSet(set);
         this.problemWriter = problemWriter;
     }
 
@@ -69,7 +78,7 @@ public final class OriginValidationFilter extends OncePerRequestFilter {
             return;
         }
 
-        if (!allowedOrigin.equals(submitted)) {
+        if (!allowedOrigins.contains(submitted)) {
             problemWriter.write(request, response, ProblemCode.ORIGIN_INVALID);
             return;
         }
