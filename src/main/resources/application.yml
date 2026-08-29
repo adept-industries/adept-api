@@ -84,7 +84,7 @@ springdoc:
 
 app:
   # "app" is Adept's own configuration namespace bound to AppProperties.
-  frontend-base-url: ${APP_FRONTEND_BASE_URL:http://localhost:3000}
+  frontend-base-url: ${APP_FRONTEND_BASE_URL:http://localhost:5173}
   public-api-base-url: ${APP_PUBLIC_API_BASE_URL:http://localhost:8080}
   email-from: ${APP_EMAIL_FROM:Adept Local <no-reply@adept.local>}
   auth:
