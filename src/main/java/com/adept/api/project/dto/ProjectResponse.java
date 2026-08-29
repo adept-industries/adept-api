@@ -10,15 +10,20 @@ public record ProjectResponse(
     UUID workspaceId,
     String name,
     String description,
-    List<ProjectRepositoryResponse> repositories
+    List<ProjectRepositoryResponse> repositories,
+    List<ProjectJiraProjectResponse> jiraProjects
 ) {
-    public static ProjectResponse from(Project project, List<ProjectRepositoryResponse> repositories) {
+    public static ProjectResponse from(
+            Project project,
+            List<ProjectRepositoryResponse> repositories,
+            List<ProjectJiraProjectResponse> jiraProjects) {
         return new ProjectResponse(
             project.getId(),
             project.getWorkspace().getId(),
             project.getName(),
             project.getDescription(),
-            List.copyOf(repositories)
+            List.copyOf(repositories),
+            List.copyOf(jiraProjects)
         );
     }
 }

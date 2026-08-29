@@ -2,7 +2,6 @@ package com.adept.api.project;
 
 import java.time.Clock;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -51,6 +50,7 @@ public class ProjectService {
     private final GitRepositoryRepository gitRepositoryRepository;
     private final JiraProjectRepository jiraProjectRepository;
     private final RepositoryJiraProjectRepository repositoryJiraProjectRepository;
+    private final ProjectJiraProjectRepository projectJiraProjectRepository;
     private final MembershipRepository membershipRepository;
     private final WorkspaceAuthorizationService workspaceAuthorizationService;
     private final AuditService auditService;
@@ -62,6 +62,7 @@ public class ProjectService {
             GitRepositoryRepository gitRepositoryRepository,
             JiraProjectRepository jiraProjectRepository,
             RepositoryJiraProjectRepository repositoryJiraProjectRepository,
+            ProjectJiraProjectRepository projectJiraProjectRepository,
             MembershipRepository membershipRepository,
             WorkspaceAuthorizationService workspaceAuthorizationService,
             AuditService auditService,
@@ -71,6 +72,7 @@ public class ProjectService {
         this.gitRepositoryRepository = gitRepositoryRepository;
         this.jiraProjectRepository = jiraProjectRepository;
         this.repositoryJiraProjectRepository = repositoryJiraProjectRepository;
+        this.projectJiraProjectRepository = projectJiraProjectRepository;
         this.membershipRepository = membershipRepository;
         this.workspaceAuthorizationService = workspaceAuthorizationService;
         this.auditService = auditService;
@@ -105,9 +107,10 @@ public class ProjectService {
         if (projectRepository.existsByWorkspaceIdAndNameIgnoreCase(principal.workspaceId(), name)) {
             throw new ConflictException(ProblemCode.PROJECT_CONFLICT);
         }
-        List<RepositoryConfigurationTarget> configuration = resolveConfiguration(
+        ResolvedConfiguration configuration = resolveConfiguration(
             principal.workspaceId(),
-            request.repositories()
+            request.repositories(),
+            request.jiraProjectIds()
         );
 
         Project project = new Project();
@@ -122,7 +125,7 @@ public class ProjectService {
         }
 
         audit(AuditAction.PROJECT_CREATED, project, membership, Map.of(), context);
-        if (!configuration.isEmpty()) {
+        if (!configuration.repositories().isEmpty() || !configuration.jiraProjects().isEmpty()) {
             applyConfiguration(project, configuration, membership, context);
         }
         return response(project, membership);
@@ -199,9 +202,10 @@ public class ProjectService {
         workspaceAuthorizationService.requireManager(principal);
         Membership membership = requireCurrentMembership(principal);
         Project project = requireProject(principal.workspaceId(), projectId);
-        List<RepositoryConfigurationTarget> configuration = resolveConfiguration(
+        ResolvedConfiguration configuration = resolveConfiguration(
             principal.workspaceId(),
-            request.repositories()
+            request.repositories(),
+            request.jiraProjectIds()
         );
         applyConfiguration(project, configuration, membership, context);
         return response(project, membership);
@@ -250,36 +254,47 @@ public class ProjectService {
         List<ProjectRepositoryLink> links = membership.getRole() == MembershipRole.MANAGER
             ? linkRepository.findAllWithRepositoryByProjectId(project.getId())
             : linkRepository.findAllReadableByLead(project.getId(), membership.getId());
-        List<UUID> repositoryIds = links.stream()
-            .map(link -> link.getRepository().getId())
+        List<ProjectJiraProjectResponse> jiraProjects = projectJiraProjectRepository
+            .findAllTrackedByProjectIdAndWorkspaceIdWithProject(project.getId(), project.getWorkspace().getId())
+            .stream()
+            .map(mapping -> ProjectJiraProjectResponse.from(mapping.getJiraProject()))
             .toList();
-        Map<UUID, List<ProjectJiraProjectResponse>> jiraProjectsByRepository = new HashMap<>();
-        if (!repositoryIds.isEmpty()) {
-            repositoryJiraProjectRepository
-                .findAllByRepositoryIdsAndWorkspaceIdWithProject(repositoryIds, project.getWorkspace().getId())
-                .forEach(mapping -> jiraProjectsByRepository
-                    .computeIfAbsent(mapping.getRepository().getId(), ignored -> new ArrayList<>())
-                    .add(ProjectJiraProjectResponse.from(mapping.getJiraProject())));
+        if (jiraProjects.isEmpty() && !links.isEmpty()) {
+            jiraProjects = repositoryJiraProjectRepository
+                .findAllByRepositoryIdsAndWorkspaceIdWithProject(
+                    links.stream().map(link -> link.getRepository().getId()).toList(),
+                    project.getWorkspace().getId()
+                )
+                .stream()
+                .map(RepositoryJiraProject::getJiraProject)
+                .filter(JiraProject::isTrackingEnabled)
+                .collect(Collectors.toMap(
+                    JiraProject::getId,
+                    ProjectJiraProjectResponse::from,
+                    (first, ignored) -> first,
+                    LinkedHashMap::new
+                ))
+                .values()
+                .stream()
+                .toList();
         }
+        List<ProjectJiraProjectResponse> visibleJiraProjects = jiraProjects;
         List<ProjectRepositoryResponse> repositories = links.stream()
             .map(ProjectRepositoryLink::getRepository)
-            .map(repository -> ProjectRepositoryResponse.from(
-                repository,
-                jiraProjectsByRepository.getOrDefault(repository.getId(), List.of())
-            ))
+            // Temporary compatibility: the deployed frontend still reads Jira
+            // mappings from each repository until its project-level PR lands.
+            .map(repository -> ProjectRepositoryResponse.from(repository, visibleJiraProjects))
             .toList();
-        return ProjectResponse.from(project, repositories);
+        return ProjectResponse.from(project, repositories, visibleJiraProjects);
     }
 
-    private List<RepositoryConfigurationTarget> resolveConfiguration(
+    private ResolvedConfiguration resolveConfiguration(
             UUID workspaceId,
-            List<ProjectRepositoryConfigurationRequest> requestedConfiguration) {
-        if (requestedConfiguration == null || requestedConfiguration.isEmpty()) {
-            return List.of();
-        }
-
+            List<ProjectRepositoryConfigurationRequest> requestedConfiguration,
+            Set<UUID> requestedProjectJiraIds) {
         Map<UUID, Set<UUID>> jiraProjectIdsByRepository = new LinkedHashMap<>();
-        for (ProjectRepositoryConfigurationRequest configuredRepository : requestedConfiguration) {
+        for (ProjectRepositoryConfigurationRequest configuredRepository :
+                requestedConfiguration == null ? List.<ProjectRepositoryConfigurationRequest>of() : requestedConfiguration) {
             if (configuredRepository == null
                     || configuredRepository.repositoryId() == null
                     || configuredRepository.jiraProjectIds() == null
@@ -303,9 +318,10 @@ public class ProjectService {
         Map<UUID, GitRepository> repositoryById = repositories.stream()
             .collect(Collectors.toMap(GitRepository::getId, repository -> repository));
 
-        Set<UUID> allJiraProjectIds = jiraProjectIdsByRepository.values().stream()
-            .flatMap(Set::stream)
-            .collect(Collectors.toSet());
+        boolean legacyRequest = requestedProjectJiraIds == null;
+        Set<UUID> allJiraProjectIds = legacyRequest
+            ? jiraProjectIdsByRepository.values().stream().flatMap(Set::stream).collect(Collectors.toSet())
+            : Set.copyOf(requestedProjectJiraIds);
         List<JiraProject> jiraProjects = allJiraProjectIds.isEmpty()
             ? List.of()
             : jiraProjectRepository.findAllByIdInAndWorkspaceId(allJiraProjectIds, workspaceId);
@@ -315,15 +331,22 @@ public class ProjectService {
                 "One or more Jira projects do not exist or belong to another workspace."
             );
         }
+        if (jiraProjects.stream().anyMatch(project -> !project.isTrackingEnabled())) {
+            throw new ApiException(
+                ProblemCode.VALIDATION_FAILED,
+                "Only tracked Jira projects can be mapped to an Adept project."
+            );
+        }
         Map<UUID, JiraProject> jiraProjectById = jiraProjects.stream()
             .collect(Collectors.toMap(JiraProject::getId, jiraProject -> jiraProject));
-
-        return jiraProjectIdsByRepository.entrySet().stream()
-            .map(entry -> new RepositoryConfigurationTarget(
-                repositoryById.get(entry.getKey()),
-                entry.getValue().stream().map(jiraProjectById::get).toList()
-            ))
-            .toList();
+        Map<UUID, List<JiraProject>> legacyMappings = new LinkedHashMap<>();
+        if (legacyRequest) {
+            jiraProjectIdsByRepository.forEach((repositoryId, projectIds) -> legacyMappings.put(
+                repositoryId,
+                projectIds.stream().map(jiraProjectById::get).toList()
+            ));
+        }
+        return new ResolvedConfiguration(repositories, jiraProjects, legacyMappings, legacyRequest);
     }
 
     private List<GitRepository> requireAttachableRepositories(UUID workspaceId, Set<UUID> repositoryIds) {
@@ -348,55 +371,45 @@ public class ProjectService {
 
     private void applyConfiguration(
             Project project,
-            List<RepositoryConfigurationTarget> configuration,
+            ResolvedConfiguration configuration,
             Membership membership,
             AccountRequestContext context) {
-        List<GitRepository> repositories = configuration.stream()
-            .map(RepositoryConfigurationTarget::repository)
-            .toList();
+        List<GitRepository> repositories = configuration.repositories();
         replaceProjectLinks(project, repositories);
 
-        Set<UUID> configuredRepositoryIds = repositories.stream()
-            .map(GitRepository::getId)
-            .collect(Collectors.toSet());
-        if (!configuredRepositoryIds.isEmpty()) {
+        projectJiraProjectRepository.deleteAllByProjectId(project.getId());
+        projectJiraProjectRepository.flush();
+        projectJiraProjectRepository.saveAll(configuration.jiraProjects().stream()
+            .map(jiraProject -> ProjectJiraProject.create(project, jiraProject, clock.instant()))
+            .toList());
+        projectJiraProjectRepository.flush();
+
+        if (!repositories.isEmpty()) {
+            Set<UUID> configuredRepositoryIds = repositories.stream()
+                .map(GitRepository::getId)
+                .collect(Collectors.toSet());
             repositoryJiraProjectRepository.deleteAllByRepositoryIds(configuredRepositoryIds);
             repositoryJiraProjectRepository.flush();
+            if (configuration.legacyRequest()) {
+                List<RepositoryJiraProject> mappings = repositories.stream()
+                    .flatMap(repository -> configuration.legacyMappings()
+                        .getOrDefault(repository.getId(), List.of())
+                        .stream()
+                        .map(jiraProject -> RepositoryJiraProject.create(repository, jiraProject, clock.instant())))
+                    .toList();
+                repositoryJiraProjectRepository.saveAll(mappings);
+                repositoryJiraProjectRepository.flush();
+            }
         }
-
-        List<RepositoryJiraProject> mappings = configuration.stream()
-            .flatMap(target -> target.jiraProjects().stream()
-                .map(jiraProject -> RepositoryJiraProject.create(target.repository(), jiraProject, clock.instant())))
-            .toList();
-        repositoryJiraProjectRepository.saveAll(mappings);
-        repositoryJiraProjectRepository.flush();
-
-        int mappingCount = 0;
-        for (RepositoryConfigurationTarget target : configuration) {
-            mappingCount += target.jiraProjects().size();
-            auditService.record(
-                AuditAction.REPOSITORY_JIRA_PROJECTS_UPDATED,
-                membership.getUser(),
-                membership,
-                target.repository().getWorkspace(),
-                "REPOSITORY",
-                target.repository().getId(),
-                Map.of(
-                    "repositoryId", target.repository().getId().toString(),
-                    "projectId", project.getId().toString(),
-                    "mappedProjectCount", target.jiraProjects().size()
-                ),
-                context != null ? context.ipAddress() : null,
-                context != null ? context.userAgent() : null
-            );
-        }
+        audit(AuditAction.PROJECT_JIRA_PROJECTS_UPDATED, project, membership,
+            Map.of("jiraProjectCount", configuration.jiraProjects().size()), context);
         audit(
             AuditAction.PROJECT_REPOSITORIES_UPDATED,
             project,
             membership,
             Map.of(
                 "repositoryCount", repositories.size(),
-                "jiraMappingCount", mappingCount
+                "jiraMappingCount", configuration.jiraProjects().size()
             ),
             context
         );
@@ -443,9 +456,10 @@ public class ProjectService {
         return description.trim();
     }
 
-    private record RepositoryConfigurationTarget(
-        GitRepository repository,
-        List<JiraProject> jiraProjects
-    ) {
+    private record ResolvedConfiguration(
+        List<GitRepository> repositories,
+        List<JiraProject> jiraProjects,
+        Map<UUID, List<JiraProject>> legacyMappings,
+        boolean legacyRequest) {
     }
 }

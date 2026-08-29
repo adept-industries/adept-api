@@ -116,6 +116,7 @@ class ProjectControllerIntegrationTest extends PartCIntegrationTestSupport {
                 .header("Authorization", "Bearer " + assignedLeadToken))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$[0].id").value(projectId.toString()))
+            .andExpect(jsonPath("$[0].jiraProjects[0].id").value(jiraProjectId.toString()))
             .andExpect(jsonPath("$[0].repositories[0].id").value(repositoryId.toString()))
             .andExpect(jsonPath("$[0].repositories[0].jiraProjects[0].id").value(jiraProjectId.toString()));
 
@@ -175,6 +176,82 @@ class ProjectControllerIntegrationTest extends PartCIntegrationTestSupport {
             repositoryId,
             jiraProjectId
         )).isOne();
+    }
+
+    @Test
+    void managerMapsTrackedJiraProjectsDirectlyToAnAdeptProject() throws Exception {
+        ManagerFixture manager = createManager("project-jira-manager");
+        UUID repositoryId = insertRepository(manager.workspaceId(), manager.membershipId(), true, false);
+        UUID trackedJiraProjectId = insertJiraProject(manager.workspaceId(), manager.membershipId(), true);
+        UUID untrackedJiraProjectId = insertJiraProject(manager.workspaceId(), manager.membershipId(), false);
+
+        CsrfPair createCsrf = fetchCsrf(mockMvc);
+        MvcResult result = mockMvc.perform(post("/api/v1/projects")
+                .header("Origin", FRONTEND_ORIGIN)
+                .header("Authorization", "Bearer " + manager.token())
+                .header("X-XSRF-TOKEN", createCsrf.token())
+                .cookie(createCsrf.cookie())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "name":"Project-level Jira",
+                      "repositories":[{"repositoryId":"%s","jiraProjectIds":[]}],
+                      "jiraProjectIds":["%s"]
+                    }
+                    """.formatted(repositoryId, trackedJiraProjectId)))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.repositories[0].id").value(repositoryId.toString()))
+            .andExpect(jsonPath("$.repositories[0].jiraProjects[0].id")
+                .value(trackedJiraProjectId.toString()))
+            .andExpect(jsonPath("$.jiraProjects[0].id").value(trackedJiraProjectId.toString()))
+            .andReturn();
+        UUID projectId = UUID.fromString(body(result).path("id").asText());
+        assertThat(jdbc.queryForObject(
+            "SELECT count(*) FROM project_jira_projects WHERE project_id = ? AND jira_project_id = ?",
+            Integer.class, projectId, trackedJiraProjectId
+        )).isOne();
+        assertThat(jdbc.queryForObject(
+            "SELECT count(*) FROM repository_jira_projects WHERE repository_id = ?",
+            Integer.class, repositoryId
+        )).isZero();
+
+        UUID leadMembershipId = insertLead(manager.workspaceId(), "project-jira-lead");
+        jdbc.update("""
+            INSERT INTO repository_lead_assignments (
+                workspace_id, repository_id, lead_membership_id, assigned_by_membership_id
+            ) VALUES (?, ?, ?, ?)
+            """, manager.workspaceId(), repositoryId, leadMembershipId, manager.membershipId());
+        mockMvc.perform(get("/api/v1/projects")
+                .header("Origin", FRONTEND_ORIGIN)
+                .header("Authorization", "Bearer " + tokenForLead(leadMembershipId, manager.workspaceId())))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[0].repositories[0].id").value(repositoryId.toString()))
+            .andExpect(jsonPath("$[0].jiraProjects[0].id").value(trackedJiraProjectId.toString()));
+
+        CsrfPair updateCsrf = fetchCsrf(mockMvc);
+        mockMvc.perform(put("/api/v1/projects/" + projectId + "/configuration")
+                .header("Origin", FRONTEND_ORIGIN)
+                .header("Authorization", "Bearer " + manager.token())
+                .header("X-XSRF-TOKEN", updateCsrf.token())
+                .cookie(updateCsrf.cookie())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"repositories":[],"jiraProjectIds":["%s"]}
+                    """.formatted(untrackedJiraProjectId)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+        assertThat(jdbc.queryForObject(
+            "SELECT count(*) FROM project_jira_projects WHERE project_id = ? AND jira_project_id = ?",
+            Integer.class, projectId, trackedJiraProjectId
+        )).isOne();
+
+        jdbc.update("UPDATE jira_projects SET tracking_enabled = false WHERE id = ?", trackedJiraProjectId);
+        mockMvc.perform(get("/api/v1/projects/" + projectId)
+                .header("Origin", FRONTEND_ORIGIN)
+                .header("Authorization", "Bearer " + manager.token()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.jiraProjects").isEmpty())
+            .andExpect(jsonPath("$.repositories[0].jiraProjects").isEmpty());
     }
 
     @Test
