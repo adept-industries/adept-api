@@ -39,4 +39,16 @@ public class RepositoryJiraProject {
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
+
+    public static RepositoryJiraProject create(
+            GitRepository repository,
+            JiraProject jiraProject,
+            Instant createdAt) {
+        RepositoryJiraProject link = new RepositoryJiraProject();
+        link.setId(new RepositoryJiraProjectId(repository.getId(), jiraProject.getId()));
+        link.setRepository(repository);
+        link.setJiraProject(jiraProject);
+        link.setCreatedAt(createdAt);
+        return link;
+    }
 }

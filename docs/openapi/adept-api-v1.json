@@ -97,6 +97,14 @@
             "maxLength": 160,
             "minLength": 0,
             "type": "string"
+          },
+          "repositories": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectRepositoryConfigurationRequest"
+            },
+            "maxItems": 500,
+            "minItems": 0,
+            "type": "array"
           }
         },
         "required": [
@@ -895,6 +903,55 @@
         ],
         "type": "object"
       },
+      "ProjectJiraProjectResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "projectKey": {
+            "type": "string"
+          },
+          "projectName": {
+            "type": "string"
+          },
+          "trackingEnabled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "projectKey",
+          "projectName",
+          "trackingEnabled"
+        ],
+        "type": "object"
+      },
+      "ProjectRepositoryConfigurationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "jiraProjectIds": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 100,
+            "minItems": 0,
+            "type": "array",
+            "uniqueItems": true
+          },
+          "repositoryId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "jiraProjectIds",
+          "repositoryId"
+        ],
+        "type": "object"
+      },
       "ProjectRepositoryResponse": {
         "additionalProperties": false,
         "properties": {
@@ -908,6 +965,12 @@
             "format": "uuid",
             "type": "string"
           },
+          "jiraProjects": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectJiraProjectResponse"
+            },
+            "type": "array"
+          },
           "trackingEnabled": {
             "type": "boolean"
           }
@@ -916,6 +979,7 @@
           "archived",
           "fullName",
           "id",
+          "jiraProjects",
           "trackingEnabled"
         ],
         "type": "object"
@@ -959,6 +1023,23 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "ReplaceProjectConfigurationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "repositories": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectRepositoryConfigurationRequest"
+            },
+            "maxItems": 500,
+            "minItems": 0,
+            "type": "array"
+          }
+        },
+        "required": [
+          "repositories"
+        ],
         "type": "object"
       },
       "ReplaceProjectRepositoriesRequest": {
@@ -4695,6 +4776,7 @@
         ]
       },
       "post": {
+        "description": "Optionally attaches tracked, non-archived repositories and replaces their repository-level Jira mappings atomically.",
         "operationId": "createProject",
         "requestBody": {
           "content": {
@@ -5286,9 +5368,195 @@
         ]
       }
     },
+    "/api/v1/projects/{projectId}/configuration": {
+      "put": {
+        "description": "The project repository set and mappings for included repositories are replaced in one transaction. Mappings for repositories removed from the project remain unchanged because they are repository-level settings.",
+        "operationId": "replaceProjectConfiguration",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplaceProjectConfigurationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectResponse"
+                }
+              }
+            },
+            "description": "Project configuration replaced",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Validation failed or the request was malformed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Authentication or session validation failed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "CSRF, origin, membership, or role authorization failed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The scoped resource was not found",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request body exceeded the 16 KiB limit",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request body used an unsupported media type",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+            "csrfHeader": []
+          }
+        ],
+        "summary": "Replace project repositories and their Jira mappings",
+        "tags": [
+          "project-controller"
+        ]
+      }
+    },
     "/api/v1/projects/{projectId}/repositories": {
       "put": {
-        "description": "Every supplied repository must belong to the current workspace.",
+        "description": "Every supplied repository must be tracked, non-archived, and belong to the current workspace. Jira mappings are unchanged.",
         "operationId": "replaceProjectRepositories",
         "parameters": [
           {
@@ -6245,7 +6513,7 @@
         ]
       },
       "post": {
-        "description": "Creates a new tenant and an active Manager membership for the authenticated Manager.",
+        "description": "Creates a new tenant and an active Manager membership for the authenticated user.",
         "operationId": "createWorkspace",
         "requestBody": {
           "content": {

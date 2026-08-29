@@ -467,7 +467,7 @@ class WorkspaceControllerIntegrationTest extends PartCIntegrationTestSupport {
     }
 
     @Test
-    void leadReceives403ManagerRequiredOnCreatePatchOrDelete() throws Exception {
+    void leadCanCreateWorkspaceButCannotPatchOrDeleteManagersWorkspace() throws Exception {
         String managerEmail = uniqueEmail("ws-owner");
         SignupResponse signup = authService.signup(
             new SignupRequest(managerEmail, VALID_PASSWORD, "Workspace Owner", "Team Workspace", "UTC"),
@@ -492,9 +492,9 @@ class WorkspaceControllerIntegrationTest extends PartCIntegrationTestSupport {
 
         String leadAccessToken = loginAndGetAccessToken(leadEmail, VALID_PASSWORD, signup.workspace().id());
 
-        // 1. Lead CREATE -> 403 MANAGER_REQUIRED
+        // A Lead can create a separate workspace and becomes its Manager.
         CsrfPair createCsrf = fetchCsrf(mockMvc);
-        mockMvc.perform(post("/api/v1/workspaces")
+        MvcResult createResult = mockMvc.perform(post("/api/v1/workspaces")
                 .header("Origin", FRONTEND_ORIGIN)
                 .header("Authorization", "Bearer " + leadAccessToken)
                 .header("X-XSRF-TOKEN", createCsrf.token())
@@ -502,15 +502,30 @@ class WorkspaceControllerIntegrationTest extends PartCIntegrationTestSupport {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                     {
-                        "name": "Unauthorized Lead Workspace",
+                        "name": "Lead Owned Workspace",
                         "timezone": "UTC"
                     }
                     """))
-            .andExpect(status().isForbidden())
-            .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
-            .andExpect(jsonPath("$.code").value("MANAGER_REQUIRED"));
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.name").value("Lead Owned Workspace"))
+            .andExpect(jsonPath("$.timezone").value("UTC"))
+            .andExpect(jsonPath("$.role").value("MANAGER"))
+            .andReturn();
 
-        // 2. Lead PATCH -> 403 MANAGER_REQUIRED
+        UUID createdWorkspaceId = UUID.fromString(
+            objectMapper.readTree(createResult.getResponse().getContentAsString()).path("id").asText()
+        );
+        assertThat(jdbc.queryForObject("""
+            SELECT count(*)
+            FROM memberships
+            WHERE workspace_id = ? AND user_id = ? AND role = 'MANAGER' AND status = 'ACTIVE'
+            """, Integer.class, createdWorkspaceId, leadUserId)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("""
+            SELECT count(*) FROM audit_logs
+            WHERE workspace_id = ? AND action = 'WORKSPACE_CREATED'
+            """, Integer.class, createdWorkspaceId)).isEqualTo(1);
+
+        // The same token is still scoped to the Manager-owned workspace, where the user remains a Lead.
         CsrfPair patchCsrf = fetchCsrf(mockMvc);
         mockMvc.perform(patch("/api/v1/workspaces/current")
                 .header("Origin", FRONTEND_ORIGIN)
@@ -527,7 +542,7 @@ class WorkspaceControllerIntegrationTest extends PartCIntegrationTestSupport {
             .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
             .andExpect(jsonPath("$.code").value("MANAGER_REQUIRED"));
 
-        // 3. Lead DELETE -> 403 MANAGER_REQUIRED
+        // A Lead also cannot delete the Manager-owned workspace.
         CsrfPair deleteCsrf = fetchCsrf(mockMvc);
         mockMvc.perform(delete("/api/v1/workspaces/current")
                 .header("Origin", FRONTEND_ORIGIN)

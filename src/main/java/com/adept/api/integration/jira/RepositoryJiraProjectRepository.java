@@ -1,5 +1,6 @@
 package com.adept.api.integration.jira;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -18,9 +19,28 @@ public interface RepositoryJiraProjectRepository extends JpaRepository<Repositor
         """)
     List<RepositoryJiraProject> findAllByRepositoryIdWithProject(@Param("repositoryId") UUID repositoryId);
 
+    @Query("""
+        select rjp
+        from RepositoryJiraProject rjp
+        join fetch rjp.repository repository
+        join fetch rjp.jiraProject jiraProject
+        where repository.id in :repositoryIds
+          and repository.workspace.id = :workspaceId
+          and jiraProject.workspace.id = :workspaceId
+        order by lower(jiraProject.projectKey), jiraProject.id
+        """)
+    List<RepositoryJiraProject> findAllByRepositoryIdsAndWorkspaceIdWithProject(
+        @Param("repositoryIds") Collection<UUID> repositoryIds,
+        @Param("workspaceId") UUID workspaceId
+    );
+
     @Modifying
     @Query("delete from RepositoryJiraProject rjp where rjp.repository.id = :repositoryId")
     void deleteAllByRepositoryId(@Param("repositoryId") UUID repositoryId);
+
+    @Modifying
+    @Query("delete from RepositoryJiraProject rjp where rjp.repository.id in :repositoryIds")
+    void deleteAllByRepositoryIds(@Param("repositoryIds") Collection<UUID> repositoryIds);
 
     @Query("""
         select rjp

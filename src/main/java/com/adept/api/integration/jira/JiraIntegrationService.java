@@ -306,12 +306,7 @@ public class JiraIntegrationService {
 
         List<RepositoryJiraProject> mappings = new ArrayList<>();
         for (JiraProject jp : targetProjects) {
-            RepositoryJiraProject link = new RepositoryJiraProject();
-            link.setId(new RepositoryJiraProjectId(repository.getId(), jp.getId()));
-            link.setRepository(repository);
-            link.setJiraProject(jp);
-            link.setCreatedAt(clock.instant());
-            mappings.add(link);
+            mappings.add(RepositoryJiraProject.create(repository, jp, clock.instant()));
         }
         repositoryJiraProjectRepository.saveAll(mappings);
 
