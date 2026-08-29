@@ -31,7 +31,10 @@ public class PrRiskPredictionService {
             baseUrl = appProperties.engine().baseUrl().toString();
         }
         this.pythonServiceUrl = baseUrl;
-        this.restClient = restClientBuilder.baseUrl(baseUrl).build();
+        this.restClient = restClientBuilder
+            .requestFactory(new org.springframework.http.client.SimpleClientHttpRequestFactory())
+            .baseUrl(baseUrl)
+            .build();
     }
 
     /**
