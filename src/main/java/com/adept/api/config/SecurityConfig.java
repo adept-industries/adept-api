@@ -124,11 +124,14 @@ public class SecurityConfig {
             .logout(AbstractHttpConfigurer::disable)
             .cors(AbstractHttpConfigurer::disable)
             .csrf(csrf -> {
-                csrf.ignoringRequestMatchers("/api/v1/webhooks/**", "/api/webhooks/**");
+                csrf.ignoringRequestMatchers(
+                    "/api/v1/webhooks/**",
+                    "/api/webhooks/**",
+                    "/api/v1/pr-risk/**",
+                    "/api/pr-risk/**"
+                );
                 csrf.spa();
                 csrf.csrfTokenRepository(csrfTokenRepository);
-                // Providers cannot send a CSRF token; webhook credentials are the trust boundary.
-                csrf.ignoringRequestMatchers("/api/v1/webhooks/**", "/api/webhooks/**");
             })
             .exceptionHandling(exceptions -> exceptions
                 .authenticationEntryPoint(authenticationEntryPoint)
