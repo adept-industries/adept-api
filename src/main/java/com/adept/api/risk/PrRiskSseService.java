@@ -58,6 +58,9 @@ public class PrRiskSseService {
         for (SseEmitter emitter : emitters) {
             try {
                 emitter.send(SseEmitter.event()
+                    .name("pr_risk_score")
+                    .data(event));
+                emitter.send(SseEmitter.event()
                     .name("pr-risk")
                     .data(event));
             } catch (Exception e) {
