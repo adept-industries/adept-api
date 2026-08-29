@@ -93,6 +93,16 @@
             "minLength": 0,
             "type": "string"
           },
+          "jiraProjectIds": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 100,
+            "minItems": 0,
+            "type": "array",
+            "uniqueItems": true
+          },
           "name": {
             "maxLength": 160,
             "minLength": 0,
@@ -994,6 +1004,12 @@
             "format": "uuid",
             "type": "string"
           },
+          "jiraProjects": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectJiraProjectResponse"
+            },
+            "type": "array"
+          },
           "name": {
             "type": "string"
           },
@@ -1010,6 +1026,7 @@
         },
         "required": [
           "id",
+          "jiraProjects",
           "name",
           "repositories",
           "workspaceId"
@@ -1028,6 +1045,16 @@
       "ReplaceProjectConfigurationRequest": {
         "additionalProperties": false,
         "properties": {
+          "jiraProjectIds": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 100,
+            "minItems": 0,
+            "type": "array",
+            "uniqueItems": true
+          },
           "repositories": {
             "items": {
               "$ref": "#/components/schemas/ProjectRepositoryConfigurationRequest"

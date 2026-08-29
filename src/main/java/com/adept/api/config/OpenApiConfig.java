@@ -702,7 +702,7 @@ public class OpenApiConfig {
         require(components, "ReplaceProjectConfigurationRequest", "repositories");
         require(components, "ProjectRepositoryResponse",
             "id", "fullName", "trackingEnabled", "archived", "jiraProjects");
-        require(components, "ProjectResponse", "id", "workspaceId", "name", "repositories");
+        require(components, "ProjectResponse", "id", "workspaceId", "name", "repositories", "jiraProjects");
 
         Schema<?> updateRequest = components.getSchemas().get("UpdateWorkspaceRequest");
         if (updateRequest != null) {

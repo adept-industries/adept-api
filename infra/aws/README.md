@@ -16,11 +16,9 @@ Replace every placeholder and every example image tag. The three application
 images must use immutable `sha-<full-commit>` tags; never deploy `latest`.
 
 When the GitHub integration is enabled, configure the GitHub App webhook URL as
-`https://adeptindustries.dev/api/v1/webhooks/github`. Store the exact same
-high-entropy webhook secret in the `adept-api` repository's Actions secret named
-`ADEPT_GITHUB_WEBHOOK_SECRET`. API deployments copy that secret into the protected
-server environment before recreating the API container, so signed GitHub
-deliveries and the production verifier cannot drift apart.
+`https://adeptindustries.dev/api/v1/webhooks/github`. Store its high-entropy
+webhook secret only as `GITHUB_WEBHOOK_SECRET` in the protected production
+environment file on the server. API deployments preserve that existing value.
 
 Validate without printing the secret-expanded configuration:
 
