@@ -85,14 +85,23 @@ jobs:
 
       - name: Deploy to AWS Lightsail and verify health
         id: deploy-to-aws
+        env:
+          GITHUB_WEBHOOK_SECRET: ${{ secrets.ADEPT_GITHUB_WEBHOOK_SECRET }}
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.LIGHTSAIL_HOST }}
           username: ${{ secrets.LIGHTSAIL_USER }}
           key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          envs: GITHUB_WEBHOOK_SECRET
           script: |
             set -eu
             cd /opt/adept
+            test -n "${GITHUB_WEBHOOK_SECRET}"
+            if grep -q '^GITHUB_WEBHOOK_SECRET=' .env.production; then
+              sed -i "s|^GITHUB_WEBHOOK_SECRET=.*|GITHUB_WEBHOOK_SECRET=${GITHUB_WEBHOOK_SECRET}|" .env.production
+            else
+              printf '\nGITHUB_WEBHOOK_SECRET=%s\n' "${GITHUB_WEBHOOK_SECRET}" >> .env.production
+            fi
             sed -i "s|^API_IMAGE=.*|API_IMAGE=ghcr.io/adept-industries/adept-api:sha-${{ github.event.workflow_run.head_sha }}|" .env.production
             sudo docker compose --env-file .env.production -f compose.yaml pull api
             sudo docker compose --env-file .env.production -f compose.yaml up -d --no-deps api
