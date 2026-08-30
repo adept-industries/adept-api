@@ -151,7 +151,7 @@ public class ProjectIssueService {
         for (Map.Entry<UUID, JiraIntegrationGroup> entry : jiraGroups.entrySet()) {
             UUID integrationId = entry.getKey();
             if (processingJobRepository
-                    .findActiveJiraProjectSyncForUpdate(integrationId.toString())
+                    .findActiveJiraIssueSyncForUpdate(integrationId.toString())
                     .isPresent()) {
                 alreadyQueuedJira++;
                 continue;

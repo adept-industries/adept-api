@@ -65,6 +65,26 @@ public interface ProcessingJobRepository
         @Param("integrationId") String integrationId
     );
 
+    @Query(
+        value = """
+            SELECT *
+            FROM processing_jobs
+            WHERE job_type = 'SYNC_JIRA_PROJECTS'
+              AND status IN ('PENDING', 'FAILED', 'RUNNING')
+              AND payload ->> 'jiraIntegrationId' = :integrationId
+              AND payload ->> 'issuesOnly' = 'true'
+            ORDER BY CASE WHEN status = 'RUNNING' THEN 0 ELSE 1 END,
+                     created_at ASC,
+                     id ASC
+            LIMIT 1
+            FOR UPDATE
+            """,
+        nativeQuery = true
+    )
+    Optional<ProcessingJob> findActiveJiraIssueSyncForUpdate(
+        @Param("integrationId") String integrationId
+    );
+
     boolean existsByRepository_IdAndJobTypeAndStatusIn(
         UUID repositoryId,
         com.adept.api.common.domain.ProcessingJobType jobType,
