@@ -938,6 +938,169 @@
         ],
         "type": "object"
       },
+      "ProjectPullRequestRiskItemResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "authorLogin": {
+            "type": "string"
+          },
+          "draft": {
+            "type": "boolean"
+          },
+          "number": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "openedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "predictedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "pullRequestId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "repositoryFullName": {
+            "type": "string"
+          },
+          "repositoryId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "riskLevel": {
+            "enum": [
+              "LOW",
+              "MEDIUM",
+              "HIGH",
+              "CRITICAL"
+            ],
+            "type": "string"
+          },
+          "riskScore": {
+            "type": "number"
+          },
+          "stalled": {
+            "type": "boolean"
+          },
+          "thresholdUsed": {
+            "type": "number"
+          },
+          "title": {
+            "type": "string"
+          },
+          "topFactors": {
+            "items": {
+              "additionalProperties": {},
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "draft",
+          "number",
+          "openedAt",
+          "predictedAt",
+          "pullRequestId",
+          "repositoryFullName",
+          "repositoryId",
+          "riskLevel",
+          "riskScore",
+          "stalled",
+          "title",
+          "topFactors",
+          "url"
+        ],
+        "type": "object"
+      },
+      "ProjectPullRequestRiskPageResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "disclaimer": {
+            "type": "string"
+          },
+          "displayLabel": {
+            "type": "string"
+          },
+          "featureSchemaVersion": {
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectPullRequestRiskItemResponse"
+            },
+            "type": "array"
+          },
+          "modelName": {
+            "type": "string"
+          },
+          "modelVersion": {
+            "type": "string"
+          },
+          "page": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "size": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "stalledBefore": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "totalElements": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "totalPages": {
+            "format": "int32",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "disclaimer",
+          "displayLabel",
+          "featureSchemaVersion",
+          "items",
+          "modelName",
+          "modelVersion",
+          "page",
+          "size",
+          "stalledBefore",
+          "totalElements",
+          "totalPages"
+        ],
+        "type": "object"
+      },
+      "ProjectPullRequestRiskRebuildResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "alreadyQueuedRepositories": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "modelVersion": {
+            "type": "string"
+          },
+          "queuedRepositories": {
+            "format": "int32",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "alreadyQueuedRepositories",
+          "modelVersion",
+          "queuedRepositories"
+        ],
+        "type": "object"
+      },
       "ProjectRepositoryConfigurationRequest": {
         "additionalProperties": false,
         "properties": {
@@ -5578,6 +5741,298 @@
         "summary": "Replace project repositories and their Jira mappings",
         "tags": [
           "project-controller"
+        ]
+      }
+    },
+    "/api/v1/projects/{projectId}/pull-request-risks": {
+      "get": {
+        "description": "Managers see predictions for every tracked project repository. Leads see only repositories assigned to their active membership. Results contain safe derived metadata and no source code or diffs.",
+        "operationId": "listProjectPullRequestRisks",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "format": "int32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "format": "int32",
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "riskLevel",
+            "required": false,
+            "schema": {
+              "enum": [
+                "LOW",
+                "MEDIUM",
+                "HIGH",
+                "CRITICAL"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "stalledOnly",
+            "required": false,
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectPullRequestRiskPageResponse"
+                }
+              }
+            },
+            "description": "Project pull-request risks returned",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Validation failed or the request was malformed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Authentication or session validation failed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "CSRF, origin, membership, or role authorization failed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The scoped resource was not found",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "List current estimated review risks for a project",
+        "tags": [
+          "project-pull-request-risk-controller"
+        ]
+      }
+    },
+    "/api/v1/projects/{projectId}/pull-request-risks/rebuild": {
+      "post": {
+        "description": "Manager-only operation. Queues one deduplicated open-pull-request scoring job for each tracked, non-archived project repository without rebuilding DORA metrics.",
+        "operationId": "rebuildProjectPullRequestRisks",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectPullRequestRiskRebuildResponse"
+                }
+              }
+            },
+            "description": "Project risk rebuild accepted",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Authentication or session validation failed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "CSRF, origin, membership, or role authorization failed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The scoped resource was not found",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+            "csrfHeader": []
+          }
+        ],
+        "summary": "Queue risk-only backfills for a project",
+        "tags": [
+          "project-pull-request-risk-controller"
         ]
       }
     },

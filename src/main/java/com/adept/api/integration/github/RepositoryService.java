@@ -215,7 +215,11 @@ public class RepositoryService {
         boolean alreadyQueued = processingJobRepository.existsByRepository_IdAndJobTypeAndStatusIn(
             repo.getId(),
             ProcessingJobType.BACKFILL_REPOSITORY,
-            List.of(ProcessingJobStatus.PENDING, ProcessingJobStatus.FAILED)
+            List.of(
+                ProcessingJobStatus.PENDING,
+                ProcessingJobStatus.FAILED,
+                ProcessingJobStatus.RUNNING
+            )
         );
         if (alreadyQueued) {
             return;

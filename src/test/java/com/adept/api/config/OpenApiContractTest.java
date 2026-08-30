@@ -106,6 +106,12 @@ class OpenApiContractTest extends PartCIntegrationTestSupport {
         endpoint("/api/v1/projects/{projectId}/configuration", "put", "replaceProjectConfiguration", "200",
             security("bearerAuth", "csrfHeader"), "ReplaceProjectConfigurationRequest",
             "400", "401", "403", "404", "413", "415"),
+        endpoint("/api/v1/projects/{projectId}/pull-request-risks", "get", "listProjectPullRequestRisks", "200",
+            security("bearerAuth"), null,
+            "400", "401", "403", "404"),
+        endpoint("/api/v1/projects/{projectId}/pull-request-risks/rebuild", "post", "rebuildProjectPullRequestRisks", "202",
+            security("bearerAuth", "csrfHeader"), null,
+            "401", "403", "404"),
         endpoint("/api/v1/repositories/{repositoryId}/backfill", "post", "requestBackfill", "202",
             security("bearerAuth", "csrfHeader"), null,
             "400", "401", "403", "404"),
@@ -134,7 +140,9 @@ class OpenApiContractTest extends PartCIntegrationTestSupport {
         Map.entry("getProject", "#/components/schemas/ProjectResponse"),
         Map.entry("updateProject", "#/components/schemas/ProjectResponse"),
         Map.entry("replaceProjectRepositories", "#/components/schemas/ProjectResponse"),
-        Map.entry("replaceProjectConfiguration", "#/components/schemas/ProjectResponse")
+        Map.entry("replaceProjectConfiguration", "#/components/schemas/ProjectResponse"),
+        Map.entry("listProjectPullRequestRisks", "#/components/schemas/ProjectPullRequestRiskPageResponse"),
+        Map.entry("rebuildProjectPullRequestRisks", "#/components/schemas/ProjectPullRequestRiskRebuildResponse")
     );
 
     private static final Set<String> ALLOWED_SCHEMAS = Set.of(
@@ -162,6 +170,9 @@ class OpenApiContractTest extends PartCIntegrationTestSupport {
         "ProjectRepositoryConfigurationRequest",
         "ProjectRepositoryResponse",
         "ProjectResponse",
+        "ProjectPullRequestRiskItemResponse",
+        "ProjectPullRequestRiskPageResponse",
+        "ProjectPullRequestRiskRebuildResponse",
         "RefreshRequest",
         "ResetPasswordRequest",
         "ReplaceProjectConfigurationRequest",
