@@ -127,6 +127,18 @@ class RepositoryScopeContractIntegrationTest extends PartCIntegrationTestSupport
         insertDeploymentFrequencySnapshot(workspaceAId, repoA1, "deployment-a1");
         insertDeploymentFrequencySnapshot(workspaceAId, repoA2, "deployment-a2");
 
+        UUID projectAId = jdbc.queryForObject("""
+            INSERT INTO projects (workspace_id, name, created_by_membership_id)
+            VALUES (?, 'Scoped Metrics', ?)
+            RETURNING id
+            """, UUID.class, workspaceAId, managerAMembershipId);
+        jdbc.update("""
+            INSERT INTO project_repositories (project_id, repository_id, workspace_id)
+            VALUES (?, ?, ?), (?, ?, ?)
+            """,
+            projectAId, repoA1, workspaceAId,
+            projectAId, repoA2, workspaceAId);
+
         mockMvc.perform(get("/api/v1/metrics/summary")
                 .header("Origin", FRONTEND_ORIGIN)
                 .header("Authorization", "Bearer " + managerAToken))
@@ -147,6 +159,52 @@ class RepositoryScopeContractIntegrationTest extends PartCIntegrationTestSupport
                 .header("Authorization", "Bearer " + leadAToken))
             .andExpect(status().isNotFound())
             .andExpect(jsonPath("$.code").value("REPOSITORY_NOT_FOUND"));
+
+        mockMvc.perform(get("/api/v1/metrics/summary")
+                .param("projectId", projectAId.toString())
+                .param("repositoryId", repoA2.toString())
+                .header("Origin", FRONTEND_ORIGIN)
+                .header("Authorization", "Bearer " + managerAToken))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.projectId").value(projectAId.toString()))
+            .andExpect(jsonPath("$.repositoryId").value(repoA2.toString()))
+            .andExpect(jsonPath("$.repositoryCount").value(1))
+            .andExpect(jsonPath("$.deploymentFrequency.sampleSize").value(1));
+
+        mockMvc.perform(get("/api/v1/metrics/summary")
+                .param("projectId", projectAId.toString())
+                .param("repositoryId", repoA1.toString())
+                .header("Origin", FRONTEND_ORIGIN)
+                .header("Authorization", "Bearer " + leadAToken))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.repositoryId").value(repoA1.toString()))
+            .andExpect(jsonPath("$.repositoryCount").value(1));
+
+        mockMvc.perform(get("/api/v1/metrics/summary")
+                .param("projectId", projectAId.toString())
+                .param("repositoryId", repoA2.toString())
+                .header("Origin", FRONTEND_ORIGIN)
+                .header("Authorization", "Bearer " + leadAToken))
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.code").value("REPOSITORY_NOT_FOUND"));
+
+        mockMvc.perform(get("/api/v1/metrics/summary")
+                .param("projectId", projectAId.toString())
+                .param("repositoryId", repoB1.toString())
+                .header("Origin", FRONTEND_ORIGIN)
+                .header("Authorization", "Bearer " + managerAToken))
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.code").value("REPOSITORY_NOT_FOUND"));
+
+        mockMvc.perform(get("/api/v1/metrics/series")
+                .param("projectId", projectAId.toString())
+                .param("repositoryId", repoA2.toString())
+                .header("Origin", FRONTEND_ORIGIN)
+                .header("Authorization", "Bearer " + managerAToken))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.projectId").value(projectAId.toString()))
+            .andExpect(jsonPath("$.repositoryId").value(repoA2.toString()))
+            .andExpect(jsonPath("$.repositoryCount").value(1));
 
         // 5. Manager A listing: sees repoA1 and repoA2, does not see repoB1
         MvcResult managerAListResult = mockMvc.perform(get("/api/v1/repositories")

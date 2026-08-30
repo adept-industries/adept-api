@@ -68,7 +68,7 @@ public class MetricService {
             UUID repositoryId,
             Instant from,
             Instant to) {
-        MetricRange range = validateRange(projectId, repositoryId, from, to);
+        MetricRange range = validateRange(from, to);
         List<UUID> repositoryIds = resolveAccessibleRepositoryIds(principal, projectId, repositoryId);
         String timezone = workspaceTimezone(principal);
 
@@ -114,7 +114,7 @@ public class MetricService {
             MetricGranularity granularity,
             Instant from,
             Instant to) {
-        MetricRange range = validateRange(projectId, repositoryId, from, to);
+        MetricRange range = validateRange(from, to);
         List<UUID> repositoryIds = resolveAccessibleRepositoryIds(principal, projectId, repositoryId);
         MetricGranularity effectiveGranularity = granularity != null ? granularity : MetricGranularity.DAY;
         String timezone = workspaceTimezone(principal);
@@ -160,17 +160,7 @@ public class MetricService {
         );
     }
 
-    private MetricRange validateRange(
-            UUID projectId,
-            UUID repositoryId,
-            Instant from,
-            Instant to) {
-        if (projectId != null && repositoryId != null) {
-            throw new ApiException(
-                ProblemCode.VALIDATION_FAILED,
-                "projectId and repositoryId cannot be supplied together."
-            );
-        }
+    private MetricRange validateRange(Instant from, Instant to) {
         Instant end = to != null ? to : Instant.now();
         Instant start = from != null ? from : end.minus(30, ChronoUnit.DAYS);
         if (!start.isBefore(end)) {
@@ -195,6 +185,42 @@ public class MetricService {
             AuthenticatedPrincipal principal,
             UUID projectId,
             UUID repositoryId) {
+        if (projectId != null) {
+            projectRepository.findByIdAndWorkspaceId(projectId, principal.workspaceId())
+                .orElseThrow(() -> new NotFoundException(ProblemCode.PROJECT_NOT_FOUND));
+
+            List<UUID> projectRepositoryIds;
+            if (principal.role() == MembershipRole.MANAGER) {
+                projectRepositoryIds = projectRepositoryLinkRepository
+                    .findAllWithRepositoryByProjectId(projectId)
+                    .stream()
+                    .map(link -> link.getRepository())
+                    .filter(MetricService::isMetricRepository)
+                    .map(GitRepository::getId)
+                    .distinct()
+                    .toList();
+            } else {
+                projectRepositoryIds = projectRepositoryLinkRepository.findAllReadableByLead(
+                        projectId,
+                        principal.membershipId()
+                    )
+                    .stream()
+                    .map(link -> link.getRepository())
+                    .filter(MetricService::isMetricRepository)
+                    .map(GitRepository::getId)
+                    .distinct()
+                    .toList();
+            }
+
+            if (repositoryId == null) {
+                return projectRepositoryIds;
+            }
+            if (!projectRepositoryIds.contains(repositoryId)) {
+                throw new NotFoundException(ProblemCode.REPOSITORY_NOT_FOUND);
+            }
+            return List.of(repositoryId);
+        }
+
         if (repositoryId != null) {
             GitRepository repository = repositoryScopeService.requireReadableRepository(
                 principal,
@@ -204,31 +230,6 @@ public class MetricService {
                 throw new NotFoundException(ProblemCode.REPOSITORY_NOT_FOUND);
             }
             return List.of(repositoryId);
-        }
-
-        if (projectId != null) {
-            projectRepository.findByIdAndWorkspaceId(projectId, principal.workspaceId())
-                .orElseThrow(() -> new NotFoundException(ProblemCode.PROJECT_NOT_FOUND));
-
-            if (principal.role() == MembershipRole.MANAGER) {
-                return projectRepositoryLinkRepository.findAllWithRepositoryByProjectId(projectId)
-                    .stream()
-                    .map(link -> link.getRepository())
-                    .filter(MetricService::isMetricRepository)
-                    .map(GitRepository::getId)
-                    .distinct()
-                    .toList();
-            }
-            return projectRepositoryLinkRepository.findAllReadableByLead(
-                    projectId,
-                    principal.membershipId()
-                )
-                .stream()
-                .map(link -> link.getRepository())
-                .filter(MetricService::isMetricRepository)
-                .map(GitRepository::getId)
-                .distinct()
-                .toList();
         }
 
         if (principal.role() == MembershipRole.MANAGER) {

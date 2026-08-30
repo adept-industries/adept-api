@@ -387,15 +387,70 @@ class MetricServiceTest {
     }
 
     @Test
-    void rejectsAmbiguousScopeAndInvalidRange() {
-        Instant now = Instant.parse("2026-08-01T00:00:00Z");
+    void selectsOneAuthorizedRepositoryWithinProjectScope() {
+        UUID projectId = UUID.randomUUID();
+        Project project = new Project();
+        project.setId(projectId);
+        project.setWorkspace(workspace);
+        ProjectRepositoryLink link = new ProjectRepositoryLink();
+        link.setProject(project);
+        link.setRepository(repository);
+
+        when(projectRepository.findByIdAndWorkspaceId(projectId, workspaceId))
+            .thenReturn(Optional.of(project));
+        when(projectRepositoryLinkRepository.findAllWithRepositoryByProjectId(projectId))
+            .thenReturn(List.of(link));
+        when(projectRepositoryLinkRepository.findAllReadableByLead(projectId, membershipId))
+            .thenReturn(List.of(link));
+        when(metricSnapshotRepository.findSnapshots(
+            eq(workspaceId),
+            eq(List.of(repositoryId)),
+            eq(MetricGranularity.DAY),
+            eq(MetricService.CALCULATION_VERSION),
+            any(),
+            any()
+        )).thenReturn(List.of());
+
+        DoraMetricsSummaryResponse manager = metricService.getSummary(
+            managerPrincipal, projectId, repositoryId, null, null
+        );
+        DoraMetricsSummaryResponse lead = metricService.getSummary(
+            leadPrincipal, projectId, repositoryId, null, null
+        );
+
+        assertThat(manager.projectId()).isEqualTo(projectId);
+        assertThat(manager.repositoryId()).isEqualTo(repositoryId);
+        assertThat(manager.repositoryCount()).isEqualTo(1);
+        assertThat(lead.projectId()).isEqualTo(projectId);
+        assertThat(lead.repositoryId()).isEqualTo(repositoryId);
+        assertThat(lead.repositoryCount()).isEqualTo(1);
+    }
+
+    @Test
+    void rejectsRepositoryOutsideAuthorizedProjectScope() {
+        UUID projectId = UUID.randomUUID();
+        UUID unavailableRepositoryId = UUID.randomUUID();
+        Project project = new Project();
+        project.setId(projectId);
+        project.setWorkspace(workspace);
+
+        when(projectRepository.findByIdAndWorkspaceId(projectId, workspaceId))
+            .thenReturn(Optional.of(project));
+        when(projectRepositoryLinkRepository.findAllReadableByLead(projectId, membershipId))
+            .thenReturn(List.of());
+
         assertThatThrownBy(() -> metricService.getSummary(
-            managerPrincipal,
-            UUID.randomUUID(),
-            repositoryId,
-            now.minusSeconds(1),
-            now
-        )).isInstanceOf(ApiException.class);
+            leadPrincipal,
+            projectId,
+            unavailableRepositoryId,
+            null,
+            null
+        )).isInstanceOf(NotFoundException.class);
+    }
+
+    @Test
+    void rejectsInvalidRange() {
+        Instant now = Instant.parse("2026-08-01T00:00:00Z");
         assertThatThrownBy(() -> metricService.getSummary(
             managerPrincipal,
             null,

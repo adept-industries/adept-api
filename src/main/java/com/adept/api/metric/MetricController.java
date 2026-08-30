@@ -18,6 +18,9 @@ import com.adept.api.metric.dto.DoraMetricsSummaryResponse;
 import com.adept.api.security.AuthenticatedPrincipal;
 import com.adept.api.security.CurrentPrincipal;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+
 @Validated
 @RestController
 @RequestMapping("/api/v1/metrics")
@@ -32,8 +35,16 @@ public class MetricController {
     }
 
     @GetMapping(value = "/summary", produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(
+        summary = "Get a scoped DORA metrics summary",
+        description = "When projectId is supplied without repositoryId, metrics are aggregated "
+            + "across the repositories readable in that project. When both are supplied, the "
+            + "repository must be tracked, attached to that project, and readable by the caller."
+    )
     public ResponseEntity<DoraMetricsSummaryResponse> getSummary(
+            @Parameter(description = "Optional selected project scope.")
             @RequestParam(required = false) UUID projectId,
+            @Parameter(description = "Optional single repository within the selected scope.")
             @RequestParam(required = false) UUID repositoryId,
             @RequestParam(required = false) Instant from,
             @RequestParam(required = false) Instant to) {
@@ -49,8 +60,16 @@ public class MetricController {
     }
 
     @GetMapping(value = "/series", produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(
+        summary = "Get a scoped DORA metrics time series",
+        description = "When projectId is supplied without repositoryId, metrics are aggregated "
+            + "across the repositories readable in that project. When both are supplied, the "
+            + "repository must be tracked, attached to that project, and readable by the caller."
+    )
     public ResponseEntity<DoraMetricsSeriesResponse> getSeries(
+            @Parameter(description = "Optional selected project scope.")
             @RequestParam(required = false) UUID projectId,
+            @Parameter(description = "Optional single repository within the selected scope.")
             @RequestParam(required = false) UUID repositoryId,
             @RequestParam(required = false) MetricType metricType,
             @RequestParam(required = false, defaultValue = "DAY") MetricGranularity granularity,

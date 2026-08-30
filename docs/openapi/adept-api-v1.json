@@ -4951,9 +4951,11 @@
     },
     "/api/v1/metrics/series": {
       "get": {
+        "description": "When projectId is supplied without repositoryId, metrics are aggregated across the repositories readable in that project. When both are supplied, the repository must be tracked, attached to that project, and readable by the caller.",
         "operationId": "getSeries",
         "parameters": [
           {
+            "description": "Optional selected project scope.",
             "in": "query",
             "name": "projectId",
             "required": false,
@@ -4963,6 +4965,7 @@
             }
           },
           {
+            "description": "Optional single repository within the selected scope.",
             "in": "query",
             "name": "repositoryId",
             "required": false,
@@ -5035,6 +5038,7 @@
             "bearerAuth": []
           }
         ],
+        "summary": "Get a scoped DORA metrics time series",
         "tags": [
           "metric-controller"
         ]
@@ -5042,9 +5046,11 @@
     },
     "/api/v1/metrics/summary": {
       "get": {
+        "description": "When projectId is supplied without repositoryId, metrics are aggregated across the repositories readable in that project. When both are supplied, the repository must be tracked, attached to that project, and readable by the caller.",
         "operationId": "getSummary",
         "parameters": [
           {
+            "description": "Optional selected project scope.",
             "in": "query",
             "name": "projectId",
             "required": false,
@@ -5054,6 +5060,7 @@
             }
           },
           {
+            "description": "Optional single repository within the selected scope.",
             "in": "query",
             "name": "repositoryId",
             "required": false,
@@ -5098,6 +5105,7 @@
             "bearerAuth": []
           }
         ],
+        "summary": "Get a scoped DORA metrics summary",
         "tags": [
           "metric-controller"
         ]
