@@ -64,6 +64,12 @@ public class OpenApiConfig {
         "/api/v1/projects/{projectId}/pull-request-risks";
     private static final String PROJECT_PULL_REQUEST_RISK_REBUILD =
         "/api/v1/projects/{projectId}/pull-request-risks/rebuild";
+    private static final String PROJECT_GITHUB_ISSUES =
+        "/api/v1/projects/{projectId}/issues/github";
+    private static final String PROJECT_JIRA_ISSUES =
+        "/api/v1/projects/{projectId}/issues/jira";
+    private static final String PROJECT_ISSUE_SYNC =
+        "/api/v1/projects/{projectId}/issues/sync";
     private static final String REPOSITORY_LEAD_ASSIGNMENTS =
         "/api/v1/repositories/{repositoryId}/lead-assignments";
     private static final String REPOSITORY_BACKFILL =
@@ -478,6 +484,48 @@ public class OpenApiConfig {
                 Set.of("401", "403", "404"),
                 CookieBehavior.NONE
             );
+            configure(
+                openApi,
+                PROJECT_GITHUB_ISSUES,
+                PathItem.HttpMethod.GET,
+                "listProjectGithubIssues",
+                "List open GitHub issues for a project",
+                "Managers see issues from every tracked project repository. Leads see issues only from tracked project repositories assigned to their active membership.",
+                "200",
+                "Project GitHub issues returned",
+                componentRef("ProjectGithubIssuePageResponse"),
+                SecurityProfile.BEARER,
+                Set.of("400", "401", "403", "404"),
+                CookieBehavior.NONE
+            );
+            configure(
+                openApi,
+                PROJECT_JIRA_ISSUES,
+                PathItem.HttpMethod.GET,
+                "listProjectJiraIssues",
+                "List unresolved Jira issues for a project",
+                "Managers and Leads with access to the project see the same unresolved issues from its tracked Jira projects.",
+                "200",
+                "Project Jira issues returned",
+                componentRef("ProjectJiraIssuePageResponse"),
+                SecurityProfile.BEARER,
+                Set.of("400", "401", "403", "404"),
+                CookieBehavior.NONE
+            );
+            configure(
+                openApi,
+                PROJECT_ISSUE_SYNC,
+                PathItem.HttpMethod.POST,
+                "syncProjectIssues",
+                "Queue issue synchronization for a project",
+                "Manager-only operation. Queues deduplicated GitHub repository and Jira project issue synchronization without rebuilding DORA metrics.",
+                "202",
+                "Project issue synchronization accepted",
+                componentRef("ProjectIssueSyncResponse"),
+                SecurityProfile.BEARER_CSRF,
+                Set.of("401", "403", "404", "429"),
+                CookieBehavior.NONE
+            );
             configureBodyOperation(
                 openApi,
                 REPOSITORY_LEAD_ASSIGNMENTS,
@@ -743,6 +791,19 @@ public class OpenApiConfig {
             "stalledBefore", "items", "page", "size", "totalElements", "totalPages");
         require(components, "ProjectPullRequestRiskRebuildResponse",
             "modelVersion", "queuedRepositories", "alreadyQueuedRepositories");
+        require(components, "ProjectGithubIssueResponse",
+            "id", "repositoryId", "repositoryFullName", "number", "title", "assigneeLogins",
+            "labels", "commentsCount", "url", "createdAt");
+        require(components, "ProjectGithubIssuePageResponse",
+            "items", "page", "size", "totalElements", "totalPages");
+        require(components, "ProjectJiraIssueResponse",
+            "id", "jiraProjectId", "jiraProjectKey", "jiraProjectName", "issueKey", "summary",
+            "url", "createdAt");
+        require(components, "ProjectJiraIssuePageResponse",
+            "items", "page", "size", "totalElements", "totalPages");
+        require(components, "ProjectIssueSyncResponse",
+            "queuedGithubRepositories", "alreadyQueuedGithubRepositories",
+            "queuedJiraIntegrations", "alreadyQueuedJiraIntegrations");
 
         Schema<?> updateRequest = components.getSchemas().get("UpdateWorkspaceRequest");
         if (updateRequest != null) {

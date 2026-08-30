@@ -70,4 +70,25 @@ public interface ProcessingJobRepository
         com.adept.api.common.domain.ProcessingJobType jobType,
         List<com.adept.api.common.domain.ProcessingJobStatus> statuses
     );
+
+    @Query(
+        value = """
+            SELECT EXISTS (
+                SELECT 1
+                FROM processing_jobs
+                WHERE repository_id = :repositoryId
+                  AND job_type = 'BACKFILL_REPOSITORY'
+                  AND status IN ('PENDING', 'FAILED', 'RUNNING')
+                  AND (
+                      payload ->> 'issuesOnly' = 'true'
+                      OR (
+                          COALESCE(payload ->> 'riskOnly', 'false') <> 'true'
+                          AND COALESCE(payload ->> 'issuesOnly', 'false') <> 'true'
+                      )
+                  )
+            )
+            """,
+        nativeQuery = true
+    )
+    boolean existsActiveIssueBackfill(@Param("repositoryId") UUID repositoryId);
 }
