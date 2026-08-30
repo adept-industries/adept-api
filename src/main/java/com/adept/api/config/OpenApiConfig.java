@@ -60,6 +60,10 @@ public class OpenApiConfig {
     private static final String PROJECT = "/api/v1/projects/{projectId}";
     private static final String PROJECT_REPOSITORIES = "/api/v1/projects/{projectId}/repositories";
     private static final String PROJECT_CONFIGURATION = "/api/v1/projects/{projectId}/configuration";
+    private static final String PROJECT_PULL_REQUEST_RISKS =
+        "/api/v1/projects/{projectId}/pull-request-risks";
+    private static final String PROJECT_PULL_REQUEST_RISK_REBUILD =
+        "/api/v1/projects/{projectId}/pull-request-risks/rebuild";
     private static final String REPOSITORY_LEAD_ASSIGNMENTS =
         "/api/v1/repositories/{repositoryId}/lead-assignments";
     private static final String REPOSITORY_BACKFILL =
@@ -446,6 +450,34 @@ public class OpenApiConfig {
                 Set.of("400", "401", "403", "404", "413", "415"),
                 CookieBehavior.NONE
             );
+            configure(
+                openApi,
+                PROJECT_PULL_REQUEST_RISKS,
+                PathItem.HttpMethod.GET,
+                "listProjectPullRequestRisks",
+                "List current estimated review risks for a project",
+                "Managers see predictions for every tracked project repository. Leads see only repositories assigned to their active membership. Results contain safe derived metadata and no source code or diffs.",
+                "200",
+                "Project pull-request risks returned",
+                componentRef("ProjectPullRequestRiskPageResponse"),
+                SecurityProfile.BEARER,
+                Set.of("400", "401", "403", "404"),
+                CookieBehavior.NONE
+            );
+            configure(
+                openApi,
+                PROJECT_PULL_REQUEST_RISK_REBUILD,
+                PathItem.HttpMethod.POST,
+                "rebuildProjectPullRequestRisks",
+                "Queue risk-only backfills for a project",
+                "Manager-only operation. Queues one deduplicated open-pull-request scoring job for each tracked, non-archived project repository without rebuilding DORA metrics.",
+                "202",
+                "Project risk rebuild accepted",
+                componentRef("ProjectPullRequestRiskRebuildResponse"),
+                SecurityProfile.BEARER_CSRF,
+                Set.of("401", "403", "404"),
+                CookieBehavior.NONE
+            );
             configureBodyOperation(
                 openApi,
                 REPOSITORY_LEAD_ASSIGNMENTS,
@@ -703,6 +735,14 @@ public class OpenApiConfig {
         require(components, "ProjectRepositoryResponse",
             "id", "fullName", "trackingEnabled", "archived", "jiraProjects");
         require(components, "ProjectResponse", "id", "workspaceId", "name", "repositories", "jiraProjects");
+        require(components, "ProjectPullRequestRiskItemResponse",
+            "pullRequestId", "repositoryId", "repositoryFullName", "number", "title", "draft",
+            "url", "openedAt", "stalled", "riskScore", "riskLevel", "topFactors", "predictedAt");
+        require(components, "ProjectPullRequestRiskPageResponse",
+            "displayLabel", "disclaimer", "modelName", "modelVersion", "featureSchemaVersion",
+            "stalledBefore", "items", "page", "size", "totalElements", "totalPages");
+        require(components, "ProjectPullRequestRiskRebuildResponse",
+            "modelVersion", "queuedRepositories", "alreadyQueuedRepositories");
 
         Schema<?> updateRequest = components.getSchemas().get("UpdateWorkspaceRequest");
         if (updateRequest != null) {
