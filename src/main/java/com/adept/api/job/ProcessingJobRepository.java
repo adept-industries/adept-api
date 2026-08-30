@@ -99,13 +99,7 @@ public interface ProcessingJobRepository
                 WHERE repository_id = :repositoryId
                   AND job_type = 'BACKFILL_REPOSITORY'
                   AND status IN ('PENDING', 'FAILED', 'RUNNING')
-                  AND (
-                      payload ->> 'issuesOnly' = 'true'
-                      OR (
-                          COALESCE(payload ->> 'riskOnly', 'false') <> 'true'
-                          AND COALESCE(payload ->> 'issuesOnly', 'false') <> 'true'
-                      )
-                  )
+                  AND payload ->> 'issuesOnly' = 'true'
             )
             """,
         nativeQuery = true
