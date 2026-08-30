@@ -913,6 +913,226 @@
         ],
         "type": "object"
       },
+      "ProjectGithubIssuePageResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectGithubIssueResponse"
+            },
+            "type": "array"
+          },
+          "page": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "size": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "totalElements": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "totalPages": {
+            "format": "int32",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "size",
+          "totalElements",
+          "totalPages"
+        ],
+        "type": "object"
+      },
+      "ProjectGithubIssueResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "assigneeLogins": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "authorLogin": {
+            "type": "string"
+          },
+          "commentsCount": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "labels": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "number": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "repositoryFullName": {
+            "type": "string"
+          },
+          "repositoryId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "assigneeLogins",
+          "commentsCount",
+          "createdAt",
+          "id",
+          "labels",
+          "number",
+          "repositoryFullName",
+          "repositoryId",
+          "title",
+          "url"
+        ],
+        "type": "object"
+      },
+      "ProjectIssueSyncResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "alreadyQueuedGithubRepositories": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "alreadyQueuedJiraIntegrations": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "queuedGithubRepositories": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "queuedJiraIntegrations": {
+            "format": "int32",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "alreadyQueuedGithubRepositories",
+          "alreadyQueuedJiraIntegrations",
+          "queuedGithubRepositories",
+          "queuedJiraIntegrations"
+        ],
+        "type": "object"
+      },
+      "ProjectJiraIssuePageResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectJiraIssueResponse"
+            },
+            "type": "array"
+          },
+          "page": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "size": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "totalElements": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "totalPages": {
+            "format": "int32",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "size",
+          "totalElements",
+          "totalPages"
+        ],
+        "type": "object"
+      },
+      "ProjectJiraIssueResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "issueKey": {
+            "type": "string"
+          },
+          "issueType": {
+            "type": "string"
+          },
+          "jiraProjectId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "jiraProjectKey": {
+            "type": "string"
+          },
+          "jiraProjectName": {
+            "type": "string"
+          },
+          "priorityName": {
+            "type": "string"
+          },
+          "statusName": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "createdAt",
+          "id",
+          "issueKey",
+          "jiraProjectId",
+          "jiraProjectKey",
+          "jiraProjectName",
+          "summary",
+          "url"
+        ],
+        "type": "object"
+      },
       "ProjectJiraProjectResponse": {
         "additionalProperties": false,
         "properties": {
@@ -5741,6 +5961,460 @@
         "summary": "Replace project repositories and their Jira mappings",
         "tags": [
           "project-controller"
+        ]
+      }
+    },
+    "/api/v1/projects/{projectId}/issues/github": {
+      "get": {
+        "description": "Managers see issues from every tracked project repository. Leads see issues only from tracked project repositories assigned to their active membership.",
+        "operationId": "listProjectGithubIssues",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "format": "int32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "format": "int32",
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectGithubIssuePageResponse"
+                }
+              }
+            },
+            "description": "Project GitHub issues returned",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Validation failed or the request was malformed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Authentication or session validation failed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "CSRF, origin, membership, or role authorization failed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The scoped resource was not found",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "List open GitHub issues for a project",
+        "tags": [
+          "project-issue-controller"
+        ]
+      }
+    },
+    "/api/v1/projects/{projectId}/issues/jira": {
+      "get": {
+        "description": "Managers and Leads with access to the project see the same unresolved issues from its tracked Jira projects.",
+        "operationId": "listProjectJiraIssues",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "format": "int32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "format": "int32",
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectJiraIssuePageResponse"
+                }
+              }
+            },
+            "description": "Project Jira issues returned",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Validation failed or the request was malformed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Authentication or session validation failed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "CSRF, origin, membership, or role authorization failed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The scoped resource was not found",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "List unresolved Jira issues for a project",
+        "tags": [
+          "project-issue-controller"
+        ]
+      }
+    },
+    "/api/v1/projects/{projectId}/issues/sync": {
+      "post": {
+        "description": "Manager-only operation. Queues deduplicated GitHub repository and Jira project issue synchronization without rebuilding DORA metrics.",
+        "operationId": "syncProjectIssues",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectIssueSyncResponse"
+                }
+              }
+            },
+            "description": "Project issue synchronization accepted",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Authentication or session validation failed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "CSRF, origin, membership, or role authorization failed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The scoped resource was not found",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "A request rate limit was exceeded",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              },
+              "Retry-After": {
+                "description": "Seconds until the request may be retried.",
+                "schema": {
+                  "format": "int64",
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+            "csrfHeader": []
+          }
+        ],
+        "summary": "Queue issue synchronization for a project",
+        "tags": [
+          "project-issue-controller"
         ]
       }
     },

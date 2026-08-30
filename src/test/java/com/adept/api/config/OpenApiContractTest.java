@@ -112,6 +112,15 @@ class OpenApiContractTest extends PartCIntegrationTestSupport {
         endpoint("/api/v1/projects/{projectId}/pull-request-risks/rebuild", "post", "rebuildProjectPullRequestRisks", "202",
             security("bearerAuth", "csrfHeader"), null,
             "401", "403", "404"),
+        endpoint("/api/v1/projects/{projectId}/issues/github", "get", "listProjectGithubIssues", "200",
+            security("bearerAuth"), null,
+            "400", "401", "403", "404"),
+        endpoint("/api/v1/projects/{projectId}/issues/jira", "get", "listProjectJiraIssues", "200",
+            security("bearerAuth"), null,
+            "400", "401", "403", "404"),
+        endpoint("/api/v1/projects/{projectId}/issues/sync", "post", "syncProjectIssues", "202",
+            security("bearerAuth", "csrfHeader"), null,
+            "401", "403", "404", "429"),
         endpoint("/api/v1/repositories/{repositoryId}/backfill", "post", "requestBackfill", "202",
             security("bearerAuth", "csrfHeader"), null,
             "400", "401", "403", "404"),
@@ -142,7 +151,10 @@ class OpenApiContractTest extends PartCIntegrationTestSupport {
         Map.entry("replaceProjectRepositories", "#/components/schemas/ProjectResponse"),
         Map.entry("replaceProjectConfiguration", "#/components/schemas/ProjectResponse"),
         Map.entry("listProjectPullRequestRisks", "#/components/schemas/ProjectPullRequestRiskPageResponse"),
-        Map.entry("rebuildProjectPullRequestRisks", "#/components/schemas/ProjectPullRequestRiskRebuildResponse")
+        Map.entry("rebuildProjectPullRequestRisks", "#/components/schemas/ProjectPullRequestRiskRebuildResponse"),
+        Map.entry("listProjectGithubIssues", "#/components/schemas/ProjectGithubIssuePageResponse"),
+        Map.entry("listProjectJiraIssues", "#/components/schemas/ProjectJiraIssuePageResponse"),
+        Map.entry("syncProjectIssues", "#/components/schemas/ProjectIssueSyncResponse")
     );
 
     private static final Set<String> ALLOWED_SCHEMAS = Set.of(
@@ -173,6 +185,11 @@ class OpenApiContractTest extends PartCIntegrationTestSupport {
         "ProjectPullRequestRiskItemResponse",
         "ProjectPullRequestRiskPageResponse",
         "ProjectPullRequestRiskRebuildResponse",
+        "ProjectGithubIssueResponse",
+        "ProjectGithubIssuePageResponse",
+        "ProjectJiraIssueResponse",
+        "ProjectJiraIssuePageResponse",
+        "ProjectIssueSyncResponse",
         "RefreshRequest",
         "ResetPasswordRequest",
         "ReplaceProjectConfigurationRequest",
