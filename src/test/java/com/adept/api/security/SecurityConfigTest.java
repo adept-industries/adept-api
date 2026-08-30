@@ -86,6 +86,22 @@ class SecurityConfigTest {
     }
 
     @Test
+    void obsoleteRiskStreamAndPredictionWebhookAreNotPublicRoutes() throws Exception {
+        mockMvc.perform(get("/api/pr-risk/stream"))
+            .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(post("/api/webhooks/github")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{}"))
+            .andExpect(status().isForbidden());
+
+        mockMvc.perform(post("/api/v1/webhooks/github/predict")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{}"))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
     void malformedUnsupportedAndOversizedBodiesNeverInvokeController() throws Exception {
         String token = csrfToken();
 

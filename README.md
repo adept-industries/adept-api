@@ -11,6 +11,7 @@ The API implementation through Phase 6 covers authentication, workspaces, projec
 - **Projects**: Projects group tracked, non-archived repositories inside one workspace. Managers can atomically configure project repository links and each included repository's workspace-scoped Jira mappings; Leads see only projects containing repositories assigned to them. Jira mappings remain repository-level settings when a repository is removed from a project.
 - **Integrations & Webhooks**: Managers connect GitHub and Jira, configure tracked repositories and mappings, and receive verified, duplicate-safe provider deliveries that are stored with durable processing jobs in one transaction.
 - **DORA Metrics**: Summary and series endpoints enforce Manager/Lead repository scope, use half-open time ranges, aggregate exact `dora-v3` observations, and report calculation time, workspace timezone, version, and staleness.
+- **PR Risk Foundation**: The API owns the existing feature/prediction schema and the frozen `jitfine-pr-features-v1` / `jitfine-expert-pr-risk-mvp-v1` read contract. Verified GitHub deliveries remain durable jobs for `adept-engine`; the API does not synchronously score webhook payloads or expose an unauthenticated risk stream.
 - **OpenAPI**: Contracts configured via `springdoc-openapi` and exported deterministically to `docs/openapi/adept-api-v1.json`.
 
 ## Local Sibling Layout
