@@ -5,7 +5,7 @@ The Adept API is the Java backend and sole owner of the shared PostgreSQL databa
 ## Overview & Current Status
 
 The API implementation through Phase 6 covers authentication, workspaces, projects, provider integrations, secure webhook ingestion, repository-scoped DORA metrics, and complete OpenAPI contract generation.
-- **Framework & Runtime**: Spring Boot 4.1 on Java 25, Flyway V1–V14, Hibernate validation, PostgreSQL 18.
+- **Framework & Runtime**: Spring Boot 4.1 on Java 25, Flyway V1–V15, Hibernate validation, PostgreSQL 18.
 - **Authentication**: JWT access tokens, HttpOnly refresh cookies (`adept_refresh`), CSRF protection (`XSRF-TOKEN` / `X-XSRF-TOKEN`), BCrypt password hashing.
 - **Workspace Management**: Managers can create additional tenant workspaces, switch between memberships, update workspace settings, and request controlled workspace deletion.
 - **Projects**: Projects group tracked, non-archived repositories inside one workspace. Managers can atomically configure project repository links and each included repository's workspace-scoped Jira mappings; Leads see only projects containing repositories assigned to them. Jira mappings remain repository-level settings when a repository is removed from a project.
@@ -135,4 +135,4 @@ required.
 
 Flyway files under `src/main/resources/db/migration` are the schema source of truth. Hibernate uses `ddl-auto: validate`. Never edit an already-shared migration. Generate local ERD with `./scripts/generate-erd.sh`.
 
-The authentication/workspace baseline ends at V8, project grouping is isolated in V9, Google authentication is isolated in V10, recent-authentication session metadata is isolated in V11, hashed Jira webhook credentials are isolated in V12, Phase 6 metric correctness support is isolated in V13, and project-level Jira mappings are isolated in V14. The migration inventory is V1–V14.
+The authentication/workspace baseline ends at V8, project grouping is isolated in V9, Google authentication is isolated in V10, recent-authentication session metadata is isolated in V11, hashed Jira webhook credentials are isolated in V12, Phase 6 metric correctness support is isolated in V13, project-level Jira mappings are isolated in V14, and the project issue dashboard schema is isolated in V15. The migration inventory is V1–V15.
