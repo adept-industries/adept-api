@@ -80,9 +80,6 @@ public class WebhookService {
     private final TokenHasher tokenHasher;
     private final ObjectMapper objectMapper;
 
-    @org.springframework.beans.factory.annotation.Autowired(required = false)
-    private com.adept.api.risk.PrRiskPredictionService prRiskPredictionService;
-
     public WebhookService(
             AppProperties properties,
             RawWebhookEventRepository rawWebhookEventRepository,
@@ -238,20 +235,6 @@ public class WebhookService {
             "GitHub webhook ingested eventType={} deliveryId={} jobId={}",
             eventType, deliveryId, job.getId()
         );
-
-        if (prRiskPredictionService != null && "pull_request".equalsIgnoreCase(eventType)) {
-            boolean isMonitoredAction = action == null || action.isBlank()
-                || "opened".equalsIgnoreCase(action)
-                || "synchronize".equalsIgnoreCase(action)
-                || "reopened".equalsIgnoreCase(action);
-            if (isMonitoredAction) {
-                try {
-                    prRiskPredictionService.predictAndBroadcast(payload);
-                } catch (Exception exc) {
-                    log.warn("Failed to evaluate PR risk for delivery {}: {}", deliveryId, exc.getMessage());
-                }
-            }
-        }
 
         return true;
     }
