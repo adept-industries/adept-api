@@ -33,6 +33,11 @@ import com.adept.api.user.UserRepository;
 import com.adept.api.workspace.Membership;
 import com.adept.api.workspace.MembershipRepository;
 
+import com.adept.api.common.domain.ProcessingJobStatus;
+import com.adept.api.common.domain.ProcessingJobType;
+import com.adept.api.job.ProcessingJob;
+import com.adept.api.job.ProcessingJobRepository;
+
 @Service
 @Transactional
 public class AlertRuleService {
@@ -43,6 +48,7 @@ public class AlertRuleService {
     private final MembershipRepository membershipRepository;
     private final UserRepository userRepository;
     private final AuditService auditService;
+    private final ProcessingJobRepository processingJobRepository;
 
     public AlertRuleService(
             AlertRuleRepository alertRuleRepository,
@@ -50,13 +56,15 @@ public class AlertRuleService {
             RepositoryScopeService repositoryScopeService,
             MembershipRepository membershipRepository,
             UserRepository userRepository,
-            AuditService auditService) {
+            AuditService auditService,
+            ProcessingJobRepository processingJobRepository) {
         this.alertRuleRepository = alertRuleRepository;
         this.gitRepositoryRepository = gitRepositoryRepository;
         this.repositoryScopeService = repositoryScopeService;
         this.membershipRepository = membershipRepository;
         this.userRepository = userRepository;
         this.auditService = auditService;
+        this.processingJobRepository = processingJobRepository;
     }
 
     @Transactional(readOnly = true)
@@ -138,6 +146,10 @@ public class AlertRuleService {
 
         AlertRule saved = alertRuleRepository.save(rule);
 
+        if (saved.isEnabled()) {
+            enqueueAlertEvaluation(saved, "ALERT_RULE_CREATED");
+        }
+
         audit(AuditAction.ALERT_RULE_CREATED, saved, currentMembership, Map.of(
             "name", saved.getName(),
             "repositoryId", repository.getId().toString(),
@@ -158,7 +170,6 @@ public class AlertRuleService {
         request.validate();
         Membership currentMembership = requireCurrentMembership(principal);
         User currentUser = currentMembership.getUser();
-
         AlertRule rule = requireAlertRule(ruleId, principal.workspaceId());
 
         // Scope check: rule's repository must be readable by caller
@@ -210,11 +221,41 @@ public class AlertRuleService {
 
         AlertRule updated = alertRuleRepository.save(rule);
 
+        if (updated.isEnabled()) {
+            enqueueAlertEvaluation(updated, "ALERT_RULE_UPDATED");
+        }
+
         audit(AuditAction.ALERT_RULE_UPDATED, updated, currentMembership, Map.of(
             "changedFields", changedFields
         ), context);
 
         return AlertRuleResponse.from(updated);
+    }
+
+    private void enqueueAlertEvaluation(AlertRule rule, String triggerSource) {
+        if (rule.getRepository() == null) {
+            return;
+        }
+        boolean activeJobExists = processingJobRepository.existsByRepository_IdAndJobTypeAndStatusIn(
+            rule.getRepository().getId(),
+            ProcessingJobType.EVALUATE_ALERTS,
+            List.of(ProcessingJobStatus.PENDING, ProcessingJobStatus.RUNNING)
+        );
+        if (!activeJobExists) {
+            ProcessingJob job = new ProcessingJob();
+            job.setWorkspace(rule.getWorkspace());
+            job.setRepository(rule.getRepository());
+            job.setJobType(ProcessingJobType.EVALUATE_ALERTS);
+            job.setStatus(ProcessingJobStatus.PENDING);
+            job.setPriority(100);
+            job.setAvailableAt(java.time.Instant.now());
+            job.setPayload(Map.of(
+                "workspace_id", rule.getWorkspace().getId().toString(),
+                "repository_id", rule.getRepository().getId().toString(),
+                "trigger_source", triggerSource
+            ));
+            processingJobRepository.save(job);
+        }
     }
 
     public void delete(

@@ -79,6 +79,14 @@ class AlertRuleIntegrationTest extends PartCIntegrationTestSupport {
 
         UUID ruleId = UUID.fromString(body(createResult).path("id").asText());
 
+        // Verify EVALUATE_ALERTS job was enqueued in processing_jobs
+        Integer jobCount = jdbc.queryForObject(
+            "SELECT count(*) FROM processing_jobs WHERE repository_id = ? AND job_type = 'EVALUATE_ALERTS' AND status = 'PENDING'",
+            Integer.class,
+            repositoryId
+        );
+        org.junit.jupiter.api.Assertions.assertEquals(1, jobCount);
+
         // Verify list returns this rule
         mockMvc.perform(get("/api/v1/alert-rules")
                 .header("Origin", FRONTEND_ORIGIN)
