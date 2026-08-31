@@ -44,6 +44,8 @@ public enum ProblemCode {
     INVITATION_CONFLICT(HttpStatus.CONFLICT, "Invitation conflict", "The invitation has already been processed or conflicts with current state."),
     WEBHOOK_SIGNATURE_INVALID(HttpStatus.UNAUTHORIZED, "Webhook signature invalid", "The webhook signature could not be verified."),
     WEBHOOK_INSTALLATION_NOT_FOUND(HttpStatus.NOT_FOUND, "Webhook installation not found", "No active integration was found for this GitHub installation."),
+    ALERT_RULE_NOT_FOUND(HttpStatus.NOT_FOUND, "Alert rule not found", "The alert rule was not found or is not accessible."),
+    ALERT_RULE_FORBIDDEN(HttpStatus.FORBIDDEN, "Alert rule access denied", "Only the rule creator or a Manager can modify or delete this alert rule."),
     METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "Method not allowed", "The HTTP method is not supported for this endpoint.");
 
     private static final String TYPE_BASE = "https://adept.local/problems/";
