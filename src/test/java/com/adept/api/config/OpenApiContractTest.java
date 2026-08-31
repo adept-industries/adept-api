@@ -126,7 +126,19 @@ class OpenApiContractTest extends PartCIntegrationTestSupport {
             "400", "401", "403", "404"),
         endpoint("/api/v1/repositories/{repositoryId}/lead-assignments", "post", "createPendingRepositoryLeadInvitation", "200",
             security("bearerAuth", "csrfHeader"), "CreateRepositoryLeadInvitationRequest",
-            "400", "401", "403", "404", "409", "413", "415")
+            "400", "401", "403", "404", "409", "413", "415"),
+        endpoint("/api/v1/alert-rules", "get", "listAlertRules", "200",
+            security("bearerAuth"), null,
+            "401", "403", "404"),
+        endpoint("/api/v1/alert-rules", "post", "createAlertRule", "201",
+            security("bearerAuth", "csrfHeader"), "CreateAlertRuleRequest",
+            "400", "401", "403", "404", "413", "415"),
+        endpoint("/api/v1/alert-rules/{id}", "patch", "updateAlertRule", "200",
+            security("bearerAuth", "csrfHeader"), "UpdateAlertRuleRequest",
+            "400", "401", "403", "404", "413", "415"),
+        endpoint("/api/v1/alert-rules/{id}", "delete", "deleteAlertRule", "204",
+            security("bearerAuth", "csrfHeader"), null,
+            "401", "403", "404")
     );
 
     private static final Map<String, String> SUCCESS_SCHEMAS = Map.ofEntries(
@@ -154,15 +166,19 @@ class OpenApiContractTest extends PartCIntegrationTestSupport {
         Map.entry("rebuildProjectPullRequestRisks", "#/components/schemas/ProjectPullRequestRiskRebuildResponse"),
         Map.entry("listProjectGithubIssues", "#/components/schemas/ProjectGithubIssuePageResponse"),
         Map.entry("listProjectJiraIssues", "#/components/schemas/ProjectJiraIssuePageResponse"),
-        Map.entry("syncProjectIssues", "#/components/schemas/ProjectIssueSyncResponse")
+        Map.entry("syncProjectIssues", "#/components/schemas/ProjectIssueSyncResponse"),
+        Map.entry("createAlertRule", "#/components/schemas/AlertRuleResponse"),
+        Map.entry("updateAlertRule", "#/components/schemas/AlertRuleResponse")
     );
 
     private static final Set<String> ALLOWED_SCHEMAS = Set.of(
         "ActionTokenRequest",
+        "AlertRuleResponse",
         "AuthSessionResponse",
         "AuthenticatedSessionResponse",
         "CurrentWorkspaceResponse",
         "CurrentWorkspaceMemberLookupResponse",
+        "CreateAlertRuleRequest",
         "CreateProjectRequest",
         "CreateRepositoryLeadInvitationRequest",
         "CreateWorkspaceRequest",
@@ -196,6 +212,7 @@ class OpenApiContractTest extends PartCIntegrationTestSupport {
         "ReplaceProjectRepositoriesRequest",
         "SignupRequest",
         "SignupResponse",
+        "UpdateAlertRuleRequest",
         "UpdateWorkspaceRequest",
         "UpdateProjectRequest",
         "UserSummary",
@@ -406,13 +423,18 @@ class OpenApiContractTest extends PartCIntegrationTestSupport {
 
     private static void assertSuccessContent(JsonNode operation, Endpoint endpoint) {
         JsonNode success = operation.path("responses").path(endpoint.successStatus());
-        if ("listWorkspaces".equals(endpoint.operationId()) || "listProjects".equals(endpoint.operationId())) {
+        if ("listWorkspaces".equals(endpoint.operationId())
+                || "listProjects".equals(endpoint.operationId())
+                || "listAlertRules".equals(endpoint.operationId())) {
             assertThat(fieldNames(success.path("content"))).containsExactly(JSON);
             assertThat(success.at("/content/application~1json/schema/type").asText()).isEqualTo("array");
-            assertThat(success.at("/content/application~1json/schema/items/$ref").asText())
-                .isEqualTo("listWorkspaces".equals(endpoint.operationId())
-                    ? "#/components/schemas/WorkspaceSummaryResponse"
-                    : "#/components/schemas/ProjectResponse");
+            String expectedRef = switch (endpoint.operationId()) {
+                case "listWorkspaces" -> "#/components/schemas/WorkspaceSummaryResponse";
+                case "listProjects" -> "#/components/schemas/ProjectResponse";
+                case "listAlertRules" -> "#/components/schemas/AlertRuleResponse";
+                default -> throw new IllegalArgumentException("Unexpected operation " + endpoint.operationId());
+            };
+            assertThat(success.at("/content/application~1json/schema/items/$ref").asText()).isEqualTo(expectedRef);
             return;
         }
 

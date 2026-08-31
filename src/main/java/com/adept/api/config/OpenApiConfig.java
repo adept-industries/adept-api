@@ -74,6 +74,8 @@ public class OpenApiConfig {
         "/api/v1/repositories/{repositoryId}/lead-assignments";
     private static final String REPOSITORY_BACKFILL =
         "/api/v1/repositories/{repositoryId}/backfill";
+    private static final String ALERT_RULES = "/api/v1/alert-rules";
+    private static final String ALERT_RULE = "/api/v1/alert-rules/{id}";
 
     @Bean
     public OpenAPI customOpenAPI() {
@@ -552,6 +554,62 @@ public class OpenApiConfig {
                 Set.of("400", "401", "403", "404"),
                 CookieBehavior.NONE
             );
+            configure(
+                openApi,
+                ALERT_RULES,
+                PathItem.HttpMethod.GET,
+                "listAlertRules",
+                "List alert rules",
+                "Managers see rules across all workspace repositories. Leads see only rules for assigned repositories.",
+                "200",
+                "Alert rules returned",
+                new ArraySchema().items(componentRef("AlertRuleResponse")),
+                SecurityProfile.BEARER,
+                Set.of("401", "403", "404"),
+                CookieBehavior.NONE
+            );
+            configure(
+                openApi,
+                ALERT_RULES,
+                PathItem.HttpMethod.POST,
+                "createAlertRule",
+                "Create an alert rule",
+                "Creates a threshold comparison rule for a tracked repository. Managers can create for any repository; Leads can create only for assigned repositories.",
+                "201",
+                "Alert rule created",
+                componentRef("AlertRuleResponse"),
+                SecurityProfile.BEARER_CSRF,
+                Set.of("400", "401", "403", "404", "413", "415"),
+                CookieBehavior.NONE
+            );
+            configure(
+                openApi,
+                ALERT_RULE,
+                PathItem.HttpMethod.PATCH,
+                "updateAlertRule",
+                "Update an alert rule",
+                "Updates an existing alert rule. Can only be performed by the rule creator or a Manager within the current workspace.",
+                "200",
+                "Alert rule updated",
+                componentRef("AlertRuleResponse"),
+                SecurityProfile.BEARER_CSRF,
+                Set.of("400", "401", "403", "404", "413", "415"),
+                CookieBehavior.NONE
+            );
+            configure(
+                openApi,
+                ALERT_RULE,
+                PathItem.HttpMethod.DELETE,
+                "deleteAlertRule",
+                "Delete an alert rule",
+                "Deletes an existing alert rule. Can only be performed by the rule creator or a Manager within the current workspace.",
+                "204",
+                "Alert rule deleted",
+                null,
+                SecurityProfile.BEARER_CSRF,
+                Set.of("401", "403", "404"),
+                CookieBehavior.NONE
+            );
 
             configureGeneratedSecurity(openApi);
         };
@@ -756,6 +814,11 @@ public class OpenApiConfig {
 
         hideProperties(components, "UpdateWorkspaceRequest", "namePresent", "timezonePresent");
         hideProperties(components, "UpdateProjectRequest", "namePresent", "descriptionPresent");
+        hideProperties(components, "UpdateAlertRuleRequest",
+            "namePresent", "metricTypePresent", "comparatorPresent", "thresholdValuePresent",
+            "evaluationWindowMinutesPresent", "cooldownMinutesPresent", "channelPresent",
+            "destinationPresent", "enabledPresent"
+        );
         markWriteOnly(components, "SignupRequest", "password");
         markWriteOnly(components, "LoginRequest", "password");
         markWriteOnly(components, "PasswordReauthenticationRequest", "password");
@@ -804,6 +867,18 @@ public class OpenApiConfig {
         require(components, "ProjectIssueSyncResponse",
             "queuedGithubRepositories", "alreadyQueuedGithubRepositories",
             "queuedJiraIntegrations", "alreadyQueuedJiraIntegrations");
+        require(components, "CreateAlertRuleRequest",
+            "repositoryId", "name", "metricType", "comparator", "thresholdValue");
+        require(components, "AlertRuleResponse",
+            "id", "workspaceId", "repositoryId", "repositoryFullName", "name",
+            "metricType", "comparator", "thresholdValue", "evaluationWindowMinutes",
+            "cooldownMinutes", "channel", "destination", "enabled", "createdAt", "updatedAt");
+
+        Schema<?> updateAlertRuleSchema = components.getSchemas().get("UpdateAlertRuleRequest");
+        if (updateAlertRuleSchema != null) {
+            updateAlertRuleSchema.setDescription("Presence-aware patch for alert rules. At least one field must be provided.");
+            updateAlertRuleSchema.setAdditionalProperties(false);
+        }
 
         Schema<?> updateRequest = components.getSchemas().get("UpdateWorkspaceRequest");
         if (updateRequest != null) {
