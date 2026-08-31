@@ -57,6 +57,10 @@ public class AccountMailService {
         );
     }
 
+    public void sendAlert(String recipient, String subject, String body) {
+        send(recipient, subject, body);
+    }
+
     private void send(String recipient, String subject, String body) {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(properties.emailFrom());
