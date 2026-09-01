@@ -56,7 +56,8 @@ class NotificationDeliveryServiceTest extends PartCIntegrationTestSupport {
         delivery.setStatus(NotificationStatus.PENDING);
         delivery.setPayload(Map.of(
             "subject", "[Adept Alert] CFR Alert Triggered",
-            "text", "Condition: GT 15.0. Actual Value: 25.0",
+            "text", "Condition: GT 15.0. Actual Value: 25.0\n"
+                + "View Dashboard: http://localhost:5173/dashboard",
             "rule_id", ctx.alertRule().getId().toString()
         ));
         deliveryRepository.save(delivery);
@@ -70,6 +71,8 @@ class NotificationDeliveryServiceTest extends PartCIntegrationTestSupport {
         );
         assertThat(mail.subject()).isEqualTo("[Adept Alert] CFR Alert Triggered");
         assertThat(mail.body()).contains("Condition: GT 15.0");
+        assertThat(mail.body()).contains(FRONTEND_ORIGIN + "/dashboard");
+        assertThat(mail.body()).doesNotContain("http://localhost:5173");
 
         NotificationDelivery updated = deliveryRepository.findById(delivery.getId()).orElseThrow();
         assertThat(updated.getStatus()).isEqualTo(NotificationStatus.SENT);

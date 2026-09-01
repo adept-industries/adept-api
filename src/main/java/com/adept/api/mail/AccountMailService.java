@@ -1,6 +1,8 @@
 package com.adept.api.mail;
 
 import java.net.URI;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,6 +20,9 @@ import jakarta.mail.internet.MimeMessage;
 public class AccountMailService {
 
     private static final Logger log = LoggerFactory.getLogger(AccountMailService.class);
+    private static final Pattern ALERT_DASHBOARD_ORIGIN = Pattern.compile(
+        "(?i)https?://[^\\s/\\\"'<>]+(?=/dashboard(?:[/?#]|[\\s\\\"'<>]|$))"
+    );
 
     private final JavaMailSender mailSender;
     private final AppProperties properties;
@@ -77,8 +82,12 @@ public class AccountMailService {
      * Falls back to plain-text-only if htmlBody is null/blank or MIME construction fails.
      */
     public void sendAlertHtml(String recipient, String subject, String textBody, String htmlBody) {
-        if (htmlBody == null || htmlBody.isBlank()) {
-            send(recipient, subject, textBody);
+        String frontendOrigin = frontendOrigin();
+        String resolvedTextBody = resolveAlertDashboardLink(textBody, frontendOrigin);
+        String resolvedHtmlBody = resolveAlertDashboardLink(htmlBody, frontendOrigin);
+
+        if (resolvedHtmlBody == null || resolvedHtmlBody.isBlank()) {
+            send(recipient, subject, resolvedTextBody);
             return;
         }
 
@@ -88,12 +97,21 @@ public class AccountMailService {
             helper.setFrom(properties.emailFrom());
             helper.setTo(recipient);
             helper.setSubject(subject);
-            helper.setText(textBody, htmlBody);
+            helper.setText(resolvedTextBody, resolvedHtmlBody);
             mailSender.send(mimeMessage);
         } catch (MessagingException ex) {
             log.warn("alert_html_mail_fallback recipient={} reason={}", recipient, ex.getMessage());
-            send(recipient, subject, textBody);
+            send(recipient, subject, resolvedTextBody);
         }
+    }
+
+    static String resolveAlertDashboardLink(String content, String frontendOrigin) {
+        if (content == null) {
+            return null;
+        }
+        return ALERT_DASHBOARD_ORIGIN.matcher(content).replaceAll(
+            Matcher.quoteReplacement(frontendOrigin)
+        );
     }
 
     private void send(String recipient, String subject, String body) {
@@ -106,11 +124,15 @@ public class AccountMailService {
     }
 
     private String link(String pathPrefix, String rawToken) {
+        return frontendOrigin() + pathPrefix + rawToken;
+    }
+
+    private String frontendOrigin() {
         URI base = properties.frontendBaseUrl();
         String origin = base.toString();
         if (origin.endsWith("/")) {
             origin = origin.substring(0, origin.length() - 1);
         }
-        return origin + pathPrefix + rawToken;
+        return origin;
     }
 }
