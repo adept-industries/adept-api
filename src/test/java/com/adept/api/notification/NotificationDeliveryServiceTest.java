@@ -11,7 +11,6 @@ import com.adept.api.alert.AlertRule;
 import com.adept.api.alert.AlertRuleRepository;
 import com.adept.api.auth.PartCIntegrationTestSupport;
 import com.adept.api.common.domain.AlertComparator;
-import com.adept.api.common.domain.MetricType;
 import com.adept.api.common.domain.NotificationChannel;
 import com.adept.api.common.domain.NotificationStatus;
 import com.adept.api.integration.github.GitRepository;
@@ -74,6 +73,7 @@ class NotificationDeliveryServiceTest extends PartCIntegrationTestSupport {
 
         NotificationDelivery updated = deliveryRepository.findById(delivery.getId()).orElseThrow();
         assertThat(updated.getStatus()).isEqualTo(NotificationStatus.SENT);
+        assertThat(updated.getAttempts()).isEqualTo(1);
         assertThat(updated.getSentAt()).isNotNull();
         assertThat(updated.getLastError()).isNull();
     }
@@ -106,15 +106,60 @@ class NotificationDeliveryServiceTest extends PartCIntegrationTestSupport {
         assertThat(failed.getAttempts()).isEqualTo(1);
         assertThat(failed.getLastError()).contains("simulated SMTP failure");
 
-        // Now test terminal failure transition to DEAD after max attempts
-        failed.setAttempts(4);
-        deliveryRepository.save(failed);
+        // A failed delivery is not retried on every scheduler poll.
+        assertThat(deliveryService.processBatch()).isZero();
+        NotificationDelivery stillFailed = deliveryRepository.findById(delivery.getId()).orElseThrow();
+        assertThat(stillFailed.getStatus()).isEqualTo(NotificationStatus.FAILED);
+        assertThat(stillFailed.getAttempts()).isEqualTo(1);
 
-        deliveryService.processBatch();
+        // Once its retry delay has elapsed, the fifth attempt becomes terminal on failure.
+        jdbc.update(
+            "UPDATE notification_deliveries "
+                + "SET attempts = 4, updated_at = now() - interval '31 seconds' WHERE id = ?",
+            delivery.getId()
+        );
+        assertThat(deliveryService.processBatch()).isEqualTo(1);
 
         NotificationDelivery dead = deliveryRepository.findById(delivery.getId()).orElseThrow();
         assertThat(dead.getStatus()).isEqualTo(NotificationStatus.DEAD);
         assertThat(dead.getAttempts()).isEqualTo(5);
+    }
+
+    @Test
+    void onlyRecoversSendingDeliveriesAfterTheirLeaseExpires() {
+        TestContext ctx = setupTestEntities("notify-lease-test");
+
+        NotificationDelivery delivery = new NotificationDelivery();
+        delivery.setWorkspace(ctx.workspace());
+        delivery.setRepository(ctx.repository());
+        delivery.setAlertRule(ctx.alertRule());
+        delivery.setEventKey("evaluation:" + UUID.randomUUID());
+        delivery.setChannel(NotificationChannel.EMAIL);
+        delivery.setDestination("lead-lease@example.com");
+        delivery.setStatus(NotificationStatus.PENDING);
+        delivery.setPayload(Map.of(
+            "subject", "[Adept Alert] Lease Alert",
+            "text", "Lease recovery alert"
+        ));
+        delivery = deliveryRepository.saveAndFlush(delivery);
+
+        jdbc.update(
+            "UPDATE notification_deliveries SET status = 'SENDING', attempts = 1, updated_at = now() WHERE id = ?",
+            delivery.getId()
+        );
+        assertThat(deliveryService.processBatch()).isZero();
+        assertThat(mailSender.messages()).isEmpty();
+
+        jdbc.update(
+            "UPDATE notification_deliveries SET updated_at = now() - interval '301 seconds' WHERE id = ?",
+            delivery.getId()
+        );
+        assertThat(deliveryService.processBatch()).isEqualTo(1);
+
+        NotificationDelivery recovered = deliveryRepository.findById(delivery.getId()).orElseThrow();
+        assertThat(recovered.getStatus()).isEqualTo(NotificationStatus.SENT);
+        assertThat(recovered.getAttempts()).isEqualTo(2);
+        assertThat(recovered.getSentAt()).isNotNull();
     }
 
     private TestContext setupTestEntities(String prefix) {

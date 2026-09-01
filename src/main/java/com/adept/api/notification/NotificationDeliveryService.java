@@ -1,5 +1,7 @@
 package com.adept.api.notification;
 
+import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -25,19 +27,28 @@ public class NotificationDeliveryService {
     private final NotificationDeliveryRepository deliveryRepository;
     private final AccountMailService mailService;
     private final TransactionTemplate transactionTemplate;
+    private final Clock clock;
     private final int batchSize;
+    private final Duration retryDelay;
+    private final Duration sendingTimeout;
 
     public NotificationDeliveryService(
         NotificationDeliveryRepository deliveryRepository,
         AccountMailService mailService,
         PlatformTransactionManager transactionManager,
-        @Value("${app.notification.delivery-batch-size:10}") int batchSize
+        Clock clock,
+        @Value("${app.notification.delivery-batch-size:10}") int batchSize,
+        @Value("${app.notification.retry-delay-seconds:30}") long retryDelaySeconds,
+        @Value("${app.notification.sending-timeout-seconds:300}") long sendingTimeoutSeconds
     ) {
         this.deliveryRepository = deliveryRepository;
         this.mailService = mailService;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
         this.transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
-        this.batchSize = batchSize;
+        this.clock = clock;
+        this.batchSize = Math.max(1, batchSize);
+        this.retryDelay = Duration.ofSeconds(Math.max(1, retryDelaySeconds));
+        this.sendingTimeout = Duration.ofSeconds(Math.max(1, sendingTimeoutSeconds));
     }
 
     @Scheduled(fixedDelayString = "${app.notification.poll-interval-ms:3000}")
@@ -51,13 +62,19 @@ public class NotificationDeliveryService {
     }
 
     public int processBatch() {
+        Instant now = clock.instant();
         List<NotificationDelivery> claimed = transactionTemplate.execute(status -> {
-            List<NotificationDelivery> deliveries = deliveryRepository.lockClaimableEmailDeliveries(batchSize);
+            List<NotificationDelivery> deliveries = deliveryRepository.lockClaimableEmailDeliveries(
+                batchSize,
+                MAX_ATTEMPTS,
+                now.minus(retryDelay),
+                now.minus(sendingTimeout)
+            );
             for (NotificationDelivery delivery : deliveries) {
                 delivery.setStatus(NotificationStatus.SENDING);
-                deliveryRepository.save(delivery);
+                delivery.setAttempts(delivery.getAttempts() + 1);
             }
-            return deliveries;
+            return deliveryRepository.saveAllAndFlush(deliveries);
         });
 
         if (claimed == null || claimed.isEmpty()) {
@@ -85,27 +102,39 @@ public class NotificationDeliveryService {
             transactionTemplate.executeWithoutResult(status -> {
                 deliveryRepository.findById(delivery.getId()).ifPresent(persisted -> {
                     persisted.setStatus(NotificationStatus.SENT);
-                    persisted.setSentAt(Instant.now());
+                    persisted.setSentAt(clock.instant());
                     persisted.setLastError(null);
                     deliveryRepository.save(persisted);
                 });
             });
 
-            log.info("alert_notification_delivered deliveryId={} destination={}", delivery.getId(), destination);
+            log.info(
+                "alert_notification_delivered deliveryId={} attempt={}",
+                delivery.getId(),
+                delivery.getAttempts()
+            );
         } catch (Exception ex) {
             String errorMessage = ex.getMessage() != null ? ex.getMessage() : ex.getClass().getSimpleName();
-            log.error("alert_notification_delivery_failed deliveryId={} destination={} error={}",
-                delivery.getId(), destination, errorMessage, ex);
+            NotificationStatus failureStatus = delivery.getAttempts() >= MAX_ATTEMPTS
+                ? NotificationStatus.DEAD
+                : NotificationStatus.FAILED;
 
             transactionTemplate.executeWithoutResult(status -> {
                 deliveryRepository.findById(delivery.getId()).ifPresent(persisted -> {
-                    int attempts = persisted.getAttempts() + 1;
-                    persisted.setAttempts(attempts);
                     persisted.setLastError(errorMessage);
-                    persisted.setStatus(attempts >= MAX_ATTEMPTS ? NotificationStatus.DEAD : NotificationStatus.FAILED);
+                    persisted.setStatus(failureStatus);
                     deliveryRepository.save(persisted);
                 });
             });
+
+            log.error(
+                "alert_notification_delivery_failed deliveryId={} attempt={} status={} error={}",
+                delivery.getId(),
+                delivery.getAttempts(),
+                failureStatus,
+                errorMessage,
+                ex
+            );
         }
     }
 

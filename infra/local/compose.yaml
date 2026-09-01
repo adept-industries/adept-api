@@ -144,8 +144,6 @@ services:
       ENGINE_WORKER_ID: ${ENGINE_WORKER_ID:-local-worker-1}
       ENGINE_MAX_JOB_ATTEMPTS: ${ENGINE_MAX_JOB_ATTEMPTS:-8}
       ENGINE_JOB_LOCK_TIMEOUT_SECONDS: ${ENGINE_JOB_LOCK_TIMEOUT_SECONDS:-900}
-      SMTP_HOST: mailpit
-      SMTP_PORT: 1025
       # Worker handlers call provider APIs and decrypt integration credentials.
       GITHUB_APP_ID: ${GITHUB_APP_ID:-}
       GITHUB_APP_PRIVATE_KEY_BASE64: ${GITHUB_APP_PRIVATE_KEY_BASE64:-}
