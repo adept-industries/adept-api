@@ -57,7 +57,7 @@ spring:
       mail.smtp.auth: ${SPRING_MAIL_AUTH:false}
       mail.smtp.starttls.enable: ${SPRING_MAIL_STARTTLS:false}
       mail.smtp.starttls.required: ${SPRING_MAIL_STARTTLS_REQUIRED:false}
-      mail.smtp.ssl.trust: ${SPRING_MAIL_SSL_TRUST:*}
+      mail.smtp.ssl.checkserveridentity: ${SPRING_MAIL_SSL_CHECK_SERVER_IDENTITY:true}
       mail.smtp.connectiontimeout: 5000
       mail.smtp.timeout: 5000
       mail.smtp.writetimeout: 5000
@@ -150,3 +150,8 @@ app:
   engine:
     base-url: ${APP_ENGINE_BASE_URL:http://localhost:8000}
     internal-token: ${APP_INTERNAL_ENGINE_TOKEN:MqXAuyUpL4XZAdLJUAOye3ddOv3zwUKmsgafe1Mjsac=}
+  notification:
+    poll-interval-ms: ${APP_NOTIFICATION_POLL_INTERVAL_MS:3000}
+    delivery-batch-size: ${APP_NOTIFICATION_DELIVERY_BATCH_SIZE:10}
+    retry-delay-seconds: ${APP_NOTIFICATION_RETRY_DELAY_SECONDS:30}
+    sending-timeout-seconds: ${APP_NOTIFICATION_SENDING_TIMEOUT_SECONDS:300}
