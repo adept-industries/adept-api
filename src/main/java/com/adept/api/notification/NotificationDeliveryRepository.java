@@ -14,7 +14,7 @@ public interface NotificationDeliveryRepository extends JpaRepository<Notificati
             SELECT *
             FROM notification_deliveries
             WHERE channel = 'EMAIL'
-              AND status IN ('PENDING', 'FAILED')
+              AND status IN ('PENDING', 'FAILED', 'SENDING')
               AND attempts < 5
             ORDER BY created_at ASC
             FOR UPDATE SKIP LOCKED

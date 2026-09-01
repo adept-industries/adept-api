@@ -77,9 +77,10 @@ public class NotificationDeliveryService {
 
         String subject = extractString(payload, "subject", "[Adept Alert] Notification Triggered");
         String textBody = extractString(payload, "text", "An alert rule condition was met. Please check your dashboard.");
+        String htmlBody = extractString(payload, "html", null);
 
         try {
-            mailService.sendAlert(destination, subject, textBody);
+            mailService.sendAlertHtml(destination, subject, textBody, htmlBody);
 
             transactionTemplate.executeWithoutResult(status -> {
                 deliveryRepository.findById(delivery.getId()).ifPresent(persisted -> {
