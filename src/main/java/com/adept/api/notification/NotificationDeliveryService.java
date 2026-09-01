@@ -79,6 +79,9 @@ public class NotificationDeliveryService {
         String textBody = extractString(payload, "text", "An alert rule condition was met. Please check your dashboard.");
         String htmlBody = extractString(payload, "html", null);
 
+        log.info("alert_notification_dispatching deliveryId={} destination={} subject={} hasHtml={}",
+            delivery.getId(), destination, subject, htmlBody != null);
+
         try {
             mailService.sendAlertHtml(destination, subject, textBody, htmlBody);
 
@@ -91,7 +94,7 @@ public class NotificationDeliveryService {
                 });
             });
 
-            log.info("alert_notification_delivered deliveryId={} destination={}", delivery.getId(), destination);
+            log.info("alert_notification_delivered deliveryId={} destination={} subject={}", delivery.getId(), destination, subject);
         } catch (Exception ex) {
             String errorMessage = ex.getMessage() != null ? ex.getMessage() : ex.getClass().getSimpleName();
             log.error("alert_notification_delivery_failed deliveryId={} destination={} error={}",

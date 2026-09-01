@@ -4,15 +4,19 @@ import java.net.URI;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.mail.MailException;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 
 import com.adept.api.config.AppProperties;
 
+import jakarta.mail.Message;
 import jakarta.mail.MessagingException;
+import jakarta.mail.internet.InternetAddress;
+import jakarta.mail.internet.MimeBodyPart;
 import jakarta.mail.internet.MimeMessage;
+import jakarta.mail.internet.MimeMultipart;
 
 @Service
 public class AccountMailService {
@@ -73,8 +77,11 @@ public class AccountMailService {
     }
 
     /**
-     * Send an alert email with HTML body (multipart text + HTML alternative).
+     * Send an alert email with HTML body (multipart/alternative: text + HTML).
      * Falls back to plain-text-only if htmlBody is null/blank or MIME construction fails.
+     *
+     * Uses a clean multipart/alternative structure (no outer multipart/mixed wrapper)
+     * for maximum compatibility with production SMTP providers like AWS SES.
      */
     public void sendAlertHtml(String recipient, String subject, String textBody, String htmlBody) {
         if (htmlBody == null || htmlBody.isBlank()) {
@@ -84,13 +91,26 @@ public class AccountMailService {
 
         try {
             MimeMessage mimeMessage = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
-            helper.setFrom(properties.emailFrom());
-            helper.setTo(recipient);
-            helper.setSubject(subject);
-            helper.setText(textBody, htmlBody);
+
+            // Use InternetAddress.parse for lenient handling of "Display Name <email>" formats
+            mimeMessage.setFrom(InternetAddress.parse(properties.emailFrom())[0]);
+            mimeMessage.setRecipients(Message.RecipientType.TO, InternetAddress.parse(recipient));
+            mimeMessage.setSubject(subject, "UTF-8");
+
+            // Build a clean multipart/alternative directly (no multipart/mixed wrapper)
+            MimeMultipart alternative = new MimeMultipart("alternative");
+
+            MimeBodyPart textPart = new MimeBodyPart();
+            textPart.setText(textBody, "UTF-8", "plain");
+            alternative.addBodyPart(textPart);
+
+            MimeBodyPart htmlPart = new MimeBodyPart();
+            htmlPart.setContent(htmlBody, "text/html; charset=UTF-8");
+            alternative.addBodyPart(htmlPart);
+
+            mimeMessage.setContent(alternative);
             mailSender.send(mimeMessage);
-        } catch (MessagingException ex) {
+        } catch (MessagingException | MailException ex) {
             log.warn("alert_html_mail_fallback recipient={} reason={}", recipient, ex.getMessage());
             send(recipient, subject, textBody);
         }
