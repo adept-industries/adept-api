@@ -236,12 +236,12 @@ public class AlertRuleService {
         if (rule.getRepository() == null) {
             return;
         }
-        boolean activeJobExists = processingJobRepository.existsByRepository_IdAndJobTypeAndStatusIn(
+        boolean pendingJobExists = processingJobRepository.existsByRepository_IdAndJobTypeAndStatusIn(
             rule.getRepository().getId(),
             ProcessingJobType.EVALUATE_ALERTS,
-            List.of(ProcessingJobStatus.PENDING, ProcessingJobStatus.RUNNING)
+            List.of(ProcessingJobStatus.PENDING)
         );
-        if (!activeJobExists) {
+        if (!pendingJobExists) {
             ProcessingJob job = new ProcessingJob();
             job.setWorkspace(rule.getWorkspace());
             job.setRepository(rule.getRepository());
