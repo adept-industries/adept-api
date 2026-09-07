@@ -28,9 +28,44 @@ variable "domain_name" {
 }
 
 variable "runtime_enabled" {
-  description = "Master safety switch for all disposable Lightsail runtime resources. Keep false until a reviewed plan is ready; set false for emergency shutdown."
+  description = "Enable application runtime resources only after a reviewed plan. Instance destruction is separately protected; stop instances operationally for maintenance."
   type        = bool
   default     = false
+}
+
+variable "instance_name" {
+  description = "Optional active instance name override when adopting a larger instance created from a snapshot."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.instance_name == null ? true : can(regex("^[A-Za-z0-9][A-Za-z0-9_.-]{0,253}[A-Za-z0-9]$", var.instance_name))
+    error_message = "instance_name must be a valid Lightsail instance name of 2 to 255 characters."
+  }
+}
+
+variable "bootstrap_instance" {
+  description = "Apply the launch script to a fresh blueprint instance. Set false when importing a snapshot-restored instance with its existing configuration."
+  type        = bool
+  default     = true
+}
+
+variable "allow_public_ssh" {
+  description = "Explicit exception for an existing deployment using GitHub-hosted runners without fixed egress IPs. Defaults false; key-only SSH must be enforced when true."
+  type        = bool
+  default     = false
+}
+
+variable "retained_instances" {
+  description = "Existing stopped instances retained during a migration. Move/import their state before planning; do not create them. They remain billable and deletion-protected."
+  type = map(object({
+    availability_zone       = string
+    blueprint_id            = string
+    bundle_id               = string
+    key_pair_name           = string
+    automatic_snapshot_time = optional(string, "03:00")
+  }))
+  default = {}
 }
 
 variable "availability_zone" {

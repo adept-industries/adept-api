@@ -7,6 +7,15 @@ domain_name  = "adeptindustries.dev"
 # SSH restrictions, cost, and the complete Terraform plan are reviewed.
 runtime_enabled = false
 
+# For snapshot migrations only: override the active name and import the existing
+# restored VM. Do not apply these values against the original VM's state.
+# instance_name      = "adept-staging-app-4gb-YYYYMMDD"
+# bootstrap_instance = false
+
+# Keep false unless explicitly preserving an existing key-only deployment that
+# needs GitHub-hosted runners with no fixed egress address.
+# allow_public_ssh = false
+
 availability_zone       = "ap-south-1a"
 lightsail_blueprint_id  = "ubuntu_24_04"
 lightsail_bundle_id     = "replace-after-paid-plan-upgrade"
