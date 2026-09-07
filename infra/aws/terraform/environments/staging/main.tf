@@ -1,9 +1,9 @@
 locals {
   application_url = "https://${var.domain_name}"
 
-  # Every disposable or chargeable runtime resource must use this exact gate.
-  # Retained recovery resources such as the state bucket and future backup bucket
-  # intentionally live outside it.
+  # Active runtime resources share this gate. Retained migration instances use
+  # their explicit map and deletion protection instead, so a runtime toggle
+  # cannot remove the recovery copy. Retained resources remain billable.
   runtime = var.runtime_enabled ? {
     primary = {
       instance_name = coalesce(var.instance_name, "${var.project_name}-${var.environment}-app")
