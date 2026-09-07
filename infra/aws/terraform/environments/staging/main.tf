@@ -6,7 +6,7 @@ locals {
   # intentionally live outside it.
   runtime = var.runtime_enabled ? {
     primary = {
-      instance_name = "${var.project_name}-${var.environment}-app"
+      instance_name = coalesce(var.instance_name, "${var.project_name}-${var.environment}-app")
     }
   } : {}
 }
@@ -47,9 +47,9 @@ resource "aws_lightsail_instance" "app" {
   bundle_id         = var.lightsail_bundle_id
   ip_address_type   = "ipv4"
   key_pair_name     = aws_lightsail_key_pair.deployer[each.key].name
-  user_data = templatefile("${path.module}/cloud-init.sh.tftpl", {
+  user_data = var.bootstrap_instance ? templatefile("${path.module}/cloud-init.sh.tftpl", {
     deploy_user = var.server_user
-  })
+  }) : null
 
   add_on {
     type          = "AutoSnapshot"
@@ -58,6 +58,13 @@ resource "aws_lightsail_instance" "app" {
   }
 
   lifecycle {
+    prevent_destroy = true
+
+    precondition {
+      condition     = !contains(keys(var.retained_instances), each.value.instance_name)
+      error_message = "The active instance must not also appear in retained_instances."
+    }
+
     precondition {
       condition     = trimspace(var.lightsail_bundle_id) != ""
       error_message = "Set lightsail_bundle_id from the live Mumbai catalog before enabling the runtime."
@@ -79,7 +86,7 @@ resource "aws_lightsail_instance_public_ports" "app" {
     protocol  = "tcp"
     from_port = 22
     to_port   = 22
-    cidrs     = var.admin_ssh_cidrs
+    cidrs     = var.allow_public_ssh ? ["0.0.0.0/0"] : var.admin_ssh_cidrs
   }
 
   port_info {
@@ -94,6 +101,50 @@ resource "aws_lightsail_instance_public_ports" "app" {
     from_port = 443
     to_port   = 443
     cidrs     = ["0.0.0.0/0"]
+  }
+}
+
+# Snapshot migrations retain the original instance until data and deployment
+# access have been verified. Moving its state here does not start or stop it.
+resource "aws_lightsail_instance" "retained" {
+  for_each = var.retained_instances
+
+  name              = each.key
+  availability_zone = each.value.availability_zone
+  blueprint_id      = each.value.blueprint_id
+  bundle_id         = each.value.bundle_id
+  ip_address_type   = "ipv4"
+  key_pair_name     = each.value.key_pair_name
+
+  add_on {
+    type          = "AutoSnapshot"
+    snapshot_time = each.value.automatic_snapshot_time
+    status        = "Enabled"
+  }
+
+  lifecycle {
+    prevent_destroy = true
+    ignore_changes  = [user_data]
+  }
+}
+
+resource "aws_lightsail_instance_public_ports" "retained" {
+  for_each = var.retained_instances
+
+  instance_name = aws_lightsail_instance.retained[each.key].name
+
+  dynamic "port_info" {
+    for_each = [22, 80, 443]
+    content {
+      protocol  = "tcp"
+      from_port = port_info.value
+      to_port   = port_info.value
+      cidrs     = port_info.value == 22 && !var.allow_public_ssh ? var.admin_ssh_cidrs : toset(["0.0.0.0/0"])
+    }
+  }
+
+  lifecycle {
+    prevent_destroy = true
   }
 }
 
