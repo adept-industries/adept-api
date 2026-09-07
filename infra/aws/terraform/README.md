@@ -61,3 +61,11 @@ Keep retained instances stopped. They are still billed until explicitly deleted;
 do not delete or remove their protection until the new system is validated. Once
 the new database accepts writes, the retained disk is stale: preserve those newer
 writes before any rollback.
+
+After an explicitly approved operational deletion of a retained VM, remove only
+that VM's entry from the ignored live `retained_instances` map and review/apply a
+refresh-only plan to reconcile the state. Do not run a normal apply with a deleted
+VM still in that map: it could recreate the VM. Keep active-instance deletion
+protection and recovery backups intact, then verify a full plan has no changes.
+The [September 2026 upgrade record](../LIGHTSAIL_UPGRADE_2026_09.md) documents the
+completed retirement of the original 2 GB VM.
