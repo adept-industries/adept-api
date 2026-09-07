@@ -7,7 +7,8 @@ This deployment serves production despite the existing `staging` resource names.
 - Region/zone: `ap-south-1` / `ap-south-1a`.
 - Active VM: `adept-staging-app-4gb-20260907`, bundle `medium_3_1`
   (4 GB RAM, 2 vCPUs, 80 GB disk; catalog price $24/month at migration).
-- Retained VM: `adept-staging-app`, bundle `small_3_1`, stopped and not deleted.
+- Former 2 GB VM: `adept-staging-app`, bundle `small_3_1`, deleted with owner
+  approval on 2026-09-07 after the new system was validated.
 - Existing static IP: `adept-staging-ip`, `3.111.250.16`.
 - Domain: `https://adeptindustries.dev`; no DNS or OAuth URL change.
 - SSH deployment user/key unchanged. The new VM has new SSH **host** keys;
@@ -15,8 +16,8 @@ This deployment serves production despite the existing `staging` resource names.
 - Automatic snapshots: daily at 03:00 UTC.
 - Manual pre-upgrade snapshot: `adept-staging-before-4gb-20260907`.
 
-The old VM remains billable while stopped. Delete it only after explicit owner
-approval and validation of the new system. Snapshot storage is also billable.
+The old VM is no longer retained or billable as an instance. The manual recovery
+snapshot remains available; snapshot storage is still billable.
 
 ## Data protection and validation
 
@@ -46,8 +47,8 @@ automatically restarted application services.
 Use the project's pinned Terraform 1.15.x, not an unsupported globally installed
 version. Actual variable files, state and saved plans are ignored and must never
 be committed. The active live variable file selects the new name and bundle,
-sets `bootstrap_instance = false`, and describes the old VM in
-`retained_instances`.
+sets `bootstrap_instance = false`, and now sets `retained_instances = {}` after
+the approved retirement described below.
 
 The old VM and firewall were moved to their `retained["adept-staging-app"]`
 Terraform addresses. The larger VM was imported at `app["primary"]`. The cutover
@@ -76,12 +77,30 @@ networking change. PostgreSQL and application ports are not public.
 
 ## Rollback boundary
 
-Before the new database accepts writes, the retained VM and snapshot provide a
-rollback path. Docker is disabled on the retained VM and must be re-enabled
-deliberately; do not run workers on both VMs.
+During migration, before the new database accepted writes, the retained VM and
+snapshot provided a rollback path. The old VM has since been deleted; recovery
+now requires restoring a backup or creating a VM from a retained snapshot.
 
 After the new database accepts writes, the old database is stale. Do not simply
 move the IP back: first pause writes and preserve or reconcile the newer data.
-Keep the old SSH host-key record available for any verified rollback. Never run
-`docker compose down -v`, delete volumes, or apply a destructive Terraform plan
-as part of routine recovery.
+Docker is disabled in the manual migration snapshot and must be enabled
+deliberately on a restored VM. Do not run duplicate workers. Verify the restored
+VM's SSH host keys. Never run `docker compose down -v`, delete volumes, or apply a
+destructive Terraform plan as part of routine recovery.
+
+## Approved old-VM retirement
+
+- Owner-authorized deletion of `adept-staging-app` succeeded on 2026-09-07 at
+  12:57:25 UTC (18:27:25 Asia/Colombo).
+- The deleted resources were the old VM, its system disk/firewall and its seven
+  automatic snapshots. The manual `adept-staging-before-4gb-20260907` snapshot
+  and verified external database/configuration backups were preserved.
+- The new 4 GB VM, static IP, DNS, deployment key and production data were not
+  changed. The latest API image deployment had succeeded before retirement.
+- The old entry was removed from the ignored live `retained_instances` map.
+  A reviewed refresh-only plan reconciled the already-deleted VM/firewall records
+  and the new VM's existing static-IP attributes, without modifying AWS resources.
+  Instance deletion protections in Terraform were not weakened.
+- Post-retirement validation: all six containers running, configured health checks
+  healthy, engine schema 15 and model ready, homepage HTTP 200, API CSRF HTTP 204,
+  and a full Terraform plan with no changes.
