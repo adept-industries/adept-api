@@ -1,134 +1,142 @@
-// ---------------------------------------------------------------------------
-// Grafana Alloy configuration — Adept monitoring, PR 1
-// ---------------------------------------------------------------------------
-// Credentials are read from environment variables supplied by Compose through
-// the service-level env_file directive. They are never hard-coded here.
-//
-// Topology:
-//   VM (node exporter) ─┐
-//   Docker containers   ├─► Alloy ──► Grafana Cloud (metrics remote-write)
-//   API /actuator/prom  ┘
-//
-// Collection interval: 60 s for all scrape targets.
-// Resource bounds: WAL kept under 1 GiB; no unbounded label cardinality.
-// ---------------------------------------------------------------------------
-
-// ── Prometheus remote-write to Grafana Cloud ──────────────────────────────
-
+// PR 1: metrics only. No logs, remote configuration, or application secrets.
 prometheus.remote_write "grafana_cloud" {
-  endpoint {
-    url = env("GRAFANA_CLOUD_METRICS_URL")
+	external_labels = {environment = "production", instance = "adept-production"}
 
-    basic_auth {
-      username = env("GRAFANA_CLOUD_METRICS_USER")
-      password = env("GRAFANA_CLOUD_TOKEN")
-    }
+	endpoint {
+		url = sys.env("GRAFANA_CLOUD_METRICS_URL")
 
-    queue_config {
-      // Bound the in-memory and WAL queue so Alloy cannot consume unbounded
-      // disk on a low-capacity VM.
-      max_samples_per_send = 2000
-      batch_send_deadline  = "5s"
-    }
-  }
+		basic_auth {
+			username = sys.env("GRAFANA_CLOUD_METRICS_USER")
+			password = sys.env("GRAFANA_CLOUD_TOKEN")
+		}
 
-  wal {
-    // Keep at most 1 h of unsent data on disk, capped at ~1 GiB via segment limits.
-    truncate_frequency = "2h"
-    min_keepalive_time = "5m"
-    max_keepalive_time = "1h"
-  }
+		queue_config {
+			capacity             = 5000
+			min_shards           = 1
+			max_shards           = 2
+			max_samples_per_send = 1000
+			batch_send_deadline  = "5s"
+		}
+	}
+	// Retention is time-based, NOT a hard disk-size cap. Allow for truncation
+	// delay and WAL segment overhead; monitor free disk and remote-write errors.
+	wal {
+		truncate_frequency = "15m"
+		min_keepalive_time = "5m"
+		max_keepalive_time = "1h"
+	}
 }
 
-// ── Node exporter — host CPU, memory, swap, disk, network ────────────────
-// The Alloy container mounts the host root at /rootfs (read-only).
-// Alloy's built-in node exporter component uses this mount to read
-// /proc and /sys, producing metrics that describe the VM, not the container.
-
+// Host mounts refer to the Linux Docker host, not Alloy's own namespaces.
 prometheus.exporter.unix "host" {
-  procfs_path = "/rootfs/proc"
-  sysfs_path  = "/rootfs/sys"
-  rootfs_path = "/rootfs"
+	procfs_path    = "/rootfs/proc"
+	sysfs_path     = "/sys"
+	rootfs_path    = "/rootfs"
+	set_collectors = [
+		"cpu", "meminfo", "diskstats", "filesystem", "loadavg", "stat", "uname",
+	]
 
-  // Include only the collector sets we actively use in dashboards.
-  // Disabling unused collectors reduces label cardinality and CPU cost.
-  enable_collectors = [
-    "cpu",
-    "meminfo",
-    "diskstats",
-    "filesystem",
-    "loadavg",
-    "netdev",
-    "stat",
-    "time",
-    "uname",
-  ]
-
-  filesystem {
-    // Ignore pseudo filesystems to avoid noise.
-    fs_types_exclude     = "^(autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|fusectl|hugetlbfs|iso9660|mqueue|nsfs|overlay|proc|procfs|pstore|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tracefs)$"
-    mount_points_exclude = "^/(dev|proc|run/credentials/.+|sys|var/lib/docker/.+)($|/)"
-  }
+	filesystem {
+		fs_types_exclude     = "^(autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|fusectl|hugetlbfs|iso9660|mqueue|nsfs|overlay|proc|procfs|pstore|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tracefs)$"
+		mount_points_exclude = "^/(dev|proc|run|sys|var/lib/docker)($|/)"
+	}
 }
 
 prometheus.scrape "host_metrics" {
-  targets    = prometheus.exporter.unix.host.targets
-  forward_to = [prometheus.remote_write.grafana_cloud.receiver]
-
-  scrape_interval = "60s"
-  scrape_timeout  = "15s"
-
-  // Attach a stable job label so dashboards can filter by target type.
-  job_name = "node-exporter"
+	sample_limit    = 5000
+	targets         = prometheus.exporter.unix.host.targets
+	forward_to      = [prometheus.remote_write.grafana_cloud.receiver]
+	scrape_interval = "60s"
+	scrape_timeout  = "15s"
+	job_name        = "node-exporter"
 }
 
-// ── cAdvisor — Docker container resource and status metrics ───────────────
-// The Docker socket mount gives cAdvisor access to running container stats.
-// NOTE: Mounting /var/run/docker.sock read-only does not restrict which
-// Docker API operations the process can call; it merely prevents file writes
-// to the socket path. Alloy's cAdvisor component queries the Docker daemon
-// API. Ensure Alloy runs with the minimum required Linux capabilities and
-// that the Docker daemon socket is not exposed to the public internet.
-
+// Docker socket access is root-equivalent even with a :ro mount. Never expose
+// this collector publicly. Do not collect environment values or arbitrary labels.
 prometheus.exporter.cadvisor "containers" {
-  docker_host            = "unix:///var/run/docker.sock"
-  store_container_labels = false  // prevent high-cardinality label explosion
-
-  // Restrict to the metric families used in dashboards; drop the rest.
-  enabled_metrics = [
-    "cpu",
-    "memory",
-    "network",
-    "diskio",
-    "oom_event",
-  ]
+	docker_host = "unix:///var/run/docker.sock"
+	// Docker's managed containerd socket is needed for its overlayfs image store.
+	containerd_host              = "/rootfs/var/run/docker/containerd/containerd.sock"
+	docker_only                  = true
+	store_container_labels       = false
+	allowlisted_container_labels = ["com.docker.compose.project", "com.docker.compose.service"]
+	enabled_metrics              = ["cpu", "memory", "network", "diskIO"]
+	storage_duration             = "1m"
 }
 
 prometheus.scrape "container_metrics" {
-  targets    = prometheus.exporter.cadvisor.containers.targets
-  forward_to = [prometheus.remote_write.grafana_cloud.receiver]
-
-  scrape_interval = "60s"
-  scrape_timeout  = "30s"
-
-  job_name = "cadvisor"
+	sample_limit    = 10000
+	targets         = prometheus.exporter.cadvisor.containers.targets
+	forward_to      = [prometheus.relabel.container_metrics.receiver]
+	scrape_interval = "60s"
+	scrape_timeout  = "30s"
+	job_name        = "cadvisor"
 }
 
-// ── Spring API — /actuator/prometheus ────────────────────────────────────
-// Alloy scrapes the API's Micrometer/Prometheus endpoint on the private
-// Docker network. The endpoint is protected by the internalMetricsFilterChain
-// in SecurityConfig (Order 1) which allows RFC-1918 addresses only.
-// No host port is published for this path.
+prometheus.relabel "container_metrics" {
+	forward_to = [prometheus.remote_write.grafana_cloud.receiver]
+
+	rule {
+		source_labels = ["__name__", "container_label_com_docker_compose_project"]
+		regex         = "(up|scrape_.*);|.*;adept-production"
+		action        = "keep"
+	}
+
+	rule {
+		source_labels = ["container_label_com_docker_compose_service"]
+		target_label  = "service"
+	}
+	// Keep resource usage, last-seen and start-time signals, not the full exporter.
+	rule {
+		source_labels = ["__name__"]
+		regex         = "up|scrape_.*|container_(cpu_usage_seconds_total|cpu_cfs_periods_total|cpu_cfs_throttled_periods_total|memory_working_set_bytes|memory_usage_bytes|memory_swap|spec_memory_limit_bytes|network_receive_bytes_total|network_transmit_bytes_total|fs_reads_bytes_total|fs_writes_bytes_total|last_seen|start_time_seconds)"
+		action        = "keep"
+	}
+
+	rule {
+		regex  = "container_label_.*"
+		action = "labeldrop"
+	}
+}
 
 prometheus.scrape "api_metrics" {
-  targets = [{
-    __address__ = "api:8080",
-  }]
-  metrics_path = "/actuator/prometheus"
-  forward_to   = [prometheus.remote_write.grafana_cloud.receiver]
+	sample_limit    = 10000
+	targets         = [{__address__ = "api:8080"}]
+	metrics_path    = "/actuator/prometheus"
+	forward_to      = [prometheus.relabel.api_metrics.receiver]
+	scrape_interval = "60s"
+	scrape_timeout  = "15s"
+	job_name        = "adept-api"
+}
 
-  scrape_interval = "60s"
-  scrape_timeout  = "15s"
+prometheus.relabel "api_metrics" {
+	forward_to = [prometheus.remote_write.grafana_cloud.receiver]
 
-  job_name = "adept-api"
+	rule {
+		source_labels = ["__name__"]
+		regex         = "up|scrape_.*|http_server_requests_seconds.*|jvm_.*|process_.*|hikaricp_.*|jdbc_connections_.*"
+		action        = "keep"
+	}
+}
+
+// Collector failures must be visible too; readiness alone does not prove delivery.
+prometheus.exporter.self "alloy" { }
+
+prometheus.scrape "alloy_metrics" {
+	sample_limit    = 5000
+	targets         = prometheus.exporter.self.alloy.targets
+	forward_to      = [prometheus.relabel.alloy_metrics.receiver]
+	scrape_interval = "60s"
+	scrape_timeout  = "15s"
+	job_name        = "alloy"
+}
+
+prometheus.relabel "alloy_metrics" {
+	forward_to = [prometheus.remote_write.grafana_cloud.receiver]
+
+	rule {
+		source_labels = ["__name__"]
+		regex         = "up|scrape_.*|process_resident_memory_bytes|process_cpu_seconds_total|prometheus_remote_storage_.*|prometheus_wal_.*"
+		action        = "keep"
+	}
 }

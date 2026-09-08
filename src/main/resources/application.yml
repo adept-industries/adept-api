@@ -80,9 +80,11 @@ management:
           # A ready API can serve only when Spring is accepting traffic and DB works.
           include: "readinessState,db"
       show-details: never
-    prometheus:
-      enabled: true
   metrics:
+    distribution:
+      # A bounded set of latency buckets; labels use Spring's route templates.
+      slo:
+        http.server.requests: 100ms,300ms,1s,3s,10s
     tags:
       # Common labels attached to every metric; visible in Grafana Cloud.
       application: adept-api

@@ -6,6 +6,8 @@ import java.util.regex.Pattern;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -176,39 +178,42 @@ class SecurityConfigTest {
         assertThat(registrations.values()).allMatch(registration -> !registration.isEnabled());
     }
 
-    @Test
-    void prometheusEndpointIsAccessibleFromDockerInternalNetwork() throws Exception {
-        // The internalMetricsFilterChain (Order 1) allows RFC-1918 addresses.
-        // In a @WebMvcTest slice the Actuator endpoint is not registered, so the
-        // request passes security and reaches the servlet layer as 404.
-        // The key invariant: it must NOT be 403 (forbidden by the security chain).
+    @ParameterizedTest
+    @ValueSource(strings = {"127.0.0.1", "::1", "172.17.0.2", "10.0.0.5", "192.168.1.4"})
+    void prometheusEndpointPassesSecurityOnlyForInternalCallers(String address) throws Exception {
+        // This slice has no Actuator endpoint. The full-context test separately
+        // proves that real Prometheus data is available, not merely "not 403".
         mockMvc.perform(get("/actuator/prometheus")
                 .with(request -> {
-                    request.setRemoteAddr("172.17.0.2"); // Docker bridge range
+                    request.setRemoteAddr(address);
                     return request;
                 }))
-            // 404 expected in test slice (Actuator not loaded); 403 would be a security bug.
-            .andExpect(status().is(org.hamcrest.Matchers.not(403)));
-
-        // Verify loopback and other RFC-1918 ranges are also allowed.
-        mockMvc.perform(get("/actuator/prometheus")
-                .with(request -> {
-                    request.setRemoteAddr("10.0.0.5");
-                    return request;
-                }))
-            .andExpect(status().is(org.hamcrest.Matchers.not(403)));
+            .andExpect(status().isNotFound());
     }
 
-    @Test
-    void prometheusEndpointIsDeniedFromPublicInternet() throws Exception {
-        // A public IP must not reach /actuator/prometheus; the filter chain
-        // denies it with 403 before any Actuator processing occurs.
+    @ParameterizedTest
+    @ValueSource(strings = {"203.0.113.1", "172.32.0.1", "192.169.1.1", "2001:db8::1"})
+    void prometheusEndpointIsDeniedFromPublicInternet(String address) throws Exception {
         mockMvc.perform(get("/actuator/prometheus")
+                .header("X-Forwarded-For", "127.0.0.1")
+                .header("Forwarded", "for=127.0.0.1")
                 .with(request -> {
-                    request.setRemoteAddr("93.184.216.34"); // example.com
+                    request.setRemoteAddr(address);
                     return request;
                 }))
             .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void internalMetricsPermissionDoesNotAllowWritesOrChildPaths() throws Exception {
+        mockMvc.perform(post("/actuator/prometheus")
+                .with(request -> {
+                    request.setRemoteAddr("172.17.0.2");
+                    return request;
+                }))
+            .andExpect(status().isForbidden());
+        mockMvc.perform(get("/actuator/prometheus/anything"))
+            .andExpect(status().isUnauthorized());
     }
 
     @Test

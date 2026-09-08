@@ -1,214 +1,229 @@
-# Adept Monitoring Setup — Owner Runbook
+# Monitoring PR 1 — setup and rollback
 
-This document covers PR 1: the Grafana Alloy collector, host metrics, container
-metrics, and API metrics. PRs 2 and 3 extend this foundation.
+**Owner only:** create `/opt/adept/.env.monitoring` and install the reviewed files.
+Do not change `.env.production` or share production access with the teammate.
+Merging this PR deploys the API image, but does **not** install Compose, Caddy,
+or Alloy configuration on AWS.
 
-> **Teammate scope:** implement code, configuration, and tests only.
-> **Owner scope:** apply this runbook on AWS after PRs are merged.
+## What this adds
 
----
-
-## What PR 1 installs
-
-| Component | What it collects |
+| Source | Measurements |
 |---|---|
-| Alloy node exporter | Host CPU, memory, swap, disk, network |
-| Alloy cAdvisor | Docker container CPU, memory, restarts |
-| API scrape | Spring request rates, latency, JVM, HikariCP pool |
+| Linux host | CPU, available memory, swap, load, filesystem space and disk I/O |
+| Docker containers | CPU, memory, network, disk I/O, last-seen and start time |
+| API | Request counts/errors/latency buckets, JVM and connection-pool usage |
+| Alloy itself | Collector resources and remote-write queue/failures |
 
-Data flows to **Grafana Cloud**. No separate Prometheus or Grafana server is
-installed on the VM.
+Alloy sends Prometheus-compatible metrics to Grafana Cloud every 60 seconds.
+There is no Grafana, Prometheus database, or Loki server on the VM.
+Worker metrics come in PR 2; logs, dashboards and alert rules come in PR 3.
+Container last-seen/start-time metrics are **not** Docker health-check status
+or an exact restart counter. This PR does not claim to export those.
 
----
+## Requirements and permissions
 
-## Prerequisites
+- Linux Docker host with Docker Compose **2.24.0 or newer** (`env_file.required`).
+- Standard Docker paths: `/var/run/docker.sock`, `/var/lib/docker`, and `/sys`.
+- With Docker's overlayfs/containerd image store, cAdvisor also needs Docker's
+  managed socket at `/var/run/docker/containerd/containerd.sock`, reached through
+  the existing host-root mount. A different containerd setup needs its actual
+  socket configured before rollout; do not accept missing container samples.
+- Owner-approved Grafana Cloud stack and write-only token.
 
-- Docker Compose v2.20 or later (`docker compose version`)
-- A Grafana Cloud stack (free tier or above)
-- SSH access to the production VM at `/opt/adept/`
+Only Caddy publishes ports 80/443. The API metrics endpoint allows internal,
+read-only scrapes; Caddy explicitly rejects public operational paths. Alloy's
+own HTTP listener binds to container loopback, not a published port.
 
----
+Alloy drops Linux capabilities and uses no-new-privileges, but **it is still a
+trusted host agent, not a sandbox**. Read-only host mounts can expose host files,
+including secrets; socket access can control Docker regardless of `:ro`.
+The config does not load or export `.env.production`, environment values, or
+arbitrary container labels. Nevertheless, the mounts are a privilege trade-off
+the owner must accept. Do not add privileged mode, open ports, or remote config.
+If this trust is unacceptable, stop and design restricted exporters/socket
+access separately.
 
-## Step 1 — Create the Grafana Cloud stack and token
+## 1. Get the Grafana details
 
-1. Log in to [grafana.com](https://grafana.com) and open your organisation.
-2. Under **My Stacks**, create or select a stack.
-3. From the stack detail page, note:
-   - **Prometheus remote-write URL** → `GRAFANA_CLOUD_METRICS_URL`
-   - **Prometheus instance ID** (numeric) → `GRAFANA_CLOUD_METRICS_USER`
-   - **Loki push URL** → `GRAFANA_CLOUD_LOGS_URL` *(used in PR 3)*
-   - **Loki instance ID** (numeric) → `GRAFANA_CLOUD_LOGS_USER` *(used in PR 3)*
-4. Under **Access Policies**, create a new Access Policy with only
-   **metrics:write** permission *(add logs:write in PR 3)*. Generate a token.
-   This token is `GRAFANA_CLOUD_TOKEN`.
+In your Grafana Cloud stack, copy the Prometheus remote-write URL and instance ID.
+Create a stack-scoped access-policy token with **metrics:write** only.
+Use the instance ID as the username, not your email. PR 3 will add logs:write
+and the Loki URL/instance ID.
 
-> **Security:** the token has write-only scope. It cannot read data, manage
-> dashboards, or administer users.
+Check the stack's Usage & Billing page and its current limits. No paid upgrade
+or billing guarantee is part of this PR.
 
----
+## 2. Stage reviewed files
 
-## Step 2 — Install files on AWS
-
-Merging the PR does **not** upload files to the VM. The owner must copy them manually.
-
-SSH to the VM and run:
+From your local `adept-api` checkout, using the existing SSH key:
 
 ```bash
-# Copy configuration files from the repository clone or a deployment artefact.
-# Adjust the source path to match how you receive the files.
-cp -r adept-api/infra/aws/alloy /opt/adept/alloy
-cp    adept-api/infra/aws/compose.yaml /opt/adept/compose.yaml
+ssh -i ~/.ssh/adept-staging ubuntu@3.111.250.16 'mkdir -p /tmp/adept-monitoring-rollout/alloy'
+scp -i ~/.ssh/adept-staging infra/aws/compose.yaml infra/aws/Caddyfile infra/aws/.env.monitoring.example ubuntu@3.111.250.16:/tmp/adept-monitoring-rollout/
+scp -i ~/.ssh/adept-staging infra/aws/alloy/config.alloy infra/aws/alloy/start.sh infra/aws/alloy/healthcheck.sh ubuntu@3.111.250.16:/tmp/adept-monitoring-rollout/alloy/
 ```
 
-Verify the mapping:
+Upload only these non-secret files. Never upload an example over the real
+`.env.production`.
 
-| Repository path | VM path |
+| Repository file | Installed VM file |
 |---|---|
-| `infra/aws/alloy/config.alloy` | `/opt/adept/alloy/config.alloy` |
 | `infra/aws/compose.yaml` | `/opt/adept/compose.yaml` |
-| `infra/aws/.env.monitoring.example` | Reference only — do not copy as-is |
+| `infra/aws/Caddyfile` | `/opt/adept/Caddyfile` |
+| `infra/aws/alloy/config.alloy` | `/opt/adept/alloy/config.alloy` |
+| `infra/aws/alloy/start.sh` | `/opt/adept/alloy/start.sh` |
+| `infra/aws/alloy/healthcheck.sh` | `/opt/adept/alloy/healthcheck.sh` |
+| `infra/aws/.env.monitoring.example` | Template for owner-created `/opt/adept/.env.monitoring` |
 
-> **Reminder:** image-tag deployments (GitHub Actions) update image references
-> in `.env.production` and recreate containers, but they do **not** upload
-> changed `compose.yaml` or `alloy/config.alloy` to AWS. You must copy these
-> manually whenever they change.
+## 3. Back up and install on AWS
 
----
-
-## Step 3 — Create `/opt/adept/.env.monitoring`
-
-```bash
-# On the production VM
-cp /opt/adept/alloy/config.alloy /tmp/  # not needed; just verifying file exists
-nano /opt/adept/.env.monitoring
-```
-
-Fill in real values (see Step 1). Example structure:
-
-```env
-GRAFANA_CLOUD_METRICS_URL=https://prometheus-prod-XX-XXXX.grafana.net/api/prom/push
-GRAFANA_CLOUD_METRICS_USER=123456
-GRAFANA_CLOUD_LOGS_URL=https://logs-prod-XX-XXXX.grafana.net/loki/api/v1/push
-GRAFANA_CLOUD_LOGS_USER=789012
-GRAFANA_CLOUD_TOKEN=<your-scoped-token>
-```
-
-Restrict permissions immediately:
+Use one SSH session. Confirm no application deployment is currently running.
+Review the staged Compose diff against the live file and preserve any unrelated
+VM customizations. Then:
 
 ```bash
-chmod 600 /opt/adept/.env.monitoring
-ls -la /opt/adept/.env.monitoring   # verify: -rw------- root root
+monitoring_backup_dir=$(sudo mktemp -d /opt/adept/monitoring-backup.XXXXXX)
+sudo cp -a /opt/adept/compose.yaml /opt/adept/Caddyfile "$monitoring_backup_dir/"
+if [ -d /opt/adept/alloy ]; then sudo cp -a /opt/adept/alloy "$monitoring_backup_dir/"; fi
+printf 'Save this rollback path: %s\n' "$monitoring_backup_dir"
+
+sudo install -d -m 755 /opt/adept/alloy
+sudo install -m 644 /tmp/adept-monitoring-rollout/compose.yaml /opt/adept/compose.yaml
+sudo cp /tmp/adept-monitoring-rollout/Caddyfile /opt/adept/Caddyfile
+sudo install -m 644 /tmp/adept-monitoring-rollout/alloy/config.alloy /opt/adept/alloy/config.alloy
+sudo install -m 644 /tmp/adept-monitoring-rollout/alloy/start.sh /opt/adept/alloy/start.sh
+sudo install -m 644 /tmp/adept-monitoring-rollout/alloy/healthcheck.sh /opt/adept/alloy/healthcheck.sh
 ```
 
----
-
-## Step 4 — Enable monitoring
+Create the monitoring file **only if it does not already exist**:
 
 ```bash
-cd /opt/adept
-
-# Start only the Alloy container; do not recreate application services.
-docker compose --profile monitoring up -d alloy
+if ! sudo test -e /opt/adept/.env.monitoring; then
+  sudo install -m 600 /tmp/adept-monitoring-rollout/.env.monitoring.example /opt/adept/.env.monitoring
+fi
+sudo nano /opt/adept/.env.monitoring
+sudo chmod 600 /opt/adept/.env.monitoring
 ```
 
----
+Fill in `GRAFANA_CLOUD_METRICS_URL`, `GRAFANA_CLOUD_METRICS_USER`, and
+`GRAFANA_CLOUD_TOKEN`. Leave the two LOGS values blank for PR 1.
+Do not paste real values into GitHub, chat, shell commands, or screenshots.
+The file is supplied only to Alloy, not to the application containers.
 
-## Step 5 — Validate (no secrets are printed by these commands)
+## 4. Validate and start
+
+Define this helper in that SSH session. It always includes the existing
+application env file needed for Compose interpolation:
 
 ```bash
-# 1. Confirm Alloy is running and healthy
-docker compose --profile monitoring ps alloy
-
-# 2. Check recent logs for startup errors
-docker compose logs --tail=50 alloy
-
-# 3. Verify Alloy reached the ready endpoint
-docker compose exec alloy wget -q -O - http://localhost:12345/-/ready
-
-# 4. Verify the API metrics endpoint is reachable from Alloy's network
-#    (replace api with the actual container name if different)
-docker compose exec alloy wget -q -O /dev/null http://api:8080/actuator/prometheus
-echo "Exit: $?"  # should be 0
-
-# 5. Check resource usage — Alloy should use < 5% CPU and < 150 MB RAM
-docker stats --no-stream alloy
-
-# 6. Confirm metrics appear in Grafana Cloud Explore within 2 minutes
-#    - Open grafana.com → your stack → Explore
-#    - Query: {job="adept-api"} or node_cpu_seconds_total
+dc() {
+  sudo docker compose --env-file /opt/adept/.env.production -f /opt/adept/compose.yaml "$@"
+}
+dc --profile monitoring config --quiet
+dc exec -T caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+dc --profile monitoring run --rm --no-deps alloy validate /etc/alloy/config.alloy
 ```
 
----
+Use `config --quiet`, **not plain `config`**, which can print expanded secrets.
+Alloy validation checks syntax, not whether Grafana accepts the token.
 
-## Step 6 — Verify no public ports were added
+After the new API image has deployed successfully:
 
 ```bash
-# Only ports 80 and 443 should be listed (Caddy).
-docker compose --profile monitoring ps --format "table {{.Name}}\t{{.Ports}}"
+dc exec -T caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile
+dc --profile monitoring up -d --no-deps --force-recreate alloy
+dc --profile monitoring ps
+dc exec -T alloy /bin/bash /etc/alloy/healthcheck.sh
+dc exec -T caddy curl -fsS -o /dev/null http://api:8080/actuator/prometheus
 ```
 
----
+No database/worker restart is needed. Keep app deployment workflows unchanged.
+Only Alloy starts; Caddy reloads its private-path restriction without replacing
+the running Caddy container. The plain Caddyfile copy above preserves the inode
+used by its single-file bind mount; replacing that file atomically would require
+recreating Caddy instead. Future monitoring config updates need this manual
+file-install process too, followed by Alloy recreation.
 
-## Rollback
+## 5. Confirm real data and resource usage
 
-To stop monitoring without affecting the application:
+In Grafana Explore, verify fresh samples after a few scrape intervals:
+
+- `up{job="adept-api"}` is 1.
+- `node_memory_MemTotal_bytes{job="node-exporter"}` agrees with the VM's RAM
+  from `free -b`, not Alloy's 384 MiB limit.
+- `node_filesystem_avail_bytes{job="node-exporter",mountpoint="/"}` reflects
+  free space on the VM's root filesystem.
+- `container_memory_working_set_bytes{job="cadvisor"}` has a `service` label
+  for the running Adept services, not only the collector/root cgroup.
+- `http_server_requests_seconds_bucket{job="adept-api"}`,
+  `jvm_memory_used_bytes{job="adept-api"}`, and `hikaricp_connections{job="adept-api"}`
+  are present. Exercise an API route to generate request metrics.
+
+From outside the VM, `https://adeptindustries.dev/actuator/prometheus` should
+return 404, not metrics. Verify ordinary dashboard/login requests still work.
 
 ```bash
-cd /opt/adept
-docker compose --profile monitoring stop alloy
-docker compose --profile monitoring rm -f alloy
+dc --profile monitoring ps
+sudo docker stats --no-stream "$(dc ps -q alloy)"
+dc logs --tail=50 alloy
 ```
 
-The `alloy_data` Docker volume (WAL) is preserved so metrics are not lost if
-you re-enable monitoring later. To delete it permanently:
+Review logs privately and redact before sharing. Check for missing collectors,
+401/403 responses, retry loops, OOMs and missing service samples. Readiness alone
+does not prove successful scrapes or remote-write delivery.
+
+Resource ceilings: **384 MiB memory, no extra swap, half of one CPU, 128 tasks**.
+These are limits, not a usage forecast; measure under backfill and normal load.
+Scrapes have 5,000/10,000-sample limits; exceeding one fails that scrape rather
+than allowing unchecked growth. Remote-write uses at most two queue shards.
+WAL retention is one hour with
+15-minute truncation checks and segment overhead, **not a hard 1 GiB disk cap**.
+Long outages can lose older monitoring samples; this is not an audit log.
+Watch host disk/Cloud usage and stop Alloy if overhead threatens application
+health. Do not increase limits blindly.
+
+## Rollback and token rotation
+
+To disable only monitoring:
 
 ```bash
-docker volume rm adept-production_alloy_data
+dc --profile monitoring stop alloy
 ```
 
-Monitoring can be removed entirely without deleting `.env.production`,
-PostgreSQL data, or any application volume.
+Keep `alloy_data` and `.env.monitoring`. No database or application volume is
+removed. Retention still applies to buffered metrics when Alloy starts again.
 
----
+If the installed configuration itself must be reverted, stop Alloy first,
+restore Compose and Caddy from the saved backup, restore the prior Alloy
+directory if there was one, validate Caddy, then reload it. Do not restore
+`.env.production` or run `docker compose down -v`.
 
-## Rotating Grafana credentials
-
-1. Create a new token in Grafana Cloud Access Policies.
-2. Update `/opt/adept/.env.monitoring` with the new token.
-3. Recreate the Alloy container so it reads the updated file:
+For token rotation, edit only `.env.monitoring`, then:
 
 ```bash
-cd /opt/adept
-docker compose --profile monitoring up -d --force-recreate alloy
+dc --profile monitoring up -d --no-deps --force-recreate alloy
 ```
 
-4. Revoke the old token in Grafana Cloud.
+Confirm fresh Cloud samples and no authorization errors **before** revoking
+the old token. A simple restart does not reread service env-file values.
 
----
+## Teammate / CI checks (no production credentials)
 
-## Docker socket security
+```bash
+bash scripts/verify-monitoring-stack.sh
+./scripts/verify-production-stack.sh
+./mvnw -B clean verify
+```
 
-Alloy mounts `/var/run/docker.sock` to collect cAdvisor container metrics.
-Mounting the socket read-only (`:ro`) prevents file writes to the socket path,
-but it does **not** restrict which Docker API operations Alloy can perform via
-the daemon. This is a well-understood trade-off for container monitoring.
+The monitoring script resolves Compose in a temporary directory, checks both
+profiles, validates the pinned Alloy config, rejects missing credentials,
+scrapes real host/container samples and checks public Caddy restrictions.
+It uses dummy credentials, isolated containers and no network for Alloy.
+The API tests verify an actual Prometheus response plus existing auth rules.
 
-Mitigations in place:
-- Alloy runs with the minimal Linux capabilities granted by Docker's default
-  runtime (`--cap-drop=ALL` is not set but no `--cap-add` is used either).
-- The socket is not exposed to the public internet.
-- Alloy is pinned to a specific image digest so its behaviour is reproducible.
+Local Docker Desktop/OrbStack tests observe their Linux VM, not macOS/Windows.
+They do not replace the owner's Linux production and Grafana ingestion checks.
 
-Review this risk before enabling monitoring on a high-security deployment.
-
----
-
-## Checking Grafana Cloud usage limits
-
-Free tier limits (as of 2026): 10,000 active metric series, 50 GB logs/month.
-This PR enables only metrics; PR 3 adds logs.
-
-To check current usage:
-- Grafana Cloud → your stack → **Usage & Billing**
-
-Contact the owner before enabling paid features or upgrading the plan.
+References: [Alloy container metrics](https://grafana.com/docs/alloy/latest/reference/components/prometheus/prometheus.exporter.cadvisor/),
+[Alloy host metrics](https://grafana.com/docs/alloy/latest/reference/components/prometheus/prometheus.exporter.unix/),
+[Compose env files](https://docs.docker.com/reference/compose-file/services/#env_file).

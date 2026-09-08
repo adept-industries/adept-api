@@ -118,8 +118,10 @@ public class SecurityConfig {
         return http
             .securityMatcher("/actuator/prometheus")
             .authorizeHttpRequests(authorize -> authorize
-                // Loopback (IPv4 and mapped IPv6)
+                .requestMatchers(request -> !HttpMethod.GET.matches(request.getMethod())).denyAll()
+                // This is a private read-only endpoint, not a user-authentication bypass.
                 .requestMatchers(new IpAddressMatcher("127.0.0.0/8")).permitAll()
+                .requestMatchers(new IpAddressMatcher("::1/128")).permitAll()
                 // Docker default bridge (172.17.0.0/16) and broader RFC-1918 172.16-31 range
                 .requestMatchers(new IpAddressMatcher("172.16.0.0/12")).permitAll()
                 // Private 10.x.x.x range (AWS VPC, custom Docker networks)
@@ -129,6 +131,7 @@ public class SecurityConfig {
                 .anyRequest().denyAll())
             .sessionManagement(session ->
                 session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .requestCache(AbstractHttpConfigurer::disable)
             .csrf(AbstractHttpConfigurer::disable)
             .build();
     }
