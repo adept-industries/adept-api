@@ -176,6 +176,63 @@ class SecurityConfigTest {
         assertThat(registrations.values()).allMatch(registration -> !registration.isEnabled());
     }
 
+    @Test
+    void prometheusEndpointIsAccessibleFromDockerInternalNetwork() throws Exception {
+        // The internalMetricsFilterChain (Order 1) allows RFC-1918 addresses.
+        // In a @WebMvcTest slice the Actuator endpoint is not registered, so the
+        // request passes security and reaches the servlet layer as 404.
+        // The key invariant: it must NOT be 403 (forbidden by the security chain).
+        mockMvc.perform(get("/actuator/prometheus")
+                .with(request -> {
+                    request.setRemoteAddr("172.17.0.2"); // Docker bridge range
+                    return request;
+                }))
+            // 404 expected in test slice (Actuator not loaded); 403 would be a security bug.
+            .andExpect(status().is(org.hamcrest.Matchers.not(403)));
+
+        // Verify loopback and other RFC-1918 ranges are also allowed.
+        mockMvc.perform(get("/actuator/prometheus")
+                .with(request -> {
+                    request.setRemoteAddr("10.0.0.5");
+                    return request;
+                }))
+            .andExpect(status().is(org.hamcrest.Matchers.not(403)));
+    }
+
+    @Test
+    void prometheusEndpointIsDeniedFromPublicInternet() throws Exception {
+        // A public IP must not reach /actuator/prometheus; the filter chain
+        // denies it with 403 before any Actuator processing occurs.
+        mockMvc.perform(get("/actuator/prometheus")
+                .with(request -> {
+                    request.setRemoteAddr("93.184.216.34"); // example.com
+                    return request;
+                }))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void otherActuatorEndpointsRemainsBlockedEvenFromInternalNetwork() throws Exception {
+        // The internalMetricsFilterChain only matches /actuator/prometheus.
+        // Requests for /actuator/info or /actuator/env must still be denied by
+        // the main chain (Order 2), even when the caller is on the Docker network.
+        mockMvc.perform(get("/actuator/info")
+                .with(request -> {
+                    request.setRemoteAddr("172.17.0.2");
+                    return request;
+                }))
+            .andExpect(status().isUnauthorized())
+            .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON));
+
+        mockMvc.perform(get("/actuator/env")
+                .with(request -> {
+                    request.setRemoteAddr("172.17.0.2");
+                    return request;
+                }))
+            .andExpect(status().isUnauthorized())
+            .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON));
+    }
+
     private String csrfToken() throws Exception {
         MvcResult result = mockMvc.perform(get("/api/v1/auth/csrf"))
             .andExpect(status().isNoContent())

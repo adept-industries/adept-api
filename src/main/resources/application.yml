@@ -64,6 +64,9 @@ spring:
 
 management:
   # Expose only named operational endpoints, not every actuator endpoint.
+  # /actuator/prometheus is access-controlled by the internalMetricsFilterChain
+  # (Order 1 in SecurityConfig) which allows only RFC-1918 / loopback addresses.
+  # It is never proxied through Caddy and has no public host port.
   endpoints:
     web:
       exposure:
@@ -77,6 +80,13 @@ management:
           # A ready API can serve only when Spring is accepting traffic and DB works.
           include: "readinessState,db"
       show-details: never
+    prometheus:
+      enabled: true
+  metrics:
+    tags:
+      # Common labels attached to every metric; visible in Grafana Cloud.
+      application: adept-api
+      environment: ${ADEPT_ENVIRONMENT:local}
 
 springdoc:
   api-docs:

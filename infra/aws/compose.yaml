@@ -1,5 +1,14 @@
 name: adept-production
 
+# ---------------------------------------------------------------------------
+# Compose profiles
+#   (default) — application services only; used by all existing CI and
+#               deployment commands. No monitoring credentials required.
+#   monitoring — additionally starts Grafana Alloy. Enable by passing
+#               --profile monitoring to docker compose commands.
+#               Requires /opt/adept/.env.monitoring on the production VM.
+# ---------------------------------------------------------------------------
+
 x-logging: &default-logging
   driver: json-file
   options:
@@ -174,6 +183,66 @@ services:
     networks: [adept]
     logging: *default-logging
 
+  # ---------------------------------------------------------------------------
+  # Grafana Alloy — metrics collector (opt-in, requires --profile monitoring)
+  # ---------------------------------------------------------------------------
+  # Alloy collects host, container, and API metrics and ships them to Grafana
+  # Cloud. It is intentionally outside the default profile so that:
+  #   - Existing 'docker compose up' commands are unaffected.
+  #   - CI and application deployments do not require monitoring credentials.
+  #   - The owner can enable or disable monitoring independently.
+  #
+  # Security notes:
+  #   - Credentials are read exclusively from .env.monitoring via env_file.
+  #     They are not forwarded into any application container.
+  #   - /var/run/docker.sock is mounted for cAdvisor container metrics.
+  #     Even a read-only socket mount does not restrict Docker API calls;
+  #     see infra/aws/docs/monitoring-setup.md for the risk assessment.
+  #   - The Alloy UI (port 12345) is exposed only within the adept network,
+  #     never to the host or the public internet.
+  #   - No metrics ports are published to the host.
+  alloy:
+    profiles: [monitoring]
+    # Pinned to a specific version digest for reproducible deployments.
+    # Update the digest when upgrading Alloy.
+    image: grafana/alloy:v1.8.3
+    restart: unless-stopped
+    env_file:
+      # Owner creates this file on AWS from infra/aws/.env.monitoring.example.
+      # See infra/aws/docs/monitoring-setup.md for instructions.
+      # required: false allows 'docker compose config' and CI validation to run
+      # without the real credentials file. Alloy will fail at startup if the file
+      # is absent and monitoring is enabled — which is the intended behaviour.
+      - path: /opt/adept/.env.monitoring
+        required: false
+    volumes:
+      # Alloy configuration (read-only; owner copies from repository).
+      - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
+      # Host filesystem mount so the built-in node exporter reads VM-level
+      # /proc and /sys, not the container's namespaced view.
+      - /:/rootfs:ro
+      # Docker socket for cAdvisor container resource metrics.
+      # See security notes above.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Persistent WAL storage so unsent data survives Alloy restarts.
+      - alloy_data:/var/lib/alloy/data
+    command:
+      - run
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    # No ports: block — Alloy UI and scrape targets stay private.
+    # Alloy can still reach api:8080 and engine-worker:9091 via the adept network.
+    expose:
+      - "12345"  # Alloy UI — reachable only within the Docker network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:12345/-/ready || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks: [adept]
+    logging: *default-logging
+
 networks:
   adept:
     driver: bridge
@@ -182,3 +251,7 @@ volumes:
   postgres_data:
   caddy_data:
   caddy_config:
+  # WAL storage for Alloy — persists across restarts to avoid data loss.
+  # This volume is created automatically but only used when --profile monitoring
+  # is active. It is safe to delete if monitoring is uninstalled.
+  alloy_data:
