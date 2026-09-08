@@ -18,6 +18,8 @@ dependency-reduced-pom.xml
 .env.*
 !.env.example
 !infra/aws/.env.production.example
+# Allow the monitoring template; the real /opt/adept/.env.monitoring must never be committed.
+!infra/aws/.env.monitoring.example
 
 # Operating-system files
 .DS_Store

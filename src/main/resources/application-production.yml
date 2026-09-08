@@ -5,6 +5,11 @@ server:
   # limiting use the original HTTPS request and client address.
   forward-headers-strategy: framework
 
+management:
+  metrics:
+    tags:
+      environment: production
+
 springdoc:
   api-docs:
     enabled: false

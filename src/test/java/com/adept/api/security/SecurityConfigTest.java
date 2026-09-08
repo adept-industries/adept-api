@@ -6,6 +6,8 @@ import java.util.regex.Pattern;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -174,6 +176,66 @@ class SecurityConfigTest {
 
         assertThat(registrations).hasSize(5);
         assertThat(registrations.values()).allMatch(registration -> !registration.isEnabled());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"127.0.0.1", "::1", "172.17.0.2", "10.0.0.5", "192.168.1.4"})
+    void prometheusEndpointPassesSecurityOnlyForInternalCallers(String address) throws Exception {
+        // This slice has no Actuator endpoint. The full-context test separately
+        // proves that real Prometheus data is available, not merely "not 403".
+        mockMvc.perform(get("/actuator/prometheus")
+                .with(request -> {
+                    request.setRemoteAddr(address);
+                    return request;
+                }))
+            .andExpect(status().isNotFound());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"203.0.113.1", "172.32.0.1", "192.169.1.1", "2001:db8::1"})
+    void prometheusEndpointIsDeniedFromPublicInternet(String address) throws Exception {
+        mockMvc.perform(get("/actuator/prometheus")
+                .header("X-Forwarded-For", "127.0.0.1")
+                .header("Forwarded", "for=127.0.0.1")
+                .with(request -> {
+                    request.setRemoteAddr(address);
+                    return request;
+                }))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void internalMetricsPermissionDoesNotAllowWritesOrChildPaths() throws Exception {
+        mockMvc.perform(post("/actuator/prometheus")
+                .with(request -> {
+                    request.setRemoteAddr("172.17.0.2");
+                    return request;
+                }))
+            .andExpect(status().isForbidden());
+        mockMvc.perform(get("/actuator/prometheus/anything"))
+            .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void otherActuatorEndpointsRemainsBlockedEvenFromInternalNetwork() throws Exception {
+        // The internalMetricsFilterChain only matches /actuator/prometheus.
+        // Requests for /actuator/info or /actuator/env must still be denied by
+        // the main chain (Order 2), even when the caller is on the Docker network.
+        mockMvc.perform(get("/actuator/info")
+                .with(request -> {
+                    request.setRemoteAddr("172.17.0.2");
+                    return request;
+                }))
+            .andExpect(status().isUnauthorized())
+            .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON));
+
+        mockMvc.perform(get("/actuator/env")
+                .with(request -> {
+                    request.setRemoteAddr("172.17.0.2");
+                    return request;
+                }))
+            .andExpect(status().isUnauthorized())
+            .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON));
     }
 
     private String csrfToken() throws Exception {

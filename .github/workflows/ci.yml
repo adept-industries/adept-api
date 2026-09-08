@@ -76,6 +76,10 @@ jobs:
       - name: Verify production Compose and Caddy configuration
         run: ./scripts/verify-production-stack.sh
 
+      - name: Verify optional monitoring and private metrics boundary
+        timeout-minutes: 5
+        run: bash ./scripts/verify-monitoring-stack.sh
+
       - name: Build and test
         timeout-minutes: 20
         run: ./mvnw -B clean verify

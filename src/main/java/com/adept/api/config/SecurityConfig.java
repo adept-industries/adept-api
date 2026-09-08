@@ -15,6 +15,7 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.intercept.AuthorizationFilter;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfFilter;
+import org.springframework.security.web.util.matcher.IpAddressMatcher;
 
 import com.adept.api.common.error.ProblemWriter;
 import com.adept.api.common.web.RequestBodyLimitFilter;
@@ -101,6 +102,38 @@ public class SecurityConfig {
     FilterRegistrationBean<JwtAuthenticationFilter> disableJwtServletRegistration(
             JwtAuthenticationFilter filter) {
         return disabledRegistration(filter);
+    }
+
+    /**
+     * Higher-priority chain that permits {@code /actuator/prometheus} only from
+     * loopback and private RFC-1918 addresses (Docker bridge, Lightsail VPC).
+     * All other callers receive 403. This chain does not affect any other path.
+     *
+     * <p>Alloy scrapes this endpoint from within the Docker {@code adept} network.
+     * The endpoint is never exposed through Caddy and has no public host port.
+     */
+    @Bean
+    @Order(1)
+    SecurityFilterChain internalMetricsFilterChain(HttpSecurity http) throws Exception {
+        return http
+            .securityMatcher("/actuator/prometheus")
+            .authorizeHttpRequests(authorize -> authorize
+                .requestMatchers(request -> !HttpMethod.GET.matches(request.getMethod())).denyAll()
+                // This is a private read-only endpoint, not a user-authentication bypass.
+                .requestMatchers(new IpAddressMatcher("127.0.0.0/8")).permitAll()
+                .requestMatchers(new IpAddressMatcher("::1/128")).permitAll()
+                // Docker default bridge (172.17.0.0/16) and broader RFC-1918 172.16-31 range
+                .requestMatchers(new IpAddressMatcher("172.16.0.0/12")).permitAll()
+                // Private 10.x.x.x range (AWS VPC, custom Docker networks)
+                .requestMatchers(new IpAddressMatcher("10.0.0.0/8")).permitAll()
+                // Private 192.168.x.x range
+                .requestMatchers(new IpAddressMatcher("192.168.0.0/16")).permitAll()
+                .anyRequest().denyAll())
+            .sessionManagement(session ->
+                session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .requestCache(AbstractHttpConfigurer::disable)
+            .csrf(AbstractHttpConfigurer::disable)
+            .build();
     }
 
     @Bean

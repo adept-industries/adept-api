@@ -5,6 +5,14 @@
 {$ADEPT_DOMAIN} {
 	encode zstd gzip
 
+	# Operational endpoints must never reach the API through Caddy's private IP.
+	handle /actuator* {
+		respond 404
+	}
+	handle /metrics* {
+		respond 404
+	}
+
 	handle /api/* {
 		reverse_proxy api:8080
 	}
