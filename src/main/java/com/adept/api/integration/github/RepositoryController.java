@@ -5,6 +5,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -21,6 +22,7 @@ import com.adept.api.common.error.ApiException;
 import com.adept.api.common.error.ProblemCode;
 import com.adept.api.integration.github.dto.LeadCandidateResponse;
 import com.adept.api.integration.github.dto.RepositoryResponse;
+import com.adept.api.integration.github.dto.RepositorySettingsOptionsResponse;
 import com.adept.api.integration.github.dto.UpdateRepositoryRequest;
 import com.adept.api.integration.jira.JiraIntegrationService;
 import com.adept.api.integration.jira.dto.JiraProjectResponse;
@@ -49,6 +51,7 @@ public class RepositoryController {
     private final CurrentPrincipal currentPrincipal;
     private final ActiveMembershipService activeMembershipService;
     private final RepositoryScopeService repositoryScopeService;
+    private final RepositorySettingsOptionsService settingsOptionsService;
 
     public RepositoryController(
             RepositoryService repositoryService,
@@ -56,13 +59,15 @@ public class RepositoryController {
             Optional<JiraIntegrationService> jiraIntegrationService,
             CurrentPrincipal currentPrincipal,
             ActiveMembershipService activeMembershipService,
-            RepositoryScopeService repositoryScopeService) {
+            RepositoryScopeService repositoryScopeService,
+            RepositorySettingsOptionsService settingsOptionsService) {
         this.repositoryService = repositoryService;
         this.invitationService = invitationService;
         this.jiraIntegrationService = jiraIntegrationService;
         this.currentPrincipal = currentPrincipal;
         this.activeMembershipService = activeMembershipService;
         this.repositoryScopeService = repositoryScopeService;
+        this.settingsOptionsService = settingsOptionsService;
     }
 
     @GetMapping
@@ -80,6 +85,15 @@ public class RepositoryController {
         AuthenticatedPrincipal principal = currentPrincipal.require();
         GitRepository repository = repositoryScopeService.requireReadableRepository(principal, repositoryId);
         return ResponseEntity.ok(repositoryService.toResponse(repository));
+    }
+
+    @GetMapping("/{repositoryId}/settings-options")
+    public ResponseEntity<RepositorySettingsOptionsResponse> settingsOptions(@PathVariable UUID repositoryId) {
+        AuthenticatedPrincipal principal = currentPrincipal.require();
+        Membership membership = activeMembershipService.getActiveMembership(principal.userId(), principal.workspaceId())
+            .orElseThrow(() -> new ApiException(ProblemCode.NO_ACTIVE_MEMBERSHIP));
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+            .body(settingsOptionsService.get(principal.workspaceId(), repositoryId, membership));
     }
 
     @PatchMapping("/{repositoryId}")

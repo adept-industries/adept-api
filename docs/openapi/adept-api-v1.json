@@ -1761,6 +1761,25 @@
         },
         "type": "object"
       },
+      "RepositorySettingsOptionsResponse": {
+        "properties": {
+          "branches": {
+            "$ref": "#/components/schemas/SettingsOptions"
+          },
+          "environments": {
+            "$ref": "#/components/schemas/SettingsOptions"
+          },
+          "workflows": {
+            "$ref": "#/components/schemas/SettingsOptions"
+          }
+        },
+        "required": [
+          "branches",
+          "environments",
+          "workflows"
+        ],
+        "type": "object"
+      },
       "ResetPasswordRequest": {
         "properties": {
           "newPassword": {
@@ -1777,6 +1796,28 @@
         "required": [
           "newPassword",
           "token"
+        ],
+        "type": "object"
+      },
+      "SettingsOptions": {
+        "properties": {
+          "complete": {
+            "type": "boolean"
+          },
+          "values": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "warning": {
+            "description": "Safe explanation when discovery is unavailable or partial",
+            "type": "string"
+          }
+        },
+        "required": [
+          "complete",
+          "values"
         ],
         "type": "object"
       },
@@ -8344,6 +8385,139 @@
             "bearerAuth": []
           }
         ],
+        "tags": [
+          "repository-controller"
+        ]
+      }
+    },
+    "/api/v1/repositories/{repositoryId}/settings-options": {
+      "get": {
+        "description": "Manager-only, workspace-scoped GitHub branch, workflow and environment names. Each list reports completeness and a safe warning independently. Successful results are cached for five minutes; discovery never changes settings or queues a backfill.",
+        "operationId": "settingsOptions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "repositoryId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositorySettingsOptionsResponse"
+                }
+              }
+            },
+            "description": "Repository settings options returned (possibly partial)",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Validation failed or the request was malformed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Authentication or session validation failed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "CSRF, origin, membership, or role authorization failed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The scoped resource was not found",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses are not cached.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Discover repository settings options",
         "tags": [
           "repository-controller"
         ]

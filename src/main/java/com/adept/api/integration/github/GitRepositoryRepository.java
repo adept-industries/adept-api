@@ -7,9 +7,11 @@ import java.util.UUID;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 
 public interface GitRepositoryRepository
     extends JpaRepository<GitRepository, UUID> {
@@ -18,6 +20,11 @@ public interface GitRepositoryRepository
         UUID id,
         UUID workspaceId
     );
+
+    @Transactional(readOnly = true)
+    @EntityGraph(attributePaths = "githubIntegration")
+    @Query("select r from GitRepository r where r.id = :id and r.workspace.id = :workspaceId")
+    Optional<GitRepository> findForSettingsDiscovery(@Param("id") UUID id, @Param("workspaceId") UUID workspaceId);
 
     Page<GitRepository> findAllByWorkspaceIdAndTrackingEnabledTrue(
         UUID workspaceId,

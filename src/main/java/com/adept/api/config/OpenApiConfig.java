@@ -74,6 +74,8 @@ public class OpenApiConfig {
         "/api/v1/repositories/{repositoryId}/lead-assignments";
     private static final String REPOSITORY_BACKFILL =
         "/api/v1/repositories/{repositoryId}/backfill";
+    private static final String REPOSITORY_SETTINGS_OPTIONS =
+        "/api/v1/repositories/{repositoryId}/settings-options";
     private static final String ALERT_RULES = "/api/v1/alert-rules";
     private static final String ALERT_RULE = "/api/v1/alert-rules/{id}";
 
@@ -538,6 +540,22 @@ public class OpenApiConfig {
                 "PendingRepositoryLeadInvitationResponse",
                 SecurityProfile.BEARER_CSRF,
                 Set.of("400", "401", "403", "404", "409", "413", "415"),
+                CookieBehavior.NONE
+            );
+            configure(
+                openApi,
+                REPOSITORY_SETTINGS_OPTIONS,
+                PathItem.HttpMethod.GET,
+                "settingsOptions",
+                "Discover repository settings options",
+                "Manager-only, workspace-scoped GitHub branch, workflow and environment names. "
+                    + "Each list reports completeness and a safe warning independently. Successful results are cached "
+                    + "for five minutes; discovery never changes settings or queues a backfill.",
+                "200",
+                "Repository settings options returned (possibly partial)",
+                componentRef("RepositorySettingsOptionsResponse"),
+                SecurityProfile.BEARER,
+                Set.of("400", "401", "403", "404"),
                 CookieBehavior.NONE
             );
             configure(
