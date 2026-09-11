@@ -28,6 +28,8 @@ import com.adept.api.auth.AuthService;
 import com.adept.api.auth.PartCIntegrationTestSupport;
 import com.adept.api.auth.dto.SignupRequest;
 import com.adept.api.auth.dto.SignupResponse;
+import com.adept.api.integration.github.dto.RepositorySettingsOptionsResponse;
+import com.adept.api.integration.github.dto.RepositorySettingsOptionsResponse.SettingsOptions;
 import com.adept.api.common.domain.GithubAccountType;
 import com.adept.api.common.domain.MembershipRole;
 import com.adept.api.common.domain.RepositorySelection;
@@ -57,6 +59,9 @@ class GithubIntegrationIntegrationTest extends PartCIntegrationTestSupport {
 
     @MockitoBean
     private GithubAppTokenService githubAppTokenService;
+
+    @MockitoBean
+    private GithubRepositoryOptionsClient repositoryOptionsClient;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -174,6 +179,38 @@ class GithubIntegrationIntegrationTest extends PartCIntegrationTestSupport {
             .andReturn();
 
         UUID repoId = UUID.fromString(body(reposResult).path(0).path("id").asText());
+
+        // Discovery is read-only, manager-only and scoped to the current workspace.
+        var options = new SettingsOptions(List.of("main"), true, null);
+        when(repositoryOptionsClient.discover(anyLong(), anyString(), anyString()))
+            .thenReturn(new RepositorySettingsOptionsResponse(options, options, options));
+        Integer jobsBefore = jdbc.queryForObject("SELECT count(*) FROM processing_jobs", Integer.class);
+        String settingsOptionsUrl = "/api/v1/repositories/" + repoId + "/settings-options";
+        mockMvc.perform(get(settingsOptionsUrl).header("Authorization", "Bearer " + managerToken))
+            .andExpect(status().isOk())
+            .andExpect(header().string("Cache-Control", "no-store"))
+            .andExpect(jsonPath("$.branches.values[0]").value("main"))
+            .andExpect(jsonPath("$.branches.complete").value(true));
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM processing_jobs", Integer.class)).isEqualTo(jobsBefore);
+        mockMvc.perform(get(settingsOptionsUrl)).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/repositories/" + UUID.randomUUID() + "/settings-options")
+                .header("Authorization", "Bearer " + managerToken)).andExpect(status().isNotFound());
+
+        SignupResponse other = authService.signup(new SignupRequest(uniqueEmail("other-manager"), VALID_PASSWORD,
+            "Other Manager", "Other Workspace", "UTC"), requestContext());
+        jdbc.update("UPDATE users SET email_verified_at = now() WHERE id = ?", other.user().id());
+        UUID otherMembership = jdbc.queryForObject("SELECT id FROM memberships WHERE user_id = ?", UUID.class, other.user().id());
+        String otherToken = jwtService.issue(new AuthenticatedPrincipal(other.user().id(), otherMembership,
+            other.workspace().id(), MembershipRole.MANAGER, 0));
+        mockMvc.perform(get(settingsOptionsUrl).header("Authorization", "Bearer " + otherToken))
+            .andExpect(status().isNotFound());
+
+        jdbc.update("UPDATE memberships SET role = 'LEAD' WHERE id = ?", managerMembershipId);
+        String leadToken = jwtService.issue(new AuthenticatedPrincipal(signup.user().id(), managerMembershipId,
+            signup.workspace().id(), MembershipRole.LEAD, 0));
+        mockMvc.perform(get(settingsOptionsUrl).header("Authorization", "Bearer " + leadToken))
+            .andExpect(status().isForbidden());
+        jdbc.update("UPDATE memberships SET role = 'MANAGER' WHERE id = ?", managerMembershipId);
 
         // 5. Update Repository tracking and settings
         CsrfPair csrf2 = fetchCsrf(mockMvc);

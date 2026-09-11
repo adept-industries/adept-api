@@ -124,6 +124,8 @@ class OpenApiContractTest extends PartCIntegrationTestSupport {
         endpoint("/api/v1/repositories/{repositoryId}/backfill", "post", "requestBackfill", "202",
             security("bearerAuth", "csrfHeader"), null,
             "400", "401", "403", "404"),
+        endpoint("/api/v1/repositories/{repositoryId}/settings-options", "get", "settingsOptions", "200",
+            security("bearerAuth"), null, "400", "401", "403", "404"),
         endpoint("/api/v1/repositories/{repositoryId}/lead-assignments", "post", "createPendingRepositoryLeadInvitation", "200",
             security("bearerAuth", "csrfHeader"), "CreateRepositoryLeadInvitationRequest",
             "400", "401", "403", "404", "409", "413", "415"),
@@ -142,6 +144,7 @@ class OpenApiContractTest extends PartCIntegrationTestSupport {
     );
 
     private static final Map<String, String> SUCCESS_SCHEMAS = Map.ofEntries(
+        Map.entry("settingsOptions", "#/components/schemas/RepositorySettingsOptionsResponse"),
         Map.entry("signup", "#/components/schemas/SignupResponse"),
         Map.entry("login", "#/components/schemas/AuthSessionResponse"),
         Map.entry("reauthenticateWithPassword", "#/components/schemas/AuthSessionResponse"),
