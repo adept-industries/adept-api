@@ -1,4 +1,5 @@
-// PR 1: metrics only. No logs, remote configuration, or application secrets.
+// Adept production monitoring. Grafana credentials come only from
+// /opt/adept/.env.monitoring through the Alloy service env_file.
 prometheus.remote_write "grafana_cloud" {
 	external_labels = {environment = "production", instance = "adept-production"}
 
@@ -24,6 +25,28 @@ prometheus.remote_write "grafana_cloud" {
 		truncate_frequency = "15m"
 		min_keepalive_time = "5m"
 		max_keepalive_time = "1h"
+	}
+}
+
+// Log delivery has a small in-memory batch/retry budget. Docker's existing
+// 10 MiB x 5-file rotation is the on-host bound; Alloy persists read positions
+// in its storage volume so collector restarts resume from the last offset.
+loki.write "grafana_cloud" {
+	external_labels = {environment = "production"}
+	max_streams     = 16
+
+	endpoint {
+		url                 = sys.env("GRAFANA_CLOUD_LOGS_URL")
+		batch_size          = "512KiB"
+		batch_wait          = "2s"
+		min_backoff_period  = "500ms"
+		max_backoff_period  = "30s"
+		max_backoff_retries = 10
+
+		basic_auth {
+			username = sys.env("GRAFANA_CLOUD_LOGS_USER")
+			password = sys.env("GRAFANA_CLOUD_TOKEN")
+		}
 	}
 }
 
@@ -119,6 +142,171 @@ prometheus.relabel "api_metrics" {
 	}
 }
 
+// This is the worker process from adept-engine, not the Engine API. Port 8001
+// has no host mapping and is reachable only across the Compose bridge network.
+prometheus.scrape "engine_worker_metrics" {
+	sample_limit    = 5000
+	targets         = [{__address__ = "engine-worker:8001"}]
+	metrics_path    = "/metrics"
+	forward_to      = [prometheus.relabel.engine_worker_metrics.receiver]
+	scrape_interval = "60s"
+	scrape_timeout  = "15s"
+	job_name        = "adept-engine-worker"
+}
+
+prometheus.relabel "engine_worker_metrics" {
+	forward_to = [prometheus.remote_write.grafana_cloud.receiver]
+
+	rule {
+		source_labels = ["__name__"]
+		regex         = "up|scrape_.*|adept_engine_worker_.*"
+		action        = "keep"
+	}
+}
+
+// Collect only selected operational service logs. Discovery filters twice so
+// an unexpected container can never enter the export pipeline by name alone.
+discovery.docker "service_logs" {
+	host             = "unix:///var/run/docker.sock"
+	refresh_interval = "60s"
+
+	filter {
+		name   = "label"
+		values = ["com.docker.compose.project=adept-production"]
+	}
+
+	filter {
+		name   = "label"
+		values = [
+			"com.docker.compose.service=api",
+			"com.docker.compose.service=engine-api",
+			"com.docker.compose.service=engine-worker",
+			"com.docker.compose.service=caddy",
+		]
+	}
+}
+
+discovery.relabel "service_logs" {
+	targets = discovery.docker.service_logs.targets
+
+	rule {
+		source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+		regex         = "adept-production"
+		action        = "keep"
+	}
+
+	rule {
+		source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+		regex         = "api|engine-api|engine-worker|caddy"
+		action        = "keep"
+	}
+
+	rule {
+		source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+		target_label  = "service"
+	}
+}
+
+loki.source.docker "service_logs" {
+	host             = "unix:///var/run/docker.sock"
+	targets          = discovery.relabel.service_logs.output
+	labels           = {environment = "production"}
+	forward_to       = [loki.process.service_logs.receiver]
+	refresh_interval = "60s"
+}
+
+loki.process "service_logs" {
+	forward_to = [loki.write.grafana_cloud.receiver]
+
+	// LOG_PIPELINE_STAGES_BEGIN -- mirrored by the local redaction fixture.
+	// Raw request/webhook bodies are not operational logs. Drop any explicit
+	// body dump rather than trying to redact an arbitrary nested payload.
+	stage.drop {
+		expression          = "(?i)(\"payload\"[[:space:]]*:|payload=|raw[ _-]?webhook[ _-]?body|webhook[ _-]?body|request[ _-]?body)"
+		drop_counter_reason = "sensitive_body"
+	}
+
+	stage.drop {
+		expression          = "(?i)(\"headers\"[[:space:]]*:|headers=)"
+		drop_counter_reason = "sensitive_headers"
+	}
+
+	stage.drop {
+		longer_than         = "16KB"
+		drop_counter_reason = "oversized_line"
+	}
+
+	stage.replace {
+		expression = "(?i)(bearer\\s+[A-Za-z0-9._~+/=-]+|basic\\s+[A-Za-z0-9._~+/=-]+)"
+		replace    = "[REDACTED_AUTH]"
+	}
+
+	stage.replace {
+		expression = "(?i)(([a-z0-9_.-]*(authorization|cookie|password|passwd|secret|token|credential|private[_-]?key)[a-z0-9_.-]*|error|reason|to_address|recipient|email|subject|rule_name|worker_id|job_id|repository_id|workspace_id|integration_id|traceid|deliveryid|jobid|userid|integrationid|repositoryid|workspaceid|workerid)[\"']?\\s*[:=]\\s*(\"[^\"]*\"|'[^']*'|[^\\s,}]+))"
+		replace    = "[REDACTED_FIELD]"
+	}
+
+	stage.replace {
+		expression = "(?i)((error|reason)=.*)$"
+		replace    = "[REDACTED_ERROR]"
+	}
+
+	stage.replace {
+		expression = "((gh[pousr]_[A-Za-z0-9_]{16,}|glc_[A-Za-z0-9_=-]{16,}|xox[baprs]-[A-Za-z0-9-]{10,}))"
+		replace    = "[REDACTED_TOKEN]"
+	}
+
+	stage.replace {
+		expression = "([A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,})"
+		replace    = "[REDACTED_JWT]"
+	}
+
+	stage.replace {
+		expression = "([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,})"
+		replace    = "[REDACTED_EMAIL]"
+	}
+
+	stage.replace {
+		expression = "([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})"
+		replace    = "[REDACTED_ID]"
+	}
+
+	stage.replace {
+		expression = "((https?|postgres(ql)?|jdbc:postgresql)://[^\\s\"']+)"
+		replace    = "[REDACTED_URL]"
+	}
+
+	stage.replace {
+		expression = "([?&][A-Za-z0-9_.~-]+=[^\\s&\"']+)"
+		replace    = "[REDACTED_QUERY]"
+	}
+
+	stage.luhn {
+		replacement = "[REDACTED_NUMBER]"
+		delimiters  = "- "
+	}
+	// Cap message size and burst volume per bounded service label and
+	// ensure no discovery metadata or request-specific field becomes a stream.
+	stage.truncate {
+		rule {
+			limit  = "8KB"
+			suffix = "...[TRUNCATED]"
+		}
+	}
+
+	stage.label_keep {
+		values = ["environment", "service"]
+	}
+
+	stage.limit {
+		rate          = 20
+		burst         = 100
+		drop          = true
+		by_label_name = "service"
+	}
+	// LOG_PIPELINE_STAGES_END
+}
+
 // Collector failures must be visible too; readiness alone does not prove delivery.
 prometheus.exporter.self "alloy" { }
 
@@ -136,7 +324,7 @@ prometheus.relabel "alloy_metrics" {
 
 	rule {
 		source_labels = ["__name__"]
-		regex         = "up|scrape_.*|process_resident_memory_bytes|process_cpu_seconds_total|prometheus_remote_storage_.*|prometheus_wal_.*"
+		regex         = "up|scrape_.*|process_resident_memory_bytes|process_cpu_seconds_total|prometheus_remote_storage_.*|prometheus_wal_.*|loki_.*"
 		action        = "keep"
 	}
 }

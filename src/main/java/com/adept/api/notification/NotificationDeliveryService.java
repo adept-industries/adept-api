@@ -127,13 +127,13 @@ public class NotificationDeliveryService {
                 });
             });
 
+            // Do not send the destination, provider error text or exception stack to
+            // the operational log pipeline. Durable details remain on the delivery.
             log.error(
-                "alert_notification_delivery_failed deliveryId={} attempt={} status={} error={}",
-                delivery.getId(),
+                "alert_notification_delivery_failed attempt={} status={} failureType={}",
                 delivery.getAttempts(),
                 failureStatus,
-                errorMessage,
-                ex
+                ex.getClass().getSimpleName()
             );
         }
     }

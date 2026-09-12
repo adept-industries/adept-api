@@ -5,7 +5,10 @@ import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 
 import com.adept.api.alert.AlertRule;
 import com.adept.api.alert.AlertRuleRepository;
@@ -20,6 +23,7 @@ import com.adept.api.workspace.WorkspaceRepository;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+@ExtendWith(OutputCaptureExtension.class)
 class NotificationDeliveryServiceTest extends PartCIntegrationTestSupport {
 
     @Autowired
@@ -82,7 +86,7 @@ class NotificationDeliveryServiceTest extends PartCIntegrationTestSupport {
     }
 
     @Test
-    void marksFailedAndIncrementsAttemptsOnMailFailure() {
+    void marksFailedAndIncrementsAttemptsOnMailFailure(CapturedOutput output) {
         TestContext ctx = setupTestEntities("notify-fail-test");
 
         NotificationDelivery delivery = new NotificationDelivery();
@@ -91,10 +95,10 @@ class NotificationDeliveryServiceTest extends PartCIntegrationTestSupport {
         delivery.setAlertRule(ctx.alertRule());
         delivery.setEventKey("rule-fail:snapshot-2");
         delivery.setChannel(NotificationChannel.EMAIL);
-        delivery.setDestination("lead-fail@example.com");
+        delivery.setDestination("private-notification@example.test");
         delivery.setStatus(NotificationStatus.PENDING);
         delivery.setPayload(Map.of(
-            "subject", "[Adept Alert] Failing Alert",
+            "subject", "FAKE_NOTIFICATION_SUBJECT",
             "text", "Alert text"
         ));
         deliveryRepository.save(delivery);
@@ -108,6 +112,12 @@ class NotificationDeliveryServiceTest extends PartCIntegrationTestSupport {
         assertThat(failed.getStatus()).isEqualTo(NotificationStatus.FAILED);
         assertThat(failed.getAttempts()).isEqualTo(1);
         assertThat(failed.getLastError()).contains("simulated SMTP failure");
+        assertThat(output.getAll())
+            .contains("alert_notification_delivery_failed")
+            .contains("failureType=MailSendException")
+            .doesNotContain("private-notification@example.test")
+            .doesNotContain("FAKE_NOTIFICATION_SUBJECT")
+            .doesNotContain("simulated SMTP failure");
 
         // A failed delivery is not retried on every scheduler poll.
         assertThat(deliveryService.processBatch()).isZero();

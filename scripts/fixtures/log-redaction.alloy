@@ -1,0 +1,103 @@
+loki.echo "redaction_test" { }
+
+loki.source.file "redaction_test" {
+	targets = [{
+		__path__    = "/fixtures/log-redaction-input.txt",
+		service     = "api",
+		environment = "production",
+		request_id  = "FAKE_LABEL_VALUE",
+	}]
+	forward_to = [loki.process.service_logs.receiver]
+}
+
+loki.process "service_logs" {
+	forward_to = [loki.echo.redaction_test.receiver]
+
+	// LOG_PIPELINE_STAGES_BEGIN -- mirrored by the local redaction fixture.
+	// Raw request/webhook bodies are not operational logs. Drop any explicit
+	// body dump rather than trying to redact an arbitrary nested payload.
+	stage.drop {
+		expression          = "(?i)(\"payload\"[[:space:]]*:|payload=|raw[ _-]?webhook[ _-]?body|webhook[ _-]?body|request[ _-]?body)"
+		drop_counter_reason = "sensitive_body"
+	}
+
+	stage.drop {
+		expression          = "(?i)(\"headers\"[[:space:]]*:|headers=)"
+		drop_counter_reason = "sensitive_headers"
+	}
+
+	stage.drop {
+		longer_than         = "16KB"
+		drop_counter_reason = "oversized_line"
+	}
+
+	stage.replace {
+		expression = "(?i)(bearer\\s+[A-Za-z0-9._~+/=-]+|basic\\s+[A-Za-z0-9._~+/=-]+)"
+		replace    = "[REDACTED_AUTH]"
+	}
+
+	stage.replace {
+		expression = "(?i)(([a-z0-9_.-]*(authorization|cookie|password|passwd|secret|token|credential|private[_-]?key)[a-z0-9_.-]*|error|reason|to_address|recipient|email|subject|rule_name|worker_id|job_id|repository_id|workspace_id|integration_id|traceid|deliveryid|jobid|userid|integrationid|repositoryid|workspaceid|workerid)[\"']?\\s*[:=]\\s*(\"[^\"]*\"|'[^']*'|[^\\s,}]+))"
+		replace    = "[REDACTED_FIELD]"
+	}
+
+	stage.replace {
+		expression = "(?i)((error|reason)=.*)$"
+		replace    = "[REDACTED_ERROR]"
+	}
+
+	stage.replace {
+		expression = "((gh[pousr]_[A-Za-z0-9_]{16,}|glc_[A-Za-z0-9_=-]{16,}|xox[baprs]-[A-Za-z0-9-]{10,}))"
+		replace    = "[REDACTED_TOKEN]"
+	}
+
+	stage.replace {
+		expression = "([A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,})"
+		replace    = "[REDACTED_JWT]"
+	}
+
+	stage.replace {
+		expression = "([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,})"
+		replace    = "[REDACTED_EMAIL]"
+	}
+
+	stage.replace {
+		expression = "([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})"
+		replace    = "[REDACTED_ID]"
+	}
+
+	stage.replace {
+		expression = "((https?|postgres(ql)?|jdbc:postgresql)://[^\\s\"']+)"
+		replace    = "[REDACTED_URL]"
+	}
+
+	stage.replace {
+		expression = "([?&][A-Za-z0-9_.~-]+=[^\\s&\"']+)"
+		replace    = "[REDACTED_QUERY]"
+	}
+
+	stage.luhn {
+		replacement = "[REDACTED_NUMBER]"
+		delimiters  = "- "
+	}
+	// Cap message size and burst volume per bounded service label and
+	// ensure no discovery metadata or request-specific field becomes a stream.
+	stage.truncate {
+		rule {
+			limit  = "8KB"
+			suffix = "...[TRUNCATED]"
+		}
+	}
+
+	stage.label_keep {
+		values = ["environment", "service"]
+	}
+
+	stage.limit {
+		rate          = 20
+		burst         = 100
+		drop          = true
+		by_label_name = "service"
+	}
+	// LOG_PIPELINE_STAGES_END
+}

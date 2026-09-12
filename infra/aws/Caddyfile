@@ -5,12 +5,45 @@
 {$ADEPT_DOMAIN} {
 	encode zstd gzip
 
+	# Keep only operational access data. Request URLs, query strings, headers,
+	# hostnames and client addresses are removed before Docker captures the log.
+	log {
+		output stdout
+		format filter {
+			wrap json
+			fields {
+				request>headers delete
+				request>uri delete
+				request>host delete
+				request>remote_ip delete
+				request>remote_port delete
+				request>client_ip delete
+				request>tls delete
+				resp_headers delete
+				user_id delete
+			}
+		}
+		sampling {
+			interval 1s
+			first 20
+			thereafter 10
+		}
+	}
+
 	# Operational endpoints must never reach the API through Caddy's private IP.
 	handle /actuator* {
 		respond 404
 	}
 	handle /metrics* {
 		respond 404
+	}
+
+	# Public uptime contract. This exposes only the existing readiness result,
+	# never the Actuator namespace or component details.
+	handle /api/status {
+		header Cache-Control "no-store"
+		rewrite * /actuator/health/readiness
+		reverse_proxy api:8080
 	}
 
 	handle /api/* {
