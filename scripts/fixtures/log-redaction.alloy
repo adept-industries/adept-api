@@ -14,79 +14,59 @@ loki.process "service_logs" {
 	forward_to = [loki.echo.redaction_test.receiver]
 
 	// LOG_PIPELINE_STAGES_BEGIN -- mirrored by the local redaction fixture.
-	// Raw request/webhook bodies are not operational logs. Drop any explicit
-	// body dump rather than trying to redact an arbitrary nested payload.
-	stage.drop {
-		expression          = "(?i)(\"payload\"[[:space:]]*:|payload=|raw[ _-]?webhook[ _-]?body|webhook[ _-]?body|request[ _-]?body)"
-		drop_counter_reason = "sensitive_body"
-	}
-
-	stage.drop {
-		expression          = "(?i)(\"headers\"[[:space:]]*:|headers=)"
-		drop_counter_reason = "sensitive_headers"
-	}
-
+	// Fail closed: only reconstruct bounded operational summaries. Never forward
+	// original messages, unknown JSON fields, exception text or stack traces.
 	stage.drop {
 		longer_than         = "16KB"
 		drop_counter_reason = "oversized_line"
 	}
 
-	stage.replace {
-		expression = "(?i)(bearer\\s+[A-Za-z0-9._~+/=-]+|basic\\s+[A-Za-z0-9._~+/=-]+)"
-		replace    = "[REDACTED_AUTH]"
-	}
-
-	stage.replace {
-		expression = "(?i)(([a-z0-9_.-]*(authorization|cookie|password|passwd|secret|token|credential|private[_-]?key)[a-z0-9_.-]*|error|reason|to_address|recipient|email|subject|rule_name|worker_id|job_id|repository_id|workspace_id|integration_id|traceid|deliveryid|jobid|userid|integrationid|repositoryid|workspaceid|workerid)[\"']?\\s*[:=]\\s*(\"[^\"]*\"|'[^']*'|[^\\s,}]+))"
-		replace    = "[REDACTED_FIELD]"
-	}
-
-	stage.replace {
-		expression = "(?i)((error|reason)=.*)$"
-		replace    = "[REDACTED_ERROR]"
-	}
-
-	stage.replace {
-		expression = "((gh[pousr]_[A-Za-z0-9_]{16,}|glc_[A-Za-z0-9_=-]{16,}|xox[baprs]-[A-Za-z0-9-]{10,}))"
-		replace    = "[REDACTED_TOKEN]"
-	}
-
-	stage.replace {
-		expression = "([A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,})"
-		replace    = "[REDACTED_JWT]"
-	}
-
-	stage.replace {
-		expression = "([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,})"
-		replace    = "[REDACTED_EMAIL]"
-	}
-
-	stage.replace {
-		expression = "([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})"
-		replace    = "[REDACTED_ID]"
-	}
-
-	stage.replace {
-		expression = "((https?|postgres(ql)?|jdbc:postgresql)://[^\\s\"']+)"
-		replace    = "[REDACTED_URL]"
-	}
-
-	stage.replace {
-		expression = "([?&][A-Za-z0-9_.~-]+=[^\\s&\"']+)"
-		replace    = "[REDACTED_QUERY]"
-	}
-
-	stage.luhn {
-		replacement = "[REDACTED_NUMBER]"
-		delimiters  = "- "
-	}
-	// Cap message size and burst volume per bounded service label and
-	// ensure no discovery metadata or request-specific field becomes a stream.
-	stage.truncate {
-		rule {
-			limit  = "8KB"
-			suffix = "...[TRUNCATED]"
+	stage.json {
+		expressions = {
+			event     = "event",
+			log_level = "level",
+			status    = "to_string(status)",
 		}
+	}
+
+	stage.regex {
+		source     = "event"
+		expression = "^(?P<safe_event>engine_worker_(pool_starting|starting|poll_failed|lease_failed|job_dispatch_failed|job_deferral_failed|metrics_update_failed|monitoring_start_failed|monitoring_stop_failed|monitoring_shutdown_timed_out|queue_metrics_collection_failed|queue_metrics_update_failed)|job_(execution_failed|permanent_failure|lease_connection_lost)|provider_job_execution_failed|unsupported_job_type_marked_dead|pr_risk_model_startup_failed|engine_readiness_failed)$"
+	}
+
+	stage.regex {
+		source     = "log_level"
+		expression = "^(?P<safe_level>error|warning|warn|ERROR|WARN)$"
+	}
+
+	// Spring Boot/Uvicorn plaintext: preserve only the severity, not the message.
+	stage.regex {
+		expression = "(^|[[:space:]])(?P<plain_level>WARN|ERROR)([[:space:]:]|$)"
+	}
+
+	stage.regex {
+		source     = "status"
+		expression = "^(?P<http_status>[45][0-9]{2})$"
+	}
+
+	// Initialize output first so a parsing/template failure cannot export raw text.
+	stage.template {
+		source   = "safe_line"
+		template = "DROP_UNSELECTED"
+	}
+
+	stage.template {
+		source   = "safe_line"
+		template = "{{ if or .safe_event .safe_level .plain_level .http_status }}level={{ if or (eq .safe_level \"error\") (eq .safe_level \"ERROR\") (eq .plain_level \"ERROR\") }}error{{ else if or .safe_level .plain_level .http_status }}warning{{ else }}info{{ end }} event={{ if .safe_event }}{{ .safe_event }}{{ else if .http_status }}http_request_failed status={{ .http_status }}{{ else }}application_warning_or_error{{ end }}{{ else }}DROP_UNSELECTED{{ end }}"
+	}
+
+	stage.output {
+		source = "safe_line"
+	}
+
+	stage.drop {
+		expression          = "^DROP_UNSELECTED$"
+		drop_counter_reason = "not_selected_operational_event"
 	}
 
 	stage.label_keep {

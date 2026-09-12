@@ -7,6 +7,5 @@ environment                  = "production"
 website_probe_job            = "adept-website"
 api_probe_job                = "adept-api-readiness"
 alerts_paused                = true
-manage_notification_policy   = false
 notification_test_enabled    = false
 notification_test_firing     = false

@@ -86,3 +86,17 @@ jobs:
 
       - name: Build API image
         run: docker build --tag adept-api:ci .
+
+      - name: Set up Terraform for offline monitoring plans
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.16.1"
+
+      - name: Verify monitoring alert queries and mocked Grafana provisioning
+        timeout-minutes: 5
+        run: |
+          bash scripts/verify-monitoring-alerts.sh
+          terraform -chdir=infra/aws/grafana/terraform fmt -check -recursive
+          terraform -chdir=infra/aws/grafana/terraform init -backend=false -input=false
+          terraform -chdir=infra/aws/grafana/terraform validate
+          terraform -chdir=infra/aws/grafana/terraform test

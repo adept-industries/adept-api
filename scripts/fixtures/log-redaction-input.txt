@@ -1,8 +1,19 @@
-safe_event=engine_worker_pool_starting count=2
-Spring warning authorization=Bearer FAKE_BEARER_VALUE password=FAKE_PASSWORD_VALUE recipient=private.person@example.test
+{"event":"engine_worker_pool_starting","level":"info","consumer_count":2}
+Spring WARN authorization=Bearer FAKE_BEARER_VALUE password=FAKE_PASSWORD_VALUE recipient=private.person@example.test
 {"event":"notification_failed","level":"error","error":"FAKE_ENGINE_ERROR","to_address":"private.person@example.test","subject":"FAKE_SUBJECT","rule_name":"FAKE_RULE","nextPageToken":"FAKE_CURSOR","worker_id":"worker:FAKE_BOOT_ID:1"}
 request failed url=https://private.example.test/path?token=FAKE_QUERY_VALUE cookie=FAKE_COOKIE_VALUE
 encoded token ghp_FAKE_GITHUB_TOKEN_1234567890 and jwt abcdefghij.klmnopqrst.uvwxyzABCD
 job_id=123e4567-e89b-12d3-a456-426614174000 safe_status=failed
 {"event":"webhook_debug","payload":"FAKE_RAW_BODY"}
 {"event":"request_debug","headers":{"Authorization":"FAKE_RAW_HEADER"}}
+{"level":"error","event":"engine_worker_poll_failed","error":"provider said \"FAKE_ESCAPED_SECRET\" and more","unknown":{"data":"FAKE_UNKNOWN_FIELD"}}
+2026-09-12T10:00:00Z ERROR application --- request failed: arbitrary FAKE_FREE_TEXT_SECRET
+    at example.Exception(FAKE_STACK_SECRET)
+{"level":"error","msg":"FAKE_CADDY_ERROR","request":{"uri":"/private/FAKE_PATH_SECRET","headers":{"Cookie":["FAKE_NESTED_SECRET"]}},"status":502}
+{"level":"info","logger":"http.log.access","status":200,"msg":"FAKE_SUCCESS_REQUEST"}
+{"event":"FAKE_DYNAMIC_EVENT","level":"error","payload":{"data":"FAKE_RAW_BODY"}}
+{"level":{"value":"FAKE_MALFORMED_LEVEL"},"event":{"value":"FAKE_MALFORMED_EVENT"}}
+{"level":"error","event":"engine_worker_pool_starting_FAKE_SUFFIX","error":"FAKE_EVENT_SUFFIX"}
+Spring WARN error=FAKE_MULTILINE_SECRET
+FAKE_MULTILINE_CONTINUATION
+{"level":"error","event":"engine_readiness_failed","message":"FAKE_LAST_MARKER"}

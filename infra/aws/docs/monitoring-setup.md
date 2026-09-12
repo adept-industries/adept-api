@@ -1,123 +1,146 @@
-# Adept Production Monitoring Runbook — Setup, Operation, and Rollback
+# Adept monitoring: owner rollout and rollback
 
-This runbook covers the end-to-end rollout of Adept's Prometheus, Grafana Alloy, and Grafana Cloud monitoring stack across the single-VM AWS Lightsail environment.
+Only the production owner performs this rollout. The teammate delivers code and
+local tests; no production access is needed to finish the PR.
 
-**Production Owner Notice:**
-Only the production owner has AWS SSH and Grafana Cloud administrative access. The teammate prepares code, configurations, templates, and automated tests. The owner reviews the files, provisions Grafana Cloud credentials, creates `/opt/adept/.env.monitoring`, and applies the changes on AWS.
+**Do not change .env.production.** Create /opt/adept/.env.monitoring separately.
+Merging this PR deploys application images, but does not install Compose, Caddy
+or Alloy configuration. Creating the monitoring env file alone is not enough.
 
-Merging pull requests deploys application container images via CI workflows, but does **not** automatically upload or apply Docker Compose, Caddy, or Alloy configuration files to the AWS host.
+## 1. What runs where
 
----
+- Existing VM: Grafana Alloy collects metrics and selected operational logs.
+- Grafana Cloud: Prometheus-compatible storage, Loki logs, dashboards and alerts.
+- External Grafana Synthetic Monitoring: website and API availability checks.
+- No separate Prometheus, Grafana or Loki server is installed on the VM.
+- One worker container still has two processing threads (one is also supported).
+- Only Caddy publishes ports 80 and 443; port 8001 is private.
 
-## 1. Architecture and Component Overview
+| Metric job | Source | Interval |
+|---|---|---|
+| node-exporter | Host CPU, RAM, swap and root filesystem | 60 seconds |
+| cadvisor | Selected Compose container resources, last-seen and start time | 60 seconds |
+| adept-api | http://api:8080/actuator/prometheus | 60 seconds |
+| adept-engine-worker | http://engine-worker:8001/metrics | 60 seconds |
+| alloy | Collector process and delivery metrics | 60 seconds |
 
-```text
-+-------------------------------------------------------------------------------+
-| AWS Lightsail VM (4 GB RAM, Ubuntu Linux)                                     |
-|                                                                               |
-|  +------------+       +------------+       +---------------+                  |
-|  |   Caddy    |  -->  |    API     |  -->  | Engine Worker |                  |
-|  |  (:80/:443)|       |  (:8080)   |       |  (:8001 /m)   |                  |
-|  +------------+       +------------+       +---------------+                  |
-|        |                     |                     |                          |
-|  (Docker Logs)         (/actuator/prometheus)   (/metrics)                    |
-|        \                     |                     /                          |
-|         +--------------------+--------------------+                           |
-|                              v                                                |
-|                   +---------------------+                                     |
-|                   |    Grafana Alloy    | (Resource bounded: 384m RAM, 0.5 CPU|
-|                   | (Host Agent/Scraper)|  Log redaction & WAL buffering)     |
-|                   +---------------------+                                     |
-+------------------------------|------------------------------------------------+
-                               | HTTPS Remote-Write (Metrics & Loki Logs)
-                               v
-+-------------------------------------------------------------------------------+
-| Grafana Cloud (Hosted Observability)                                          |
-|                                                                               |
-|  - Hosted Prometheus (Metrics storage & PromQL engine)                        |
-|  - Hosted Loki (Sanitized container & operational logs)                       |
-|  - Dashboards (Infrastructure, Application, Worker & Queue)                   |
-|  - Unified Alerting (Operational alert rules & email notifications)           |
-|  - Synthetic Monitoring (External website & API uptime probes)                |
-+-------------------------------------------------------------------------------+
-```
+Worker reachability is not job-processing health. Watch configured/live threads,
+successful polls, active-job duration, queue snapshot freshness and outcomes.
+Container last-seen/start-time metrics are proxies, not Docker health-check
+results or exact restart counts. Fast restarts between scrapes can be missed.
 
-### Metrics & Scrapes Contract
-| Target | Endpoint / Exporter | Private Port | Scrape Interval | Key Metrics |
-|---|---|---|---|---|
-| **Linux Host** | unix collector (node exporter) | Internal | 60s | CPU, RAM (`node_memory_*`), swap, root disk (`node_filesystem_*`), load |
-| **Containers** | cadvisor collector | Internal | 60s | Container CPU, memory working set, network, disk I/O |
-| **API** | `/actuator/prometheus` | `api:8080` (private) | 60s | Request rate/latency/5xx (`http_server_requests_seconds_*`), JVM heap, HikariCP pool |
-| **Engine Worker** | `/metrics` | `engine-worker:8001` (private) | 60s | Configured threads, live threads (`adept_engine_worker_thread_alive`), poll timestamps, queue size/oldest ready age, dead-letter jobs, completed/failed job throughput |
-| **Alloy Collector** | Internal listener | `127.0.0.1:12345` | 60s | Collector process memory/CPU, remote-write queue, drop counters |
+### Privacy and resource boundaries
 
-### Security & Privacy Protections
-1. **Network Isolation**: Only Caddy binds to public host ports (80/443). The API Actuator endpoint (`/actuator/prometheus`) and Engine Worker metrics endpoint (`:8001/metrics`) are accessible only over the private Docker network (`adept_network`).
-2. **Log Redaction**: Alloy pipelines filter and scrub authorization headers (`Bearer ...`), API tokens, passwords, cookies, credit card patterns, and personal emails before shipping logs to Grafana Cloud Loki. Raw webhook bodies and customer payload data are excluded.
-3. **Secret Segregation**: Real monitoring credentials reside exclusively in `/opt/adept/.env.monitoring` (mode `600`) and are passed only to the Alloy container. The application `.env.production` is never mounted or exposed to Alloy.
+Alloy exports only reconstructed operational summaries: known worker event names,
+warning/error severity and HTTP 4xx/5xx status. Unknown messages, stack traces,
+request bodies, URLs, headers, customer IDs and arbitrary exception fields are
+never forwarded. Unselected lines are dropped; this deliberately loses detailed
+diagnostics. Consult local application logs with owner access when needed.
+Only environment and service are Loki labels. Normal access requests and
+per-job success messages are not shipped.
 
----
+Caddy removes request URI, client addresses, headers and user data from its
+access logs before Docker captures them. Other local application logs may still
+contain sensitive details; do not paste raw logs into tickets or chat.
 
-## 2. Requirements & Prerequisites
+Only Alloy receives the Grafana credentials through its service env_file.
+However, the read-only host-root and Docker-socket mounts are privileged access:
+Alloy can read host files (including secrets) and the socket is root-equivalent.
+A :ro socket mount does not make Docker API operations read-only. This is a
+trusted, digest-pinned collector, not a security sandbox. Its UI is loopback-only.
 
-- **Host**: Linux host with Docker Engine and Docker Compose **2.24.0 or newer** (`env_file.required` support).
-- **Host Paths**: Docker socket `/var/run/docker.sock`, `/var/lib/docker`, `/sys`, and containerd socket `/run/containerd/containerd.sock` (or `/var/run/docker/containerd/containerd.sock`).
-- **Grafana Cloud Account**:
-  - Prometheus remote-write endpoint URL & instance username (numeric ID).
-  - Loki remote-write endpoint URL & instance username (numeric ID).
-  - Stack-scoped Access Policy Token with permissions `metrics:write` and `logs:write`.
-  - Service Account Token with Alerting/Dashboard provisioning permissions (if applying via Terraform).
+Alloy is capped at 384 MiB RAM, no extra swap, 0.5 CPU and 128 processes.
+Loki uses bounded batches/retries, at most 16 streams and a 20-lines/second
+per-service limit (burst 100). Docker rotates logs at 10 MiB × 5 files.
+The alloy_data volume preserves metrics WAL and Docker log positions across
+restarts. WAL retention is approximately one hour plus segment/truncation
+overhead, **not a hard disk-size limit**. Prolonged outages, rate limits or disk
+pressure can lose telemetry. Watch volume growth and Grafana ingestion usage.
 
----
+## 2. Prerequisites and local verification
 
-## 3. Staging and File Installation on AWS
+- PR2's worker metrics image is deployed before worker scraping is enabled.
+- Docker Compose 2.24+ supports optional env_file entries.
+- Linux host paths: /proc, /sys, /var/lib/docker and /var/run/docker.sock.
+- Check the host containerd socket. The committed Alloy path assumes
+  /var/run/docker/containerd/containerd.sock; if the host uses
+  /run/containerd/containerd.sock, change only the staged containerd_host value
+  to /rootfs/run/containerd/containerd.sock before validation.
+- Approve a Grafana Cloud stack and its plan first. Check metrics, logs and
+  Synthetic Monitoring allowances; do not enable paid upgrades without approval.
+- Stack supports Grafana's direct per-rule contact-point routing (10.4+).
+- Terraform 1.7+ for mocked tests; CI uses 1.16.1 and the committed provider lock.
 
-### File Mapping
-| Repository Source | Target Path on VM | Permissions | Description |
-|---|---|---|---|
-| `infra/aws/compose.yaml` | `/opt/adept/compose.yaml` | `644` | Docker Compose stack with monitoring profile & worker port 8001 |
-| `infra/aws/Caddyfile` | `/opt/adept/Caddyfile` | `644` | Caddy reverse proxy with blocked public actuator/metrics paths |
-| `infra/aws/alloy/config.alloy` | `/opt/adept/alloy/config.alloy` | `644` | Alloy scrapers, log collectors, redaction pipelines, remote writes |
-| `infra/aws/alloy/start.sh` | `/opt/adept/alloy/start.sh` | `755` | Alloy entrypoint script with token validation |
-| `infra/aws/alloy/healthcheck.sh` | `/opt/adept/alloy/healthcheck.sh` | `755` | Alloy container health check script |
-| `infra/aws/.env.monitoring.example` | `/opt/adept/.env.monitoring` | `600` | Owner-populated monitoring secrets file |
-
-### Step 1: Stage Reviewed Files to VM
-From your local `adept-api` repository checkout:
+Run locally from adept-api (Docker and jq required):
 
 ```bash
-# Upload files to staging directory on VM
-ssh -i ~/.ssh/adept-staging ubuntu@3.111.250.16 "mkdir -p /tmp/adept-monitoring-rollout/alloy"
+bash scripts/verify-production-stack.sh
+bash scripts/verify-monitoring-stack.sh
+bash scripts/verify-monitoring-alerts.sh
+./mvnw -B clean verify
+terraform -chdir=infra/aws/grafana/terraform init -backend=false -input=false
+terraform -chdir=infra/aws/grafana/terraform validate
+terraform -chdir=infra/aws/grafana/terraform test
+```
+
+These checks use dummy credentials/disposable containers and a mocked Grafana
+provider. They test real Alloy discovery/sanitization, Caddy routing, PromQL
+healthy/pending/firing/recovery behavior and provisioning structure. They do
+**not** prove Grafana Cloud ingestion, real email delivery or production health.
+The owner must verify those below.
+
+## 3. Install reviewed files on AWS
+
+Use a reviewed checkout; coordinate with teammates so no deployments run while
+replacing configuration. Do not upload the application .env.production example.
+
+| Repository file | VM destination |
+|---|---|
+| infra/aws/compose.yaml | /opt/adept/compose.yaml |
+| infra/aws/Caddyfile | /opt/adept/Caddyfile |
+| infra/aws/alloy/config.alloy | /opt/adept/alloy/config.alloy |
+| infra/aws/alloy/start.sh | /opt/adept/alloy/start.sh |
+| infra/aws/alloy/healthcheck.sh | /opt/adept/alloy/healthcheck.sh |
+| infra/aws/.env.monitoring.example | Stage as a template; never overwrite an existing real file |
+
+From the owner's local checkout:
+
+```bash
+ssh -i ~/.ssh/adept-staging ubuntu@3.111.250.16 "install -d -m 700 /tmp/adept-monitoring-rollout /tmp/adept-monitoring-rollout/alloy"
 scp -i ~/.ssh/adept-staging infra/aws/compose.yaml infra/aws/Caddyfile infra/aws/.env.monitoring.example ubuntu@3.111.250.16:/tmp/adept-monitoring-rollout/
 scp -i ~/.ssh/adept-staging infra/aws/alloy/config.alloy infra/aws/alloy/start.sh infra/aws/alloy/healthcheck.sh ubuntu@3.111.250.16:/tmp/adept-monitoring-rollout/alloy/
-```
-
-### Step 2: SSH into VM and Create Backup
-Connect via SSH:
-```bash
 ssh -i ~/.ssh/adept-staging ubuntu@3.111.250.16
 ```
 
-Create a timestamped rollback backup of existing configuration files:
+On the VM, back up configuration and record the printed backup directory:
+
 ```bash
-monitoring_backup_dir=$(sudo mktemp -d /opt/adept/monitoring-backup.$(date +%Y%m%d_%H%M%S).XXXXXX)
+monitoring_backup_dir=$(sudo mktemp -d /opt/adept/monitoring-backup.XXXXXX)
 sudo cp -a /opt/adept/compose.yaml /opt/adept/Caddyfile "$monitoring_backup_dir/"
-if [ -d /opt/adept/alloy ]; then sudo cp -a /opt/adept/alloy "$monitoring_backup_dir/"; fi
-printf "Backup saved to: %s\n" "$monitoring_backup_dir"
+if sudo test -d /opt/adept/alloy; then sudo cp -a /opt/adept/alloy "$monitoring_backup_dir/"; fi
+if sudo test -f /opt/adept/.env.monitoring; then sudo cp -a /opt/adept/.env.monitoring "$monitoring_backup_dir/"; fi
+printf 'Backup: %s\n' "$monitoring_backup_dir"
+sudo diff -u /opt/adept/compose.yaml /tmp/adept-monitoring-rollout/compose.yaml || true
+sudo diff -u /opt/adept/Caddyfile /tmp/adept-monitoring-rollout/Caddyfile || true
 ```
 
-### Step 3: Install Staged Files
+Review differences before continuing. Preserve any intentional VM-only settings,
+existing image-variable names and all application volume names. Do not print
+expanded Compose configuration or diff secret env files.
+
+Install the reviewed files:
+
 ```bash
 sudo install -d -m 755 /opt/adept/alloy
 sudo install -m 644 /tmp/adept-monitoring-rollout/compose.yaml /opt/adept/compose.yaml
-sudo cp /tmp/adept-monitoring-rollout/Caddyfile /opt/adept/Caddyfile
+sudo install -m 644 /tmp/adept-monitoring-rollout/Caddyfile /opt/adept/Caddyfile
 sudo install -m 644 /tmp/adept-monitoring-rollout/alloy/config.alloy /opt/adept/alloy/config.alloy
 sudo install -m 755 /tmp/adept-monitoring-rollout/alloy/start.sh /opt/adept/alloy/start.sh
 sudo install -m 755 /tmp/adept-monitoring-rollout/alloy/healthcheck.sh /opt/adept/alloy/healthcheck.sh
 ```
 
-### Step 4: Configure `/opt/adept/.env.monitoring`
-If the file does not already exist:
+Create the separate credentials file only if absent:
+
 ```bash
 if ! sudo test -e /opt/adept/.env.monitoring; then
   sudo install -m 600 /tmp/adept-monitoring-rollout/.env.monitoring.example /opt/adept/.env.monitoring
@@ -126,207 +149,213 @@ sudo nano /opt/adept/.env.monitoring
 sudo chmod 600 /opt/adept/.env.monitoring
 ```
 
-Populate the five variables from your Grafana Cloud stack details:
-```env
-GRAFANA_CLOUD_METRICS_URL=https://prometheus-prod-XX-prod-us-east-0.grafana.net/api/prom/push
-GRAFANA_CLOUD_METRICS_USER=123456
-GRAFANA_CLOUD_LOGS_URL=https://logs-prod-XXX.grafana.net/loki/api/v1/push
-GRAFANA_CLOUD_LOGS_USER=654321
-GRAFANA_CLOUD_TOKEN=glc_eyJ...
-```
-*(Never commit or print real tokens.)*
+Fill all five values from the same approved Grafana Cloud stack:
 
----
+- GRAFANA_CLOUD_METRICS_URL: Prometheus remote-write HTTPS endpoint.
+- GRAFANA_CLOUD_METRICS_USER: Prometheus instance ID, not a login email.
+- GRAFANA_CLOUD_LOGS_URL: Loki push HTTPS endpoint.
+- GRAFANA_CLOUD_LOGS_USER: Loki instance ID.
+- GRAFANA_CLOUD_TOKEN: stack-scoped Access Policy token with only metrics:write
+  and logs:write. This is not the Terraform service-account token.
 
-## 4. Configuration Validation and Service Activation
+No new values are required in .env.production: worker threads default to 2 and
+queue metrics refresh defaults to 60 seconds. Never copy GitHub secrets over
+the VM's existing application secrets.
 
-Define the Compose helper in your SSH session:
+## 4. Validate and activate
+
+Define this helper in the SSH shell:
+
 ```bash
 dc() {
   sudo docker compose --env-file /opt/adept/.env.production -f /opt/adept/compose.yaml "$@"
 }
-```
-
-### Step 1: Non-Destructive Validation
-```bash
-# 1. Validate Compose syntax quietly (prevents printing interpolated secrets)
 dc --profile monitoring config --quiet
-
-# 2. Validate Caddyfile syntax inside the running Caddy container
-dc exec -T caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
-
-# 3. Validate Alloy River syntax using an isolated one-off run
+dc run --rm --no-deps caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 dc --profile monitoring run --rm --no-deps alloy validate /etc/alloy/config.alloy
 ```
 
-### Step 2: Apply Changes and Start Services
-```bash
-# Reload Caddy config (seamless reload, preserves container and active TLS sessions)
-dc exec -T caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile
+One-off validation containers mount the newly installed files; do not validate
+only through an old running bind mount. If validation fails, restore the saved
+configuration before continuing. A failed Alloy startup must not stop the app.
 
-# Recreate Engine Worker container to expose private port 8001
+Apply during a short maintenance window:
+
+```bash
+dc up -d --no-deps --force-recreate caddy
 dc up -d --no-deps --force-recreate engine-worker
-
-# Recreate and start Grafana Alloy collector
 dc --profile monitoring up -d --no-deps --force-recreate alloy
-```
-
-### Step 3: Check Local Health & Scrape Endpoints
-```bash
-# Verify all containers are running
 dc --profile monitoring ps
-
-# Run Alloy internal health check
 dc exec -T alloy /bin/bash /etc/alloy/healthcheck.sh
-
-# Verify private API Prometheus scrape from Caddy
 dc exec -T caddy curl -fsS -o /dev/null http://api:8080/actuator/prometheus
-
-# Verify private Engine Worker metrics scrape from Caddy/Alloy
 dc exec -T caddy curl -fsS -o /dev/null http://engine-worker:8001/metrics
 ```
 
----
+Recreating Caddy ensures replaced file bind mounts use the reviewed configuration;
+expect a brief public interruption. TLS data persists. The worker drains active
+jobs within its existing 120-second grace period; stale-lease recovery remains
+unchanged. Do not recreate PostgreSQL, API or frontend for this installation.
 
-## 5. Grafana Cloud Provisioning (Dashboards, Alerts & Synthetics)
+Alloy /-/ready proves collector startup only. Verify that fresh metrics and
+sanitized log entries actually arrive in Cloud after several scrape intervals.
 
-### Option A: Automated Provisioning via Terraform (Recommended)
-From your local machine in `infra/aws/grafana/terraform/`:
+## 5. Configure Cloud dashboards, probes and notifications
 
-1. Create `terraform.tfvars` from `terraform.tfvars.example`:
-   ```bash
-   cp terraform.tfvars.example terraform.tfvars
-   ```
-2. Configure `terraform.tfvars`:
-   ```hcl
-   grafana_url               = "https://your-stack.grafana.net"
-   prometheus_datasource_uid = "your-prometheus-datasource-uid"
-   notification_emails       = ["owner@example.com"]
-   environment               = "production"
-   alerts_paused             = false
-   manage_notification_policy = false # set true if managing root notification policy
-   ```
-3. Set your service account token in environment:
-   ```bash
-   export TF_VAR_grafana_auth="glsa_..."
-   ```
-4. Initialize and apply:
-   ```bash
-   terraform init
-   terraform plan
-   terraform apply
-   ```
+Creating .env.monitoring does not provision Cloud dashboards/alerts. Run these
+steps locally as owner, not on AWS. They do not use Adept SMTP or its alert queue.
 
-#### Controlled Notification Delivery Test
-To test alert email delivery and recovery without touching production:
+In infra/aws/grafana/terraform, copy terraform.tfvars.example to the ignored
+terraform.tfvars. Set the Grafana stack URL, Prometheus datasource UID,
+notification email addresses and environment. Keep alerts_paused = true.
+
+Supply a separate stack-scoped service-account token with dashboard/alert
+provisioning permissions. In a Bash shell, avoid putting it in shell history:
+
+```bash
+read -rsp "Grafana service-account token: " TF_VAR_grafana_auth; printf '\n'
+export TF_VAR_grafana_auth
+terraform init
+terraform plan
+terraform apply
+```
+
+Review the plan: only the Adept folder, three dashboards, message template,
+contact point and rule group should be managed. Direct per-rule routing sends
+Adept alerts to "Adept owner email" without replacing any global notification
+policy tree. Recovery emails are enabled. Notifications wait one minute,
+group by folder/rule/environment/service/severity, update every ten minutes and
+repeat every four hours.
+
+Terraform state/plan files may contain personal data or sensitive settings;
+keep them private and backed up outside Git. Never commit credentials or state.
+Dashboards have Prometheus/Loki datasource dropdowns: select the corresponding
+stack sources and production environment. Manual dashboard JSON import is also
+possible, but **does not install alert rules or contact points**; use Terraform
+for those or manually reproduce and preview every definition.
+
+### External availability checks (both setup methods need this)
+
+In Grafana Synthetic Monitoring, create HTTP checks using approved public probes
+outside the VM. Review estimated usage before enabling them.
+
+| Check name / exported job | URL | Required assertions |
+|---|---|---|
+| adept-website | https://adeptindustries.dev/ | HTTP 200 and body contains "Adept" |
+| adept-api-readiness | https://adeptindustries.dev/api/status | HTTP 200 and JSON status exactly UP |
+
+Use a 60-second interval if it fits the approved allowance. Add environment =
+production to both checks. The check name supplies the job label; confirm actual
+labels in Explore rather than adding a conflicting reserved job label.
+For an HTTP body regex, use `"status"\s*:\s*"UP"` and require JSON content type.
+Do not use /api/v1/health, an arbitrary health URL or HTTP 200 alone: the public
+contract added by this PR is exactly /api/status, backed by Spring readiness
+(including DB availability). /actuator* and /metrics* remain blocked.
+
+Preview probe_success for both named jobs before enabling operational alerts.
+A website HTML check verifies serving the page, not successful JavaScript
+execution or sign-in. A browser journey can be added later if needed.
+
+### Test firing and recovery without stopping production
+
+Keep operational alerts paused while testing:
+
 ```bash
 terraform apply -var="notification_test_enabled=true" -var="notification_test_firing=true"
-# Check email for firing notification
+# Wait for the firing email and inspect Grafana notification history.
 terraform apply -var="notification_test_enabled=true" -var="notification_test_firing=false"
-# Check email for recovery notification
+# Wait for the recovery email (up to the ten-minute group interval).
 terraform apply -var="notification_test_enabled=false"
 ```
 
-### Option B: Manual UI Import
+Only after queries, probes and notifications work, set alerts_paused = false,
+review the plan and apply again. Then unset TF_VAR_grafana_auth.
 
-#### 1. Import Dashboards
-Navigate to **Dashboards** -> **New** -> **Import** in Grafana Cloud:
-- Upload `infra/aws/grafana/dashboards/infrastructure.json`
-- Upload `infra/aws/grafana/dashboards/application.json`
-- Upload `infra/aws/grafana/dashboards/worker.json`
-- Set folder to **Adept** and choose the Prometheus data source.
+## 6. What the alerts mean
 
-#### 2. Configure Contact Point & Template
-In **Alerting** -> **Contact points**:
-- Create Contact Point: `Adept owner email` with recipient email.
-- Set Message Template with title `[{{ .Status }}] Adept: {{ len .Alerts.Firing }} firing, {{ len .Alerts.Resolved }} recovered` and details.
+Exact definitions live in infra/aws/grafana/alert-definitions.json and are shared
+by Terraform and local Prometheus tests. Every healthy query returns 0; an
+unhealthy one returns 1. Missing required series explicitly produces 1 where
+possible; unexpected No Data and query errors are Alerting, never normal
+recovery. A stopped collector may take the datasource lookback (usually five
+minutes) plus the rule's pending period to alert. Alerting lives outside the VM.
 
-#### 3. Setup External Synthetic Monitoring (Uptime Checks)
-In **Testing & Synthetics** -> **Synthetics**:
-1. **Public Website Check**:
-   - URL: `https://adeptindustries.dev/`
-   - Method: `GET`
-   - Frequency: `1m`
-   - Label: `job = "adept-website"`, `environment = "production"`
-   - Assertions: Status code `200` AND Body contains `"Adept"` (verifies frontend is properly served, not a generic 502/503 page).
-2. **API Readiness Check**:
-   - URL: `https://adeptindustries.dev/api/v1/health` (or health endpoint)
-   - Method: `GET`
-   - Frequency: `1m`
-   - Label: `job = "adept-api-readiness"`, `environment = "production"`
-   - Assertions: Status code `200` AND JSON body contains `"status":"UP"` or `"ok":true` (distinguishes API health from frontend SPA fallback).
+| Condition | Initial threshold and pending period |
+|---|---|
+| Website/API probes | Failing or absent for 3 minutes |
+| Collector, API, worker, host, container scrapes | Failed/absent for 5 minutes |
+| Worker threads | Missing/dead slots or missing thread telemetry for 5 minutes |
+| Idle polling | Poll age >5 minutes while idle, sustained another 5 minutes |
+| Long job | Active duration >30 minutes, sustained 5 minutes |
+| Queue snapshot | Collection failed or last success >3 minutes old, sustained 5 minutes |
+| Queue delay/backlog | Oldest ready wait >10 minutes or >100 ready jobs, sustained 10 minutes |
+| New dead letters | New durable transition within 15 minutes, sustained 1 minute |
+| Repeated failures | At least 5 failed attempts in 15 minutes, sustained 3 minutes |
+| API errors | >5% 5xx over 5 minutes, sustained 5 minutes |
+| CPU/RAM/disk | >85% CPU, <10% available RAM or <15% disk available for 10 minutes |
+| Swap | >80% occupied for 15 minutes (not proof of active swapping) |
 
----
+Healthy idle queues and future schedules do not trigger backlog alerts.
+Busy-scope deferrals and continuation pages are not failed attempts. A long
+active job does not count as stalled idle polling. Cached queue values can
+remain after collection failure; always check the snapshot-health alert too.
+Counters reset on worker restart; their initialized zeros help detect a first
+event, but events before a first scrape or just before restart may be missed.
+Tune thresholds from real beta usage, not by hiding missing-data failures.
 
-## 6. Live Telemetry Verification & Resource Monitoring
+### Verify actual data and overhead
 
-### Metric Queries to Verify in Grafana Explore
-- `up{environment="production"}`: Shows `1` for `adept-api`, `adept-engine-worker`, `alloy`, `alloy-node`, and `cadvisor`.
-- `adept_engine_worker_configured_threads{environment="production"}`: Equals `2` (or `1`).
-- `adept_engine_worker_thread_alive{environment="production"}`: Sum equals configured thread count.
-- `adept_engine_queue_ready_jobs{environment="production"}`: Reports non-negative integer (0 is healthy idle).
-- `http_server_requests_seconds_count{environment="production"}`: Reports incoming API traffic.
-- `node_memory_MemAvailable_bytes{job="alloy-node"}`: Accurately reflects VM memory.
+Explore should show fresh up samples for node-exporter, cadvisor, adept-api,
+adept-engine-worker and alloy. Check these metrics:
 
-### Log Queries to Verify in Grafana Explore (Loki)
-- `{environment="production", service="api"}`: API application logs.
-- `{environment="production", service="engine-worker"}`: Worker execution logs.
-- `{environment="production", service="caddy"}`: Caddy access/error logs.
-- **Privacy verification**: Confirm tokens, authorization headers, passwords, and raw webhook bodies do not appear in log streams.
+```promql
+adept_engine_worker_configured_threads{environment="production"}
+adept_engine_worker_thread_alive{environment="production"}
+adept_engine_worker_queue_ready_jobs{environment="production"}
+adept_engine_worker_queue_collection_success{environment="production"}
+time() - adept_engine_worker_queue_last_success_timestamp_seconds{environment="production"}
+node_memory_MemAvailable_bytes{job="node-exporter",environment="production"}
+```
 
-### Resource & Ceiling Checks on AWS
+For Loki, query `{environment="production",service="engine-worker"}` or service =
+api, engine-api, caddy. Quiet services may legitimately have no selected logs.
+Alloy itself is not exported through the Docker log pipeline; inspect its local
+logs privately and use remote-write/drop metrics for delivery diagnostics.
+
+On the VM:
+
 ```bash
-# Check container memory & CPU consumption
-sudo docker stats --no-stream "$(dc ps -q alloy engine-worker api)"
-
-# Check Alloy log tail for any ingestion errors or retries
+dc --profile monitoring stats --no-stream
+df -h / /var/lib/docker
+sudo docker system df -v
 dc logs --tail=50 alloy
 ```
 
-**Alloy Resource Limits:**
-- Memory limit: `384 MiB`
-- CPU limit: `0.5 core`
-- Disk WAL: Bounded in `alloy_data` volume with automatic segment truncation.
+Check Grafana usage, WAL/disk growth and collector CPU/RAM after rollout and
+during a busy sync. Do not assume monitoring is complete just because Alloy is
+running. Record successful ingestion, both worker slots, public probe assertions,
+alert email and recovery before declaring final acceptance.
 
----
+## 7. Rollback and token rotation
 
-## 7. Rollback & Maintenance Procedures
+To stop only monitoring: `dc --profile monitoring stop alloy`. Application data
+and alloy_data remain. If metrics are intentionally disabled for a long period,
+pause the Grafana rules explicitly; otherwise missing-telemetry alerts are expected.
 
-### Disabling Monitoring Only
-To shut down the monitoring collector without affecting any application services:
-```bash
-dc --profile monitoring stop alloy
-```
-*Persistent application data and `alloy_data` volume remain intact.*
+For a full config rollback, stop Alloy, restore compose.yaml, Caddyfile and the
+alloy directory from the recorded backup, validate, and recreate only Caddy and
+engine-worker. Recreate Alloy only if reverting to a previously working collector.
+If Caddy config is restored by replacing a file, do not rely on an old bind-mount
+reload. Preserve .env.production, image tags and all application volumes.
+Never run docker compose down -v. Do not destroy Terraform resources to
+silence an outage.
 
-### Full Rollback of Configuration Files
-If changes to `compose.yaml` or `Caddyfile` need to be reverted:
-```bash
-# 1. Stop Alloy
-dc --profile monitoring stop alloy
+For ingestion-token rotation, edit only .env.monitoring, force-recreate Alloy,
+verify fresh Cloud samples, then revoke the old token. Keep the previous token
+valid until verification. No application restart or application env edit is needed.
 
-# 2. Restore backed up configuration files
-sudo cp -a "$monitoring_backup_dir/compose.yaml" /opt/adept/compose.yaml
-sudo cp -a "$monitoring_backup_dir/Caddyfile" /opt/adept/Caddyfile
-if [ -d "$monitoring_backup_dir/alloy" ]; then
-  sudo cp -a "$monitoring_backup_dir/alloy" /opt/adept/
-fi
+## References
 
-# 3. Validate and reload Caddy
-dc exec -T caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
-dc exec -T caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile
-
-# 4. Recreate engine-worker to reset ports if necessary
-dc up -d --no-deps --force-recreate engine-worker
-```
-*(Never restore `.env.production` or run `docker compose down -v`.)*
-
-### Ingestion Token Rotation
-When rotating Grafana Cloud ingestion tokens:
-1. Update `GRAFANA_CLOUD_TOKEN` in `/opt/adept/.env.monitoring`.
-2. Apply changes:
-   ```bash
-   dc --profile monitoring up -d --no-deps --force-recreate alloy
-   ```
-3. Check Alloy logs (`dc logs --tail=30 alloy`) and verify new samples arrive in Grafana Cloud.
-4. Revoke the old token in Grafana Cloud only after verifying live data.
+- [PromQL comparison semantics](https://prometheus.io/docs/prometheus/latest/querying/operators/)
+- [Grafana No Data and error behavior](https://grafana.com/docs/grafana/latest/alerting/fundamentals/alert-rule-evaluation/nodata-and-error-states/)
+- [Alloy log processing](https://grafana.com/docs/alloy/latest/reference/components/loki/loki.process/)
+- [Grafana notification setup](https://grafana.com/docs/grafana/latest/alerting/configure-notifications/)

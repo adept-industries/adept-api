@@ -1,0 +1,162 @@
+{
+  "WebsiteDown": {
+    "for": "3m",
+    "service": "caddy",
+    "severity": "critical",
+    "summary": "Website content check failed or telemetry is missing",
+    "description": "At least one configured external probe is failing, or no website probe data is arriving.",
+    "expr": "(min(probe_success{job=\"__WEBSITE_PROBE_JOB__\",environment=\"__ENV__\"}) == bool 0) or vector(1)"
+  },
+  "ApiReadinessDown": {
+    "for": "3m",
+    "service": "api",
+    "severity": "critical",
+    "summary": "API readiness check failed or telemetry is missing",
+    "description": "The external /api/status check must return HTTP 200 and JSON status UP.",
+    "expr": "(min(probe_success{job=\"__API_PROBE_JOB__\",environment=\"__ENV__\"}) == bool 0) or vector(1)"
+  },
+  "AlloyCollectorDown": {
+    "for": "5m",
+    "service": "alloy",
+    "severity": "critical",
+    "summary": "alloy metrics scrape failed or telemetry is missing",
+    "description": "A failed scrape or absent target is unhealthy. A stopped collector becomes absent after the datasource lookback interval.",
+    "expr": "(min(up{job=\"alloy\",environment=\"__ENV__\"}) == bool 0) or vector(1)"
+  },
+  "ApiMetricsMissing": {
+    "for": "5m",
+    "service": "api",
+    "severity": "critical",
+    "summary": "api metrics scrape failed or telemetry is missing",
+    "description": "A failed scrape or absent target is unhealthy. A stopped collector becomes absent after the datasource lookback interval.",
+    "expr": "(min(up{job=\"adept-api\",environment=\"__ENV__\"}) == bool 0) or vector(1)"
+  },
+  "EngineWorkerCollectorDown": {
+    "for": "5m",
+    "service": "engine-worker",
+    "severity": "critical",
+    "summary": "engine-worker metrics scrape failed or telemetry is missing",
+    "description": "A failed scrape or absent target is unhealthy. A stopped collector becomes absent after the datasource lookback interval.",
+    "expr": "(min(up{job=\"adept-engine-worker\",environment=\"__ENV__\"}) == bool 0) or vector(1)"
+  },
+  "HostMetricsMissing": {
+    "for": "5m",
+    "service": "host",
+    "severity": "critical",
+    "summary": "host metrics scrape failed or telemetry is missing",
+    "description": "A failed scrape or absent target is unhealthy. A stopped collector becomes absent after the datasource lookback interval.",
+    "expr": "(min(up{job=\"node-exporter\",environment=\"__ENV__\"}) == bool 0) or vector(1)"
+  },
+  "ContainerMetricsMissing": {
+    "for": "5m",
+    "service": "alloy",
+    "severity": "critical",
+    "summary": "alloy metrics scrape failed or telemetry is missing",
+    "description": "A failed scrape or absent target is unhealthy. A stopped collector becomes absent after the datasource lookback interval.",
+    "expr": "(min(up{job=\"cadvisor\",environment=\"__ENV__\"}) == bool 0) or vector(1)"
+  },
+  "WorkerThreadsDegraded": {
+    "for": "5m",
+    "service": "engine-worker",
+    "severity": "critical",
+    "summary": "Worker threads or their telemetry are missing",
+    "description": "Expect exactly the configured one or two live thread slots, including active-state and last-successful-poll telemetry.",
+    "expr": "clamp_max((sum(adept_engine_worker_thread_alive{job=\"adept-engine-worker\",environment=\"__ENV__\"}) < bool max(adept_engine_worker_configured_threads{job=\"adept-engine-worker\",environment=\"__ENV__\"})) + (count(adept_engine_worker_thread_active{job=\"adept-engine-worker\",environment=\"__ENV__\"}) != bool max(adept_engine_worker_configured_threads{job=\"adept-engine-worker\",environment=\"__ENV__\"})) + (count(adept_engine_worker_thread_last_successful_poll_timestamp_seconds{job=\"adept-engine-worker\",environment=\"__ENV__\"}) != bool max(adept_engine_worker_configured_threads{job=\"adept-engine-worker\",environment=\"__ENV__\"})), 1) or vector(1)"
+  },
+  "WorkerPollingStalled": {
+    "for": "5m",
+    "service": "engine-worker",
+    "severity": "warning",
+    "summary": "An idle worker thread has stopped polling",
+    "description": "A thread has been idle with no successful poll for over five minutes, sustained for another five minutes. Active jobs are excluded.",
+    "expr": "max(((time() - adept_engine_worker_thread_last_successful_poll_timestamp_seconds{job=\"adept-engine-worker\",environment=\"__ENV__\"}) > bool 300) * (adept_engine_worker_thread_active{job=\"adept-engine-worker\",environment=\"__ENV__\"} == bool 0)) or vector(1)"
+  },
+  "WorkerLongRunningJob": {
+    "for": "5m",
+    "service": "engine-worker",
+    "severity": "warning",
+    "summary": "A worker job has been active for over 30 minutes",
+    "description": "Long-running work is not a polling failure. Investigate job progress before treating this as a stuck job.",
+    "expr": "(max(adept_engine_worker_thread_active_job_duration_seconds{job=\"adept-engine-worker\",environment=\"__ENV__\"}) > bool 1800) or vector(1)"
+  },
+  "WorkerQueueSnapshotStale": {
+    "for": "5m",
+    "service": "engine-worker",
+    "severity": "warning",
+    "summary": "Worker queue snapshot failed or is stale",
+    "description": "The queue sampler failed, never completed a snapshot, or its last successful snapshot is over three minutes old.",
+    "expr": "clamp_max((max(adept_engine_worker_queue_collection_success{job=\"adept-engine-worker\",environment=\"__ENV__\"}) != bool 1) + ((time() - max(adept_engine_worker_queue_last_success_timestamp_seconds{job=\"adept-engine-worker\",environment=\"__ENV__\"})) > bool 180), 1) or vector(1)"
+  },
+  "WorkerQueueDelayOverdue": {
+    "for": "10m",
+    "service": "engine-worker",
+    "severity": "warning",
+    "summary": "Ready work has waited over ten minutes",
+    "description": "Ready-to-run work only: future schedules and retry backoff are excluded. Check snapshot health before interpreting cached queue values.",
+    "expr": "(max(adept_engine_worker_queue_oldest_ready_wait_seconds{job=\"adept-engine-worker\",environment=\"__ENV__\"}) > bool 600) or vector(1)"
+  },
+  "WorkerQueueBacklog": {
+    "for": "10m",
+    "service": "engine-worker",
+    "severity": "warning",
+    "summary": "More than 100 ready jobs are queued",
+    "description": "The ready backlog remains over 100 jobs for ten minutes; tune from measured beta traffic.",
+    "expr": "(max(adept_engine_worker_queue_ready_jobs{job=\"adept-engine-worker\",environment=\"__ENV__\"}) > bool 100) or vector(1)"
+  },
+  "WorkerNewDeadLetters": {
+    "for": "1m",
+    "service": "engine-worker",
+    "severity": "warning",
+    "summary": "New dead-letter jobs were recorded",
+    "description": "New durable dead-letter transitions in the last fifteen minutes, including stale-lease recovery. Existing historical DEAD rows alone do not trigger this rule.",
+    "expr": "((sum(increase(adept_engine_worker_job_attempts_total{job=\"adept-engine-worker\",environment=\"__ENV__\",outcome=\"dead_lettered\"}[15m])) + sum(increase(adept_engine_worker_stale_jobs_recovered_total{job=\"adept-engine-worker\",environment=\"__ENV__\",outcome=\"dead_lettered\"}[15m]))) > bool 0) or vector(1)"
+  },
+  "WorkerRepeatedFailures": {
+    "for": "3m",
+    "service": "engine-worker",
+    "severity": "warning",
+    "summary": "Repeated worker failures are consuming retries",
+    "description": "Five or more failed durable attempts in fifteen minutes. Continuations, busy-scope deferrals and shutdown hand-backs are not failures.",
+    "expr": "(sum(increase(adept_engine_worker_job_attempts_total{job=\"adept-engine-worker\",environment=\"__ENV__\",outcome=~\"retry_scheduled|dead_lettered\"}[15m])) >= bool 5) or vector(1)"
+  },
+  "ApiHigh5xxErrorRate": {
+    "for": "5m",
+    "service": "api",
+    "severity": "critical",
+    "summary": "API 5xx responses exceed five percent",
+    "description": "No errors or no requests is healthy when API scraping works. Missing API telemetry is not treated as recovery.",
+    "expr": "clamp_max((((sum(rate(http_server_requests_seconds_count{job=\"adept-api\",environment=\"__ENV__\",status=~\"5..\"}[5m])) or vector(0)) / clamp_min((sum(rate(http_server_requests_seconds_count{job=\"adept-api\",environment=\"__ENV__\"}[5m])) or vector(0)), 0.001)) > bool 0.05) + ((min(up{job=\"adept-api\",environment=\"__ENV__\"}) == bool 0) or vector(1)), 1)"
+  },
+  "HostDiskSpaceLow": {
+    "for": "10m",
+    "service": "host",
+    "severity": "warning",
+    "summary": "Root filesystem has less than fifteen percent available",
+    "description": "Root filesystem has less than fifteen percent available",
+    "expr": "(max(1 - node_filesystem_avail_bytes{job=\"node-exporter\",environment=\"__ENV__\",mountpoint=\"/\",fstype!~\"tmpfs|overlay\"} / node_filesystem_size_bytes{job=\"node-exporter\",environment=\"__ENV__\",mountpoint=\"/\",fstype!~\"tmpfs|overlay\"}) > bool 0.85) or vector(1)"
+  },
+  "HostMemoryPressure": {
+    "for": "10m",
+    "service": "host",
+    "severity": "warning",
+    "summary": "Available host RAM is below ten percent",
+    "description": "Available host RAM is below ten percent",
+    "expr": "(max(1 - node_memory_MemAvailable_bytes{job=\"node-exporter\",environment=\"__ENV__\"} / node_memory_MemTotal_bytes{job=\"node-exporter\",environment=\"__ENV__\"}) > bool 0.90) or vector(1)"
+  },
+  "HostCpuPressure": {
+    "for": "10m",
+    "service": "host",
+    "severity": "warning",
+    "summary": "Host CPU usage is above eighty-five percent",
+    "description": "Host CPU usage is above eighty-five percent",
+    "expr": "((1 - avg(rate(node_cpu_seconds_total{job=\"node-exporter\",environment=\"__ENV__\",mode=\"idle\"}[5m]))) > bool 0.85) or vector(1)"
+  },
+  "HostSwapPressure": {
+    "for": "15m",
+    "service": "host",
+    "severity": "warning",
+    "summary": "Host swap usage is above eighty percent",
+    "description": "Sustained swap occupancy is a pressure signal, not proof of current swapping. A host with zero configured swap is healthy for this rule.",
+    "expr": "(max((node_memory_SwapTotal_bytes{job=\"node-exporter\",environment=\"__ENV__\"} - node_memory_SwapFree_bytes{job=\"node-exporter\",environment=\"__ENV__\"}) / clamp_min(node_memory_SwapTotal_bytes{job=\"node-exporter\",environment=\"__ENV__\"}, 1)) > bool 0.80) or vector(1)"
+  }
+}

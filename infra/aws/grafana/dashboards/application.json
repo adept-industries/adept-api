@@ -30,7 +30,7 @@
       "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
       "id": 1,
       "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true},
-      "targets": [{"editorMode": "code", "expr": "max(up{environment=~\"$environment\",job=\"adept-api\"})", "legendFormat": "API", "range": true, "refId": "A"}],
+      "targets": [{"editorMode": "code", "expr": "max(up{environment=~\"$environment\",job=\"adept-api\"})", "legendFormat": "API", "instant": true, "range": false, "refId": "A"}],
       "title": "API metrics target",
       "type": "stat"
     },
@@ -43,7 +43,7 @@
       "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
       "id": 2,
       "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true},
-      "targets": [{"editorMode": "code", "expr": "sum(rate(http_server_requests_seconds_count{environment=~\"$environment\",job=\"adept-api\"}[5m]))", "legendFormat": "Requests", "range": true, "refId": "A"}],
+      "targets": [{"editorMode": "code", "expr": "sum(rate(http_server_requests_seconds_count{environment=~\"$environment\",job=\"adept-api\"}[5m]))", "legendFormat": "Requests", "instant": true, "range": false, "refId": "A"}],
       "title": "Request rate",
       "type": "stat"
     },
@@ -56,7 +56,7 @@
       "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
       "id": 3,
       "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true},
-      "targets": [{"editorMode": "code", "expr": "100 * sum(rate(http_server_requests_seconds_count{environment=~\"$environment\",job=\"adept-api\",status=~\"5..\"}[5m])) / clamp_min(sum(rate(http_server_requests_seconds_count{environment=~\"$environment\",job=\"adept-api\"}[5m])), 0.001)", "legendFormat": "5xx", "range": true, "refId": "A"}],
+      "targets": [{"editorMode": "code", "expr": "100 * (sum(rate(http_server_requests_seconds_count{environment=~\"$environment\",job=\"adept-api\",status=~\"5..\"}[5m])) or (0 * sum(rate(http_server_requests_seconds_count{environment=~\"$environment\",job=\"adept-api\"}[5m])))) / clamp_min(sum(rate(http_server_requests_seconds_count{environment=~\"$environment\",job=\"adept-api\"}[5m])), 0.001)", "legendFormat": "5xx", "instant": true, "range": false, "refId": "A"}],
       "title": "Server error ratio",
       "type": "stat"
     },
@@ -69,7 +69,7 @@
       "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
       "id": 4,
       "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true},
-      "targets": [{"editorMode": "code", "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_requests_seconds_bucket{environment=~\"$environment\",job=\"adept-api\"}[5m])))", "legendFormat": "p95", "range": true, "refId": "A"}],
+      "targets": [{"editorMode": "code", "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_requests_seconds_bucket{environment=~\"$environment\",job=\"adept-api\"}[5m])))", "legendFormat": "p95", "instant": true, "range": false, "refId": "A"}],
       "title": "HTTP p95 latency",
       "type": "stat"
     },
@@ -124,8 +124,8 @@
       "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12},
       "id": 8,
       "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "right", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
-      "targets": [{"editorMode": "code", "expr": "histogram_quantile(0.95, sum by (cause, action, le) (rate(jvm_gc_pause_seconds_bucket{environment=~\"$environment\",job=\"adept-api\"}[5m])))", "legendFormat": "{{action}} / {{cause}}", "range": true, "refId": "A"}],
-      "title": "JVM GC pause p95",
+      "targets": [{"editorMode": "code", "expr": "sum by (cause, action) (rate(jvm_gc_pause_seconds_sum{environment=~\"$environment\",job=\"adept-api\"}[5m])) / clamp_min(sum by (cause, action) (rate(jvm_gc_pause_seconds_count{environment=~\"$environment\",job=\"adept-api\"}[5m])), 0.001)", "legendFormat": "{{action}} / {{cause}}", "range": true, "refId": "A"}],
+      "title": "JVM GC mean pause",
       "type": "timeseries"
     },
     {

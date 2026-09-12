@@ -58,12 +58,6 @@ variable "alerts_paused" {
   default     = true
 }
 
-variable "manage_notification_policy" {
-  description = "Opt in only after reviewing the stack's existing policy tree; Grafana's resource replaces the complete tree."
-  type        = bool
-  default     = false
-}
-
 variable "notification_test_enabled" {
   description = "Create the controlled vector-based notification test rule. Leave false during normal operation."
   type        = bool

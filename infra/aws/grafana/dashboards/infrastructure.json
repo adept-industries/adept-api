@@ -38,7 +38,7 @@
       "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
       "id": 1,
       "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true},
-      "targets": [{"editorMode": "code", "expr": "100 * (1 - avg(rate(node_cpu_seconds_total{environment=~\"$environment\",job=\"node-exporter\",mode=\"idle\"}[5m])))", "legendFormat": "CPU", "range": true, "refId": "A"}],
+      "targets": [{"editorMode": "code", "expr": "100 * (1 - avg(rate(node_cpu_seconds_total{environment=~\"$environment\",job=\"node-exporter\",mode=\"idle\"}[5m])))", "legendFormat": "CPU", "instant": true, "range": false, "refId": "A"}],
       "title": "Host CPU used",
       "type": "stat"
     },
@@ -57,7 +57,7 @@
       "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
       "id": 2,
       "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true},
-      "targets": [{"editorMode": "code", "expr": "100 * (1 - sum(node_memory_MemAvailable_bytes{environment=~\"$environment\",job=\"node-exporter\"}) / clamp_min(sum(node_memory_MemTotal_bytes{environment=~\"$environment\",job=\"node-exporter\"}), 1))", "legendFormat": "RAM", "range": true, "refId": "A"}],
+      "targets": [{"editorMode": "code", "expr": "100 * (1 - sum(node_memory_MemAvailable_bytes{environment=~\"$environment\",job=\"node-exporter\"}) / clamp_min(sum(node_memory_MemTotal_bytes{environment=~\"$environment\",job=\"node-exporter\"}), 1))", "legendFormat": "RAM", "instant": true, "range": false, "refId": "A"}],
       "title": "Host RAM used",
       "type": "stat"
     },
@@ -76,7 +76,7 @@
       "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
       "id": 3,
       "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true},
-      "targets": [{"editorMode": "code", "expr": "100 * (sum(node_memory_SwapTotal_bytes{environment=~\"$environment\",job=\"node-exporter\"}) - sum(node_memory_SwapFree_bytes{environment=~\"$environment\",job=\"node-exporter\"})) / clamp_min(sum(node_memory_SwapTotal_bytes{environment=~\"$environment\",job=\"node-exporter\"}), 1)", "legendFormat": "Swap", "range": true, "refId": "A"}],
+      "targets": [{"editorMode": "code", "expr": "100 * (sum(node_memory_SwapTotal_bytes{environment=~\"$environment\",job=\"node-exporter\"}) - sum(node_memory_SwapFree_bytes{environment=~\"$environment\",job=\"node-exporter\"})) / clamp_min(sum(node_memory_SwapTotal_bytes{environment=~\"$environment\",job=\"node-exporter\"}), 1)", "legendFormat": "Swap", "instant": true, "range": false, "refId": "A"}],
       "title": "Host swap used",
       "type": "stat"
     },
@@ -95,7 +95,7 @@
       "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
       "id": 4,
       "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true},
-      "targets": [{"editorMode": "code", "expr": "100 * (1 - sum(node_filesystem_avail_bytes{environment=~\"$environment\",job=\"node-exporter\",mountpoint=\"/\",fstype!~\"tmpfs|overlay\"}) / clamp_min(sum(node_filesystem_size_bytes{environment=~\"$environment\",job=\"node-exporter\",mountpoint=\"/\",fstype!~\"tmpfs|overlay\"}), 1))", "legendFormat": "Root disk", "range": true, "refId": "A"}],
+      "targets": [{"editorMode": "code", "expr": "100 * (1 - sum(node_filesystem_avail_bytes{environment=~\"$environment\",job=\"node-exporter\",mountpoint=\"/\",fstype!~\"tmpfs|overlay\"}) / clamp_min(sum(node_filesystem_size_bytes{environment=~\"$environment\",job=\"node-exporter\",mountpoint=\"/\",fstype!~\"tmpfs|overlay\"}), 1))", "legendFormat": "Root disk", "instant": true, "range": false, "refId": "A"}],
       "title": "Root disk used",
       "type": "stat"
     },
@@ -123,7 +123,7 @@
       "gridPos": {"h": 7, "w": 12, "x": 12, "y": 4},
       "id": 6,
       "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "horizontal", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true},
-      "targets": [{"editorMode": "code", "expr": "changes((max by (service) (container_start_time_seconds{environment=~\"$environment\",job=\"cadvisor\",service!=\"\"}))[$__range:1m])", "legendFormat": "{{service}}", "range": true, "refId": "A"}],
+      "targets": [{"editorMode": "code", "expr": "changes((max by (service) (container_start_time_seconds{environment=~\"$environment\",job=\"cadvisor\",service!=\"\"}))[$__range:1m])", "legendFormat": "{{service}}", "instant": true, "range": false, "refId": "A"}],
       "title": "Observed container start changes (restart proxy)",
       "type": "stat"
     },
@@ -191,7 +191,7 @@
       "gridPos": {"h": 9, "w": 24, "x": 0, "y": 27},
       "id": 11,
       "options": {"dedupStrategy": "none", "enableLogDetails": true, "prettifyLogMessage": false, "showCommonLabels": false, "showLabels": false, "showTime": true, "sortOrder": "Descending", "wrapLogMessage": true},
-      "targets": [{"editorMode": "code", "expr": "{environment=~\"$environment\",service=~\"caddy|alloy\"}", "queryType": "range", "refId": "A"}],
+      "targets": [{"editorMode": "code", "expr": "{environment=~\"$environment\",service=\"caddy\"}", "queryType": "range", "refId": "A"}],
       "title": "Infrastructure operational logs",
       "type": "logs"
     }

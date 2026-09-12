@@ -90,18 +90,20 @@ redaction_id="$(docker run -d --network none \
   /etc/alloy/config.alloy)"
 for attempt in {1..30}; do
   redaction_output="$(docker logs "$redaction_id" 2>&1)"
-  if grep -q 'safe_event=engine_worker_pool_starting' <<<"$redaction_output"; then break; fi
+  if grep -q 'event=engine_readiness_failed' <<<"$redaction_output"; then break; fi
   sleep 1
 done
-grep -q 'safe_event=engine_worker_pool_starting' <<<"$redaction_output"
-grep -q '\[REDACTED_FIELD\]' <<<"$redaction_output"
+grep -q 'level=info event=engine_worker_pool_starting' <<<"$redaction_output"
+grep -q 'level=error event=engine_worker_poll_failed' <<<"$redaction_output"
+grep -q 'event=engine_readiness_failed' <<<"$redaction_output"
+grep -q 'event=http_request_failed status=502' <<<"$redaction_output"
 grep -q 'labels="{environment=\\"production\\", service=\\"api\\"}"' <<<"$redaction_output"
 for marker in \
   FAKE_BEARER_VALUE FAKE_PASSWORD_VALUE private.person@example.test \
   FAKE_ENGINE_ERROR FAKE_SUBJECT FAKE_RULE FAKE_CURSOR FAKE_BOOT_ID \
   FAKE_QUERY_VALUE FAKE_COOKIE_VALUE FAKE_GITHUB_TOKEN \
   123e4567-e89b-12d3-a456-426614174000 FAKE_RAW_BODY FAKE_RAW_HEADER \
-  FAKE_OVERSIZED_VALUE FAKE_LABEL_VALUE; do
+  FAKE_OVERSIZED_VALUE FAKE_LABEL_VALUE FAKE_; do
   if grep -q "$marker" <<<"$redaction_output"; then
     echo "Sensitive log marker escaped redaction: $marker" >&2
     exit 1
@@ -121,10 +123,14 @@ echo "Checking live host, container and private worker scrapes"
 docker network create --internal "$test_network" >/dev/null
 caddy_image="$(jq -r '.services.caddy.image' <<<"$enabled")"
 api_mock_id="$(docker run -d --network "$test_network" --network-alias api \
+  --label com.docker.compose.project=adept-production \
+  --label com.docker.compose.service=api \
   "$caddy_image" caddy respond --listen :8080 --access-log \
   --header 'Content-Type: application/json' --body '{"status":"UP"}')"
 worker_metrics_body=$'# TYPE adept_engine_worker_configured_threads gauge\nadept_engine_worker_configured_threads 2\n# TYPE adept_engine_worker_thread_alive gauge\nadept_engine_worker_thread_alive{thread_slot="1"} 1\nadept_engine_worker_thread_alive{thread_slot="2"} 1\n# TYPE adept_engine_worker_queue_ready_jobs gauge\nadept_engine_worker_queue_ready_jobs 0\n# TYPE adept_engine_worker_queue_oldest_ready_wait_seconds gauge\nadept_engine_worker_queue_oldest_ready_wait_seconds 0\n# TYPE adept_engine_worker_queue_collection_success gauge\nadept_engine_worker_queue_collection_success 1\n'
 worker_mock_id="$(docker run -d --network "$test_network" --network-alias engine-worker \
+  --label com.docker.compose.project=adept-production \
+  --label com.docker.compose.service=engine-worker \
   "$caddy_image" caddy respond --listen :8001 \
   --header 'Content-Type: text/plain; version=0.0.4' --body "$worker_metrics_body")"
 
@@ -156,11 +162,14 @@ grep -q '^adept_engine_worker_thread_alive{thread_slot="2"} 1' <<<"$worker_metri
 grep -q '^adept_engine_worker_queue_ready_jobs 0' <<<"$worker_metrics"
 
 scrape_component() {
+  local metrics_path="/api/v0/component/$1/metrics"
+  # Loki's debug counters are on the global endpoint, unlike exporter handlers.
+  if [[ "$1" == "loki.source.docker.service_logs" ]]; then metrics_path="/metrics"; fi
   docker exec "$collector_id" /bin/bash -ec '
     exec 3<>/dev/tcp/127.0.0.1/12345
-    printf "GET /api/v0/component/%s/metrics HTTP/1.0\r\nHost: localhost\r\n\r\n" "$1" >&3
+    printf "GET %s HTTP/1.0\r\nHost: localhost\r\n\r\n" "$1" >&3
     while IFS= read -r line <&3; do printf "%s\n" "$line"; done
-  ' -- "$1"
+  ' -- "$metrics_path"
 }
 
 host_metrics="$(scrape_component prometheus.exporter.unix.host)"
@@ -169,6 +178,17 @@ grep -q '^node_cpu_seconds_total{' <<<"$host_metrics"
 grep -q '^node_filesystem_size_bytes{' <<<"$host_metrics"
 # It must report the host RAM, not the collector's 384 MiB limit.
 awk '/^node_memory_MemTotal_bytes / { if ($2 > 402653184) ok=1 } END { exit !ok }' <<<"$host_metrics"
+
+# Exercise real Docker discovery/source wiring, not just a copied file pipeline.
+for attempt in {1..30}; do
+  docker_log_metrics="$(scrape_component loki.source.docker.service_logs)"
+  if awk '/^loki_source_docker_target_entries_total/ && $NF > 0 { ok=1 } END { exit !ok }' <<<"$docker_log_metrics"; then break; fi
+  sleep 1
+done
+if ! awk '/^loki_source_docker_target_entries_total/ && $NF > 0 { ok=1 } END { exit !ok }' <<<"$docker_log_metrics"; then
+  echo "Expected Docker log source counters for the selected test services" >&2
+  exit 1
+fi
 
 for attempt in {1..30}; do
   container_metrics="$(scrape_component prometheus.exporter.cadvisor.containers)"

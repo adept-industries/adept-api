@@ -30,7 +30,7 @@
       "gridPos": {"h": 4, "w": 5, "x": 0, "y": 0},
       "id": 1,
       "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true},
-      "targets": [{"editorMode": "code", "expr": "max(up{environment=~\"$environment\",job=\"adept-engine-worker\"})", "legendFormat": "endpoint", "range": true, "refId": "A"}],
+      "targets": [{"editorMode": "code", "expr": "max(up{environment=~\"$environment\",job=\"adept-engine-worker\"})", "legendFormat": "endpoint", "instant": true, "range": false, "refId": "A"}],
       "title": "Metrics endpoint",
       "type": "stat"
     },
@@ -41,7 +41,7 @@
       "gridPos": {"h": 4, "w": 4, "x": 5, "y": 0},
       "id": 2,
       "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true},
-      "targets": [{"editorMode": "code", "expr": "max(adept_engine_worker_configured_threads{environment=~\"$environment\",job=\"adept-engine-worker\"})", "legendFormat": "configured", "range": true, "refId": "A"}],
+      "targets": [{"editorMode": "code", "expr": "max(adept_engine_worker_configured_threads{environment=~\"$environment\",job=\"adept-engine-worker\"})", "legendFormat": "configured", "instant": true, "range": false, "refId": "A"}],
       "title": "Configured threads",
       "type": "stat"
     },
@@ -52,7 +52,7 @@
       "gridPos": {"h": 4, "w": 5, "x": 9, "y": 0},
       "id": 3,
       "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true},
-      "targets": [{"editorMode": "code", "expr": "sum(adept_engine_worker_thread_alive{environment=~\"$environment\",job=\"adept-engine-worker\"})", "legendFormat": "alive", "range": true, "refId": "A"}],
+      "targets": [{"editorMode": "code", "expr": "sum(adept_engine_worker_thread_alive{environment=~\"$environment\",job=\"adept-engine-worker\"})", "legendFormat": "alive", "instant": true, "range": false, "refId": "A"}],
       "title": "Live threads",
       "type": "stat"
     },
@@ -63,7 +63,7 @@
       "gridPos": {"h": 4, "w": 5, "x": 14, "y": 0},
       "id": 4,
       "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true},
-      "targets": [{"editorMode": "code", "expr": "sum(adept_engine_worker_thread_active{environment=~\"$environment\",job=\"adept-engine-worker\"})", "legendFormat": "active", "range": true, "refId": "A"}],
+      "targets": [{"editorMode": "code", "expr": "sum(adept_engine_worker_thread_active{environment=~\"$environment\",job=\"adept-engine-worker\"})", "legendFormat": "active", "instant": true, "range": false, "refId": "A"}],
       "title": "Active threads",
       "type": "stat"
     },
@@ -74,7 +74,7 @@
       "gridPos": {"h": 4, "w": 5, "x": 19, "y": 0},
       "id": 5,
       "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true},
-      "targets": [{"editorMode": "code", "expr": "max(adept_engine_worker_shutdown_requested{environment=~\"$environment\",job=\"adept-engine-worker\"})", "legendFormat": "state", "range": true, "refId": "A"}],
+      "targets": [{"editorMode": "code", "expr": "max(adept_engine_worker_shutdown_requested{environment=~\"$environment\",job=\"adept-engine-worker\"})", "legendFormat": "state", "instant": true, "range": false, "refId": "A"}],
       "title": "Worker process state",
       "type": "stat"
     },
@@ -121,7 +121,7 @@
       "gridPos": {"h": 4, "w": 4, "x": 0, "y": 18},
       "id": 9,
       "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true},
-      "targets": [{"editorMode": "code", "expr": "max(adept_engine_worker_queue_ready_jobs{environment=~\"$environment\",job=\"adept-engine-worker\"})", "legendFormat": "ready", "range": true, "refId": "A"}],
+      "targets": [{"editorMode": "code", "expr": "max(adept_engine_worker_queue_ready_jobs{environment=~\"$environment\",job=\"adept-engine-worker\"})", "legendFormat": "ready", "instant": true, "range": false, "refId": "A"}],
       "title": "Ready jobs",
       "type": "stat"
     },
@@ -132,7 +132,7 @@
       "gridPos": {"h": 4, "w": 5, "x": 4, "y": 18},
       "id": 10,
       "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true},
-      "targets": [{"editorMode": "code", "expr": "max(adept_engine_worker_queue_oldest_ready_wait_seconds{environment=~\"$environment\",job=\"adept-engine-worker\"})", "legendFormat": "oldest", "range": true, "refId": "A"}],
+      "targets": [{"editorMode": "code", "expr": "max(adept_engine_worker_queue_oldest_ready_wait_seconds{environment=~\"$environment\",job=\"adept-engine-worker\"})", "legendFormat": "oldest", "instant": true, "range": false, "refId": "A"}],
       "title": "Oldest ready wait",
       "type": "stat"
     },
@@ -142,7 +142,7 @@
       "gridPos": {"h": 4, "w": 4, "x": 9, "y": 18},
       "id": 11,
       "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true},
-      "targets": [{"editorMode": "code", "expr": "max(adept_engine_worker_queue_running_jobs{environment=~\"$environment\",job=\"adept-engine-worker\"})", "legendFormat": "running", "range": true, "refId": "A"}],
+      "targets": [{"editorMode": "code", "expr": "max(adept_engine_worker_queue_running_jobs{environment=~\"$environment\",job=\"adept-engine-worker\"})", "legendFormat": "running", "instant": true, "range": false, "refId": "A"}],
       "title": "Running jobs",
       "type": "stat"
     },
@@ -153,7 +153,7 @@
       "gridPos": {"h": 4, "w": 5, "x": 13, "y": 18},
       "id": 12,
       "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true},
-      "targets": [{"editorMode": "code", "expr": "max(adept_engine_worker_queue_dead_letter_jobs{environment=~\"$environment\",job=\"adept-engine-worker\"})", "legendFormat": "dead-letter", "range": true, "refId": "A"}],
+      "targets": [{"editorMode": "code", "expr": "max(adept_engine_worker_queue_dead_letter_jobs{environment=~\"$environment\",job=\"adept-engine-worker\"})", "legendFormat": "dead-letter", "instant": true, "range": false, "refId": "A"}],
       "title": "Dead-letter jobs",
       "type": "stat"
     },

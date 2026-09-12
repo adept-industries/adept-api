@@ -41,16 +41,3 @@ resource "grafana_contact_point" "adept_email" {
 
   depends_on = [grafana_message_template.adept]
 }
-
-# Grafana exposes one notification policy tree per organization. This resource
-# is deliberately opt-in because enabling it replaces that entire tree.
-resource "grafana_notification_policy" "adept" {
-  count = var.manage_notification_policy ? 1 : 0
-
-  contact_point = grafana_contact_point.adept_email.name
-  group_by      = ["environment", "service", "severity"]
-
-  group_wait      = "1m"
-  group_interval  = "10m"
-  repeat_interval = "4h"
-}
