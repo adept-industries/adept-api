@@ -63,6 +63,8 @@ jq -s '{
   ] | to_entries | map(.value + {record: ("dashboard_test_" + (.key | tostring))})}]
 }' "$repository_root"/infra/aws/grafana/dashboards/*.json >"$verification_dir/dashboards.json"
 
+chmod -R a+rX "$verification_dir"
+
 docker run --rm --network none --volume "$verification_dir:/tests:ro" --workdir /tests \
   --entrypoint /bin/promtool "$prometheus_image" check rules rules.json dashboards.json
 docker run --rm --network none --volume "$verification_dir:/tests:ro" --workdir /tests \
