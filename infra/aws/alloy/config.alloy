@@ -1,4 +1,5 @@
-// PR 1: metrics only. No logs, remote configuration, or application secrets.
+// Adept production monitoring. Grafana credentials come only from
+// /opt/adept/.env.monitoring through the Alloy service env_file.
 prometheus.remote_write "grafana_cloud" {
 	external_labels = {environment = "production", instance = "adept-production"}
 
@@ -24,6 +25,28 @@ prometheus.remote_write "grafana_cloud" {
 		truncate_frequency = "15m"
 		min_keepalive_time = "5m"
 		max_keepalive_time = "1h"
+	}
+}
+
+// Log delivery has a small in-memory batch/retry budget. Docker's existing
+// 10 MiB x 5-file rotation is the on-host bound; Alloy persists read positions
+// in its storage volume so collector restarts resume from the last offset.
+loki.write "grafana_cloud" {
+	external_labels = {environment = "production"}
+	max_streams     = 16
+
+	endpoint {
+		url                 = sys.env("GRAFANA_CLOUD_LOGS_URL")
+		batch_size          = "512KiB"
+		batch_wait          = "2s"
+		min_backoff_period  = "500ms"
+		max_backoff_period  = "30s"
+		max_backoff_retries = 10
+
+		basic_auth {
+			username = sys.env("GRAFANA_CLOUD_LOGS_USER")
+			password = sys.env("GRAFANA_CLOUD_TOKEN")
+		}
 	}
 }
 
@@ -119,6 +142,142 @@ prometheus.relabel "api_metrics" {
 	}
 }
 
+// This is the worker process from adept-engine, not the Engine API. Port 8001
+// has no host mapping and is reachable only across the Compose bridge network.
+prometheus.scrape "engine_worker_metrics" {
+	sample_limit    = 5000
+	targets         = [{__address__ = "engine-worker:8001"}]
+	metrics_path    = "/metrics"
+	forward_to      = [prometheus.relabel.engine_worker_metrics.receiver]
+	scrape_interval = "60s"
+	scrape_timeout  = "15s"
+	job_name        = "adept-engine-worker"
+}
+
+prometheus.relabel "engine_worker_metrics" {
+	forward_to = [prometheus.remote_write.grafana_cloud.receiver]
+
+	rule {
+		source_labels = ["__name__"]
+		regex         = "up|scrape_.*|adept_engine_worker_.*"
+		action        = "keep"
+	}
+}
+
+// Discover this Compose project, then allow only selected services below.
+// Multiple Docker label filters are ANDed, not ORed: filtering service=api
+// AND service=engine-worker here would discover no containers at all.
+discovery.docker "service_logs" {
+	host             = "unix:///var/run/docker.sock"
+	refresh_interval = "60s"
+
+	filter {
+		name   = "label"
+		values = ["com.docker.compose.project=adept-production"]
+	}
+}
+
+discovery.relabel "service_logs" {
+	targets = discovery.docker.service_logs.targets
+
+	rule {
+		source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+		regex         = "adept-production"
+		action        = "keep"
+	}
+
+	rule {
+		source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+		regex         = "api|engine-api|engine-worker|caddy"
+		action        = "keep"
+	}
+
+	rule {
+		source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+		target_label  = "service"
+	}
+}
+
+loki.source.docker "service_logs" {
+	host             = "unix:///var/run/docker.sock"
+	targets          = discovery.relabel.service_logs.output
+	labels           = {environment = "production"}
+	forward_to       = [loki.process.service_logs.receiver]
+	refresh_interval = "60s"
+}
+
+loki.process "service_logs" {
+	forward_to = [loki.write.grafana_cloud.receiver]
+
+	// LOG_PIPELINE_STAGES_BEGIN -- mirrored by the local redaction fixture.
+	// Fail closed: only reconstruct bounded operational summaries. Never forward
+	// original messages, unknown JSON fields, exception text or stack traces.
+	stage.drop {
+		longer_than         = "16KB"
+		drop_counter_reason = "oversized_line"
+	}
+
+	stage.json {
+		expressions = {
+			event     = "event",
+			log_level = "level",
+			status    = "to_string(status)",
+		}
+	}
+
+	stage.regex {
+		source     = "event"
+		expression = "^(?P<safe_event>engine_worker_(pool_starting|starting|poll_failed|lease_failed|job_dispatch_failed|job_deferral_failed|metrics_update_failed|monitoring_start_failed|monitoring_stop_failed|monitoring_shutdown_timed_out|queue_metrics_collection_failed|queue_metrics_update_failed)|job_(execution_failed|permanent_failure|lease_connection_lost)|provider_job_execution_failed|unsupported_job_type_marked_dead|pr_risk_model_startup_failed|engine_readiness_failed)$"
+	}
+
+	stage.regex {
+		source     = "log_level"
+		expression = "^(?P<safe_level>error|warning|warn|ERROR|WARN)$"
+	}
+
+	// Spring Boot/Uvicorn plaintext: preserve only the severity, not the message.
+	stage.regex {
+		expression = "(^|[[:space:]])(?P<plain_level>WARN|ERROR)([[:space:]:]|$)"
+	}
+
+	stage.regex {
+		source     = "status"
+		expression = "^(?P<http_status>[45][0-9]{2})$"
+	}
+
+	// Initialize output first so a parsing/template failure cannot export raw text.
+	stage.template {
+		source   = "safe_line"
+		template = "DROP_UNSELECTED"
+	}
+
+	stage.template {
+		source   = "safe_line"
+		template = "{{ if or .safe_event .safe_level .plain_level .http_status }}level={{ if or (eq .safe_level \"error\") (eq .safe_level \"ERROR\") (eq .plain_level \"ERROR\") }}error{{ else if or .safe_level .plain_level .http_status }}warning{{ else }}info{{ end }} event={{ if .safe_event }}{{ .safe_event }}{{ else if .http_status }}http_request_failed status={{ .http_status }}{{ else }}application_warning_or_error{{ end }}{{ else }}DROP_UNSELECTED{{ end }}"
+	}
+
+	stage.output {
+		source = "safe_line"
+	}
+
+	stage.drop {
+		expression          = "^DROP_UNSELECTED$"
+		drop_counter_reason = "not_selected_operational_event"
+	}
+
+	stage.label_keep {
+		values = ["environment", "service"]
+	}
+
+	stage.limit {
+		rate          = 20
+		burst         = 100
+		drop          = true
+		by_label_name = "service"
+	}
+	// LOG_PIPELINE_STAGES_END
+}
+
 // Collector failures must be visible too; readiness alone does not prove delivery.
 prometheus.exporter.self "alloy" { }
 
@@ -136,7 +295,7 @@ prometheus.relabel "alloy_metrics" {
 
 	rule {
 		source_labels = ["__name__"]
-		regex         = "up|scrape_.*|process_resident_memory_bytes|process_cpu_seconds_total|prometheus_remote_storage_.*|prometheus_wal_.*"
+		regex         = "up|scrape_.*|process_resident_memory_bytes|process_cpu_seconds_total|prometheus_remote_storage_.*|prometheus_wal_.*|loki_.*"
 		action        = "keep"
 	}
 }

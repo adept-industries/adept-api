@@ -100,7 +100,8 @@ public class AccountMailService {
             helper.setText(resolvedTextBody, resolvedHtmlBody);
             mailSender.send(mimeMessage);
         } catch (MessagingException ex) {
-            log.warn("alert_html_mail_fallback recipient={} reason={}", recipient, ex.getMessage());
+            // Recipients and provider text can contain personal data or credentials.
+            log.warn("alert_html_mail_fallback failureType={}", ex.getClass().getSimpleName());
             send(recipient, subject, resolvedTextBody);
         }
     }

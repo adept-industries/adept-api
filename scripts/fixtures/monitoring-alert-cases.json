@@ -1,0 +1,589 @@
+{
+  "baseline": [
+    {
+      "series": "probe_success{environment=\"production\",job=\"adept-website\"}",
+      "values": "1+0x60"
+    },
+    {
+      "series": "probe_success{environment=\"production\",job=\"adept-api-readiness\"}",
+      "values": "1+0x60"
+    },
+    {
+      "series": "up{environment=\"production\",job=\"alloy\"}",
+      "values": "1+0x60"
+    },
+    {
+      "series": "up{environment=\"production\",job=\"adept-api\"}",
+      "values": "1+0x60"
+    },
+    {
+      "series": "up{environment=\"production\",job=\"adept-engine-worker\"}",
+      "values": "1+0x60"
+    },
+    {
+      "series": "up{environment=\"production\",job=\"node-exporter\"}",
+      "values": "1+0x60"
+    },
+    {
+      "series": "up{environment=\"production\",job=\"cadvisor\"}",
+      "values": "1+0x60"
+    },
+    {
+      "series": "adept_engine_worker_configured_threads{environment=\"production\",job=\"adept-engine-worker\"}",
+      "values": "2+0x60"
+    },
+    {
+      "series": "adept_engine_worker_thread_alive{environment=\"production\",job=\"adept-engine-worker\",thread_slot=\"1\"}",
+      "values": "1+0x60"
+    },
+    {
+      "series": "adept_engine_worker_thread_active{environment=\"production\",job=\"adept-engine-worker\",thread_slot=\"1\"}",
+      "values": "0+0x60"
+    },
+    {
+      "series": "adept_engine_worker_thread_last_successful_poll_timestamp_seconds{environment=\"production\",job=\"adept-engine-worker\",thread_slot=\"1\"}",
+      "values": "0+60x60"
+    },
+    {
+      "series": "adept_engine_worker_thread_active_job_duration_seconds{environment=\"production\",job=\"adept-engine-worker\",thread_slot=\"1\"}",
+      "values": "0+0x60"
+    },
+    {
+      "series": "adept_engine_worker_thread_alive{environment=\"production\",job=\"adept-engine-worker\",thread_slot=\"2\"}",
+      "values": "1+0x60"
+    },
+    {
+      "series": "adept_engine_worker_thread_active{environment=\"production\",job=\"adept-engine-worker\",thread_slot=\"2\"}",
+      "values": "0+0x60"
+    },
+    {
+      "series": "adept_engine_worker_thread_last_successful_poll_timestamp_seconds{environment=\"production\",job=\"adept-engine-worker\",thread_slot=\"2\"}",
+      "values": "0+60x60"
+    },
+    {
+      "series": "adept_engine_worker_thread_active_job_duration_seconds{environment=\"production\",job=\"adept-engine-worker\",thread_slot=\"2\"}",
+      "values": "0+0x60"
+    },
+    {
+      "series": "adept_engine_worker_queue_ready_jobs{environment=\"production\",job=\"adept-engine-worker\"}",
+      "values": "0+0x60"
+    },
+    {
+      "series": "adept_engine_worker_queue_oldest_ready_wait_seconds{environment=\"production\",job=\"adept-engine-worker\"}",
+      "values": "0+0x60"
+    },
+    {
+      "series": "adept_engine_worker_queue_running_jobs{environment=\"production\",job=\"adept-engine-worker\"}",
+      "values": "0+0x60"
+    },
+    {
+      "series": "adept_engine_worker_queue_dead_letter_jobs{environment=\"production\",job=\"adept-engine-worker\"}",
+      "values": "0+0x60"
+    },
+    {
+      "series": "adept_engine_worker_queue_collection_success{environment=\"production\",job=\"adept-engine-worker\"}",
+      "values": "1+0x60"
+    },
+    {
+      "series": "adept_engine_worker_queue_last_success_timestamp_seconds{environment=\"production\",job=\"adept-engine-worker\"}",
+      "values": "0+60x60"
+    },
+    {
+      "series": "adept_engine_worker_job_attempts_total{environment=\"production\",job=\"adept-engine-worker\",job_type=\"RECALCULATE_METRICS\",outcome=\"retry_scheduled\"}",
+      "values": "0+0x60"
+    },
+    {
+      "series": "adept_engine_worker_job_attempts_total{environment=\"production\",job=\"adept-engine-worker\",job_type=\"RECALCULATE_METRICS\",outcome=\"dead_lettered\"}",
+      "values": "0+0x60"
+    },
+    {
+      "series": "adept_engine_worker_stale_jobs_recovered_total{environment=\"production\",job=\"adept-engine-worker\",outcome=\"dead_lettered\"}",
+      "values": "0+0x60"
+    },
+    {
+      "series": "http_server_requests_seconds_count{environment=\"production\",job=\"adept-api\",status=\"200\",uri=\"/api/v1/example\"}",
+      "values": "0+10x60"
+    },
+    {
+      "series": "node_memory_MemAvailable_bytes{environment=\"production\",job=\"node-exporter\"}",
+      "values": "50+0x60"
+    },
+    {
+      "series": "node_memory_MemTotal_bytes{environment=\"production\",job=\"node-exporter\"}",
+      "values": "100+0x60"
+    },
+    {
+      "series": "node_filesystem_avail_bytes{environment=\"production\",job=\"node-exporter\",mountpoint=\"/\",fstype=\"ext4\"}",
+      "values": "80+0x60"
+    },
+    {
+      "series": "node_filesystem_size_bytes{environment=\"production\",job=\"node-exporter\",mountpoint=\"/\",fstype=\"ext4\"}",
+      "values": "100+0x60"
+    },
+    {
+      "series": "node_cpu_seconds_total{environment=\"production\",job=\"node-exporter\",mode=\"idle\",cpu=\"0\"}",
+      "values": "0+54x60"
+    },
+    {
+      "series": "node_memory_SwapTotal_bytes{environment=\"production\",job=\"node-exporter\"}",
+      "values": "20+0x60"
+    },
+    {
+      "series": "node_memory_SwapFree_bytes{environment=\"production\",job=\"node-exporter\"}",
+      "values": "20+0x60"
+    }
+  ],
+  "cases": [
+    {
+      "name": "Healthy two-thread worker, no failed requests and only future scheduled work",
+      "overrides": [],
+      "expected": {
+        "WebsiteDown": 0,
+        "ApiReadinessDown": 0,
+        "AlloyCollectorDown": 0,
+        "ApiMetricsMissing": 0,
+        "EngineWorkerCollectorDown": 0,
+        "HostMetricsMissing": 0,
+        "ContainerMetricsMissing": 0,
+        "WorkerThreadsDegraded": 0,
+        "WorkerPollingStalled": 0,
+        "WorkerLongRunningJob": 0,
+        "WorkerQueueSnapshotStale": 0,
+        "WorkerQueueDelayOverdue": 0,
+        "WorkerQueueBacklog": 0,
+        "WorkerNewDeadLetters": 0,
+        "WorkerRepeatedFailures": 0,
+        "ApiHigh5xxErrorRate": 0,
+        "HostDiskSpaceLow": 0,
+        "HostMemoryPressure": 0,
+        "HostCpuPressure": 0,
+        "HostSwapPressure": 0
+      }
+    },
+    {
+      "name": "No samples must not look like recovery",
+      "overrides": [],
+      "expected": {
+        "WebsiteDown": 1,
+        "ApiReadinessDown": 1,
+        "AlloyCollectorDown": 1,
+        "ApiMetricsMissing": 1,
+        "EngineWorkerCollectorDown": 1,
+        "HostMetricsMissing": 1,
+        "ContainerMetricsMissing": 1,
+        "WorkerThreadsDegraded": 1,
+        "WorkerPollingStalled": 1,
+        "WorkerLongRunningJob": 1,
+        "WorkerQueueSnapshotStale": 1,
+        "WorkerQueueDelayOverdue": 1,
+        "WorkerQueueBacklog": 1,
+        "WorkerNewDeadLetters": 1,
+        "WorkerRepeatedFailures": 1,
+        "ApiHigh5xxErrorRate": 1,
+        "HostDiskSpaceLow": 1,
+        "HostMemoryPressure": 1,
+        "HostCpuPressure": 1,
+        "HostSwapPressure": 1
+      },
+      "omit": ".*"
+    },
+    {
+      "name": "All conditions breached",
+      "overrides": [
+        {
+          "series": "probe_success{environment=\"production\",job=\"adept-website\"}",
+          "values": "0+0x60"
+        },
+        {
+          "series": "probe_success{environment=\"production\",job=\"adept-api-readiness\"}",
+          "values": "0+0x60"
+        },
+        {
+          "series": "up{environment=\"production\",job=\"alloy\"}",
+          "values": "0+0x60"
+        },
+        {
+          "series": "up{environment=\"production\",job=\"adept-api\"}",
+          "values": "0+0x60"
+        },
+        {
+          "series": "up{environment=\"production\",job=\"adept-engine-worker\"}",
+          "values": "0+0x60"
+        },
+        {
+          "series": "up{environment=\"production\",job=\"node-exporter\"}",
+          "values": "0+0x60"
+        },
+        {
+          "series": "up{environment=\"production\",job=\"cadvisor\"}",
+          "values": "0+0x60"
+        },
+        {
+          "series": "adept_engine_worker_thread_alive{environment=\"production\",job=\"adept-engine-worker\",thread_slot=\"1\"}",
+          "values": "0+0x60"
+        },
+        {
+          "series": "adept_engine_worker_thread_alive{environment=\"production\",job=\"adept-engine-worker\",thread_slot=\"2\"}",
+          "values": "0+0x60"
+        },
+        {
+          "series": "adept_engine_worker_thread_last_successful_poll_timestamp_seconds{environment=\"production\",job=\"adept-engine-worker\",thread_slot=\"1\"}",
+          "values": "0+0x60"
+        },
+        {
+          "series": "adept_engine_worker_thread_last_successful_poll_timestamp_seconds{environment=\"production\",job=\"adept-engine-worker\",thread_slot=\"2\"}",
+          "values": "0+0x60"
+        },
+        {
+          "series": "adept_engine_worker_thread_active_job_duration_seconds{environment=\"production\",job=\"adept-engine-worker\",thread_slot=\"1\"}",
+          "values": "2000+0x60"
+        },
+        {
+          "series": "adept_engine_worker_queue_collection_success{environment=\"production\",job=\"adept-engine-worker\"}",
+          "values": "0+0x60"
+        },
+        {
+          "series": "adept_engine_worker_queue_last_success_timestamp_seconds{environment=\"production\",job=\"adept-engine-worker\"}",
+          "values": "0+0x60"
+        },
+        {
+          "series": "adept_engine_worker_queue_ready_jobs{environment=\"production\",job=\"adept-engine-worker\"}",
+          "values": "150+0x60"
+        },
+        {
+          "series": "adept_engine_worker_queue_oldest_ready_wait_seconds{environment=\"production\",job=\"adept-engine-worker\"}",
+          "values": "900+0x60"
+        },
+        {
+          "series": "adept_engine_worker_job_attempts_total{environment=\"production\",job=\"adept-engine-worker\",job_type=\"RECALCULATE_METRICS\",outcome=\"retry_scheduled\"}",
+          "values": "0+2x60"
+        },
+        {
+          "series": "adept_engine_worker_job_attempts_total{environment=\"production\",job=\"adept-engine-worker\",job_type=\"RECALCULATE_METRICS\",outcome=\"dead_lettered\"}",
+          "values": "0+1x60"
+        },
+        {
+          "series": "node_memory_MemAvailable_bytes{environment=\"production\",job=\"node-exporter\"}",
+          "values": "5+0x60"
+        },
+        {
+          "series": "node_filesystem_avail_bytes{environment=\"production\",job=\"node-exporter\",mountpoint=\"/\",fstype=\"ext4\"}",
+          "values": "10+0x60"
+        },
+        {
+          "series": "node_cpu_seconds_total{environment=\"production\",job=\"node-exporter\",mode=\"idle\",cpu=\"0\"}",
+          "values": "0+3x60"
+        },
+        {
+          "series": "node_memory_SwapFree_bytes{environment=\"production\",job=\"node-exporter\"}",
+          "values": "1+0x60"
+        }
+      ],
+      "expected": {
+        "WebsiteDown": 1,
+        "ApiReadinessDown": 1,
+        "AlloyCollectorDown": 1,
+        "ApiMetricsMissing": 1,
+        "EngineWorkerCollectorDown": 1,
+        "HostMetricsMissing": 1,
+        "ContainerMetricsMissing": 1,
+        "WorkerThreadsDegraded": 1,
+        "WorkerPollingStalled": 1,
+        "WorkerLongRunningJob": 1,
+        "WorkerQueueSnapshotStale": 1,
+        "WorkerQueueDelayOverdue": 1,
+        "WorkerQueueBacklog": 1,
+        "WorkerNewDeadLetters": 1,
+        "WorkerRepeatedFailures": 1,
+        "ApiHigh5xxErrorRate": 1,
+        "HostDiskSpaceLow": 1,
+        "HostMemoryPressure": 1,
+        "HostCpuPressure": 1,
+        "HostSwapPressure": 1
+      }
+    },
+    {
+      "name": "One-thread configuration is healthy",
+      "overrides": [
+        {
+          "series": "adept_engine_worker_configured_threads{environment=\"production\",job=\"adept-engine-worker\"}",
+          "values": "1+0x60"
+        }
+      ],
+      "expected": {
+        "WebsiteDown": 0,
+        "ApiReadinessDown": 0,
+        "AlloyCollectorDown": 0,
+        "ApiMetricsMissing": 0,
+        "EngineWorkerCollectorDown": 0,
+        "HostMetricsMissing": 0,
+        "ContainerMetricsMissing": 0,
+        "WorkerThreadsDegraded": 0,
+        "WorkerPollingStalled": 0,
+        "WorkerLongRunningJob": 0,
+        "WorkerQueueSnapshotStale": 0,
+        "WorkerQueueDelayOverdue": 0,
+        "WorkerQueueBacklog": 0,
+        "WorkerNewDeadLetters": 0,
+        "WorkerRepeatedFailures": 0,
+        "ApiHigh5xxErrorRate": 0,
+        "HostDiskSpaceLow": 0,
+        "HostMemoryPressure": 0,
+        "HostCpuPressure": 0,
+        "HostSwapPressure": 0
+      },
+      "omit": "thread_slot=\"2\""
+    },
+    {
+      "name": "A missing thread series is unhealthy",
+      "overrides": [],
+      "expected": {
+        "WorkerThreadsDegraded": 1
+      },
+      "omit": "thread_slot=\"2\""
+    },
+    {
+      "name": "Both threads stopped is unhealthy",
+      "overrides": [
+        {
+          "series": "adept_engine_worker_thread_alive{environment=\"production\",job=\"adept-engine-worker\",thread_slot=\"1\"}",
+          "values": "0+0x60"
+        },
+        {
+          "series": "adept_engine_worker_thread_alive{environment=\"production\",job=\"adept-engine-worker\",thread_slot=\"2\"}",
+          "values": "0+0x60"
+        }
+      ],
+      "expected": {
+        "WorkerThreadsDegraded": 1
+      }
+    },
+    {
+      "name": "One idle thread stalls even while its peer polls",
+      "overrides": [
+        {
+          "series": "adept_engine_worker_thread_last_successful_poll_timestamp_seconds{environment=\"production\",job=\"adept-engine-worker\",thread_slot=\"2\"}",
+          "values": "0+0x60"
+        }
+      ],
+      "expected": {
+        "WorkerPollingStalled": 1
+      }
+    },
+    {
+      "name": "A busy thread's old poll is not a failure",
+      "overrides": [
+        {
+          "series": "adept_engine_worker_thread_last_successful_poll_timestamp_seconds{environment=\"production\",job=\"adept-engine-worker\",thread_slot=\"2\"}",
+          "values": "0+0x60"
+        },
+        {
+          "series": "adept_engine_worker_thread_active{environment=\"production\",job=\"adept-engine-worker\",thread_slot=\"2\"}",
+          "values": "1+0x60"
+        },
+        {
+          "series": "adept_engine_worker_thread_active_job_duration_seconds{environment=\"production\",job=\"adept-engine-worker\",thread_slot=\"2\"}",
+          "values": "1200+0x60"
+        }
+      ],
+      "expected": {
+        "WorkerPollingStalled": 0,
+        "WorkerLongRunningJob": 0,
+        "WorkerThreadsDegraded": 0
+      }
+    },
+    {
+      "name": "Queue collection failure cannot masquerade as an empty healthy queue",
+      "overrides": [
+        {
+          "series": "adept_engine_worker_queue_collection_success{environment=\"production\",job=\"adept-engine-worker\"}",
+          "values": "0+0x60"
+        },
+        {
+          "series": "adept_engine_worker_queue_last_success_timestamp_seconds{environment=\"production\",job=\"adept-engine-worker\"}",
+          "values": "0+0x60"
+        },
+        {
+          "series": "adept_engine_worker_queue_ready_jobs{environment=\"production\",job=\"adept-engine-worker\"}",
+          "values": "NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN"
+        },
+        {
+          "series": "adept_engine_worker_queue_oldest_ready_wait_seconds{environment=\"production\",job=\"adept-engine-worker\"}",
+          "values": "NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN"
+        }
+      ],
+      "expected": {
+        "WorkerQueueSnapshotStale": 1,
+        "WorkerQueueBacklog": 0,
+        "WorkerQueueDelayOverdue": 0
+      }
+    },
+    {
+      "name": "Frozen queue snapshot detected even when success gauge remains one",
+      "overrides": [
+        {
+          "series": "adept_engine_worker_queue_last_success_timestamp_seconds{environment=\"production\",job=\"adept-engine-worker\"}",
+          "values": "0+0x60"
+        }
+      ],
+      "expected": {
+        "WorkerQueueSnapshotStale": 1
+      }
+    },
+    {
+      "name": "No requests and no error series is healthy",
+      "overrides": [
+        {
+          "series": "http_server_requests_seconds_count{environment=\"production\",job=\"adept-api\",status=\"200\",uri=\"/api/v1/example\"}",
+          "values": "0+0x60"
+        }
+      ],
+      "expected": {
+        "ApiHigh5xxErrorRate": 0
+      }
+    },
+    {
+      "name": "Real API failures exceed the threshold",
+      "overrides": [
+        {
+          "series": "http_server_requests_seconds_count{environment=\"production\",job=\"adept-api\",status=\"500\",uri=\"/api/v1/example\"}",
+          "values": "0+2x60"
+        }
+      ],
+      "expected": {
+        "ApiHigh5xxErrorRate": 1
+      }
+    },
+    {
+      "name": "New dead letter detected after a zero baseline",
+      "overrides": [
+        {
+          "series": "adept_engine_worker_job_attempts_total{environment=\"production\",job=\"adept-engine-worker\",job_type=\"RECALCULATE_METRICS\",outcome=\"dead_lettered\"}",
+          "values": "0+0x9 1+0x50"
+        }
+      ],
+      "expected": {
+        "WorkerNewDeadLetters": 1
+      },
+      "eval_time": "12m"
+    },
+    {
+      "name": "Dead letter from stale lease recovery also detected",
+      "overrides": [
+        {
+          "series": "adept_engine_worker_stale_jobs_recovered_total{environment=\"production\",job=\"adept-engine-worker\",outcome=\"dead_lettered\"}",
+          "values": "0+0x9 1+0x50"
+        }
+      ],
+      "expected": {
+        "WorkerNewDeadLetters": 1
+      },
+      "eval_time": "12m"
+    },
+    {
+      "name": "Existing historical dead letters do not cause new-event alerts",
+      "overrides": [
+        {
+          "series": "adept_engine_worker_queue_dead_letter_jobs{environment=\"production\",job=\"adept-engine-worker\"}",
+          "values": "20+0x60"
+        }
+      ],
+      "expected": {
+        "WorkerNewDeadLetters": 0
+      }
+    },
+    {
+      "name": "Counter reset alone is not a new failure",
+      "overrides": [
+        {
+          "series": "adept_engine_worker_job_attempts_total{environment=\"production\",job=\"adept-engine-worker\",job_type=\"RECALCULATE_METRICS\",outcome=\"dead_lettered\"}",
+          "values": "8+0x9 0+0x50"
+        },
+        {
+          "series": "adept_engine_worker_job_attempts_total{environment=\"production\",job=\"adept-engine-worker\",job_type=\"RECALCULATE_METRICS\",outcome=\"retry_scheduled\"}",
+          "values": "8+0x9 0+0x50"
+        }
+      ],
+      "expected": {
+        "WorkerNewDeadLetters": 0,
+        "WorkerRepeatedFailures": 0
+      },
+      "eval_time": "12m"
+    },
+    {
+      "name": "Busy scope and continuation deferrals are not failed attempts",
+      "overrides": [
+        {
+          "series": "adept_engine_worker_job_deferrals_total{environment=\"production\",job=\"adept-engine-worker\",job_type=\"RECALCULATE_METRICS\",reason=\"scope_busy\"}",
+          "values": "0+10x60"
+        }
+      ],
+      "expected": {
+        "WorkerRepeatedFailures": 0,
+        "WorkerNewDeadLetters": 0
+      }
+    },
+    {
+      "name": "Transient outage stays pending",
+      "overrides": [
+        {
+          "series": "probe_success{environment=\"production\",job=\"adept-website\"}",
+          "values": "1+0x18 0+0x40"
+        }
+      ],
+      "expected": {
+        "WebsiteDown": 1
+      },
+      "alerts": {
+        "WebsiteDown": false
+      }
+    },
+    {
+      "name": "Sustained outage fires and then recovers",
+      "overrides": [
+        {
+          "series": "probe_success{environment=\"production\",job=\"adept-website\"}",
+          "values": "0+0x8 1+0x51"
+        }
+      ],
+      "expected": {
+        "WebsiteDown": 0
+      },
+      "extra_alert_checks": [
+        {
+          "alert": "WebsiteDown",
+          "at": "5m",
+          "firing": true
+        }
+      ]
+    },
+    {
+      "name": "Stopped collector's stale marker is detected",
+      "overrides": [
+        {
+          "series": "up{environment=\"production\",job=\"alloy\"}",
+          "values": "1+0x5 stale"
+        }
+      ],
+      "expected": {
+        "AlloyCollectorDown": 1
+      }
+    },
+    {
+      "name": "A host with no swap configured is healthy",
+      "overrides": [
+        {
+          "series": "node_memory_SwapTotal_bytes{environment=\"production\",job=\"node-exporter\"}",
+          "values": "0+0x60"
+        },
+        {
+          "series": "node_memory_SwapFree_bytes{environment=\"production\",job=\"node-exporter\"}",
+          "values": "0+0x60"
+        }
+      ],
+      "expected": {
+        "HostSwapPressure": 0
+      }
+    }
+  ]
+}

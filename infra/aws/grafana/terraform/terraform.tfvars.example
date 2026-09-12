@@ -1,0 +1,11 @@
+# Copy to a private location or terraform.tfvars (ignored here).
+# Export TF_VAR_grafana_auth instead of storing the service-account token.
+grafana_url                  = "https://your-stack.grafana.net"
+prometheus_datasource_uid    = "replace-with-prometheus-datasource-uid"
+notification_emails          = ["owner@example.com"]
+environment                  = "production"
+website_probe_job            = "adept-website"
+api_probe_job                = "adept-api-readiness"
+alerts_paused                = true
+notification_test_enabled    = false
+notification_test_firing     = false

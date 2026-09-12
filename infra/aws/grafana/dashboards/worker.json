@@ -1,0 +1,251 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {"type": "grafana", "uid": "-- Grafana --"},
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "Adept Engine worker thread, queue, durable outcome and processing signals. A reachable metrics endpoint alone is not treated as worker health, and an empty ready queue is healthy idle behavior.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": {"type": "prometheus", "uid": "${metrics}"},
+      "description": "Only proves the private /metrics endpoint was scraped. Use thread liveness, polling and queue freshness panels to judge worker health.",
+      "fieldConfig": {
+        "defaults": {"color": {"mode": "thresholds"}, "mappings": [{"options": {"0": {"color": "red", "index": 0, "text": "MISSING"}, "1": {"color": "green", "index": 1, "text": "REACHABLE"}}, "type": "value"}], "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}, "unit": "short"},
+        "overrides": []
+      },
+      "gridPos": {"h": 4, "w": 5, "x": 0, "y": 0},
+      "id": 1,
+      "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true},
+      "targets": [{"editorMode": "code", "expr": "max(up{environment=~\"$environment\",job=\"adept-engine-worker\"})", "legendFormat": "endpoint", "instant": true, "range": false, "refId": "A"}],
+      "title": "Metrics endpoint",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${metrics}"},
+      "description": "ENGINE_WORKER_THREADS, supported values 1 or 2.",
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "mappings": [], "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]}, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 4, "w": 4, "x": 5, "y": 0},
+      "id": 2,
+      "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true},
+      "targets": [{"editorMode": "code", "expr": "max(adept_engine_worker_configured_threads{environment=~\"$environment\",job=\"adept-engine-worker\"})", "legendFormat": "configured", "instant": true, "range": false, "refId": "A"}],
+      "title": "Configured threads",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${metrics}"},
+      "description": "Must equal the configured thread count outside startup and shutdown grace periods.",
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "mappings": [], "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 4, "w": 5, "x": 9, "y": 0},
+      "id": 3,
+      "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true},
+      "targets": [{"editorMode": "code", "expr": "sum(adept_engine_worker_thread_alive{environment=~\"$environment\",job=\"adept-engine-worker\"})", "legendFormat": "alive", "instant": true, "range": false, "refId": "A"}],
+      "title": "Live threads",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${metrics}"},
+      "description": "Zero is normal when no jobs are ready. Active plus idle state is shown per stable thread slot below.",
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "mappings": [], "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "blue", "value": 1}]}, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 4, "w": 5, "x": 14, "y": 0},
+      "id": 4,
+      "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true},
+      "targets": [{"editorMode": "code", "expr": "sum(adept_engine_worker_thread_active{environment=~\"$environment\",job=\"adept-engine-worker\"})", "legendFormat": "active", "instant": true, "range": false, "refId": "A"}],
+      "title": "Active threads",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${metrics}"},
+      "description": "Set before graceful SIGTERM/SIGINT shutdown. A requested shutdown is not a healthy running state, but avoids noisy thread alerts during a normal stop.",
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "mappings": [{"options": {"0": {"color": "green", "index": 0, "text": "RUNNING"}, "1": {"color": "blue", "index": 1, "text": "STOPPING"}}, "type": "value"}], "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "blue", "value": 1}]}, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 4, "w": 5, "x": 19, "y": 0},
+      "id": 5,
+      "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true},
+      "targets": [{"editorMode": "code", "expr": "max(adept_engine_worker_shutdown_requested{environment=~\"$environment\",job=\"adept-engine-worker\"})", "legendFormat": "state", "instant": true, "range": false, "refId": "A"}],
+      "title": "Worker process state",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${metrics}"},
+      "description": "Stable slot labels are bounded (1 or 2). Alive=1 may coexist with active=0 during healthy idle periods.",
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"axisCenteredZero": false, "axisColorMode": "text", "axisLabel": "", "axisPlacement": "auto", "barAlignment": 0, "drawStyle": "line", "fillOpacity": 20, "gradientMode": "none", "hideFrom": {"legend": false, "tooltip": false, "viz": false}, "lineInterpolation": "stepAfter", "lineWidth": 1, "pointSize": 5, "scaleDistribution": {"type": "linear"}, "showPoints": "never", "spanNulls": false, "stacking": {"group": "A", "mode": "none"}, "thresholdsStyle": {"mode": "off"}}, "mappings": [], "max": 1, "min": 0, "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 7, "w": 12, "x": 0, "y": 4},
+      "id": 6,
+      "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "right", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"editorMode": "code", "expr": "adept_engine_worker_thread_alive{environment=~\"$environment\",job=\"adept-engine-worker\"}", "legendFormat": "slot {{thread_slot}} alive", "range": true, "refId": "A"},
+        {"editorMode": "code", "expr": "adept_engine_worker_thread_active{environment=~\"$environment\",job=\"adept-engine-worker\"}", "legendFormat": "slot {{thread_slot}} active", "range": true, "refId": "B"}
+      ],
+      "title": "Thread state",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${metrics}"},
+      "description": "Age since each slot last completed a successful poll. An active long-running job is evaluated separately from idle polling.",
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"axisCenteredZero": false, "axisColorMode": "text", "axisLabel": "", "axisPlacement": "auto", "barAlignment": 0, "drawStyle": "line", "fillOpacity": 10, "gradientMode": "none", "hideFrom": {"legend": false, "tooltip": false, "viz": false}, "lineInterpolation": "linear", "lineWidth": 1, "pointSize": 5, "scaleDistribution": {"type": "linear"}, "showPoints": "never", "spanNulls": false, "stacking": {"group": "A", "mode": "none"}, "thresholdsStyle": {"mode": "off"}}, "mappings": [], "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 180}]}, "unit": "s"}, "overrides": []},
+      "gridPos": {"h": 7, "w": 12, "x": 12, "y": 4},
+      "id": 7,
+      "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "right", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"editorMode": "code", "expr": "clamp_min(time() - adept_engine_worker_thread_last_successful_poll_timestamp_seconds{environment=~\"$environment\",job=\"adept-engine-worker\"}, 0)", "legendFormat": "slot {{thread_slot}}", "range": true, "refId": "A"}],
+      "title": "Last successful poll age",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${metrics}"},
+      "description": "Current in-flight duration per slot. Zero while idle; no job UUID or tenant label is exported.",
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"axisCenteredZero": false, "axisColorMode": "text", "axisLabel": "", "axisPlacement": "auto", "barAlignment": 0, "drawStyle": "line", "fillOpacity": 10, "gradientMode": "none", "hideFrom": {"legend": false, "tooltip": false, "viz": false}, "lineInterpolation": "linear", "lineWidth": 1, "pointSize": 5, "scaleDistribution": {"type": "linear"}, "showPoints": "never", "spanNulls": false, "stacking": {"group": "A", "mode": "none"}, "thresholdsStyle": {"mode": "off"}}, "mappings": [], "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1800}]}, "unit": "s"}, "overrides": []},
+      "gridPos": {"h": 7, "w": 24, "x": 0, "y": 11},
+      "id": 8,
+      "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "right", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"editorMode": "code", "expr": "adept_engine_worker_thread_active_job_duration_seconds{environment=~\"$environment\",job=\"adept-engine-worker\"}", "legendFormat": "slot {{thread_slot}}", "range": true, "refId": "A"}],
+      "title": "Active job duration",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${metrics}"},
+      "description": "Ready now and eligible for another attempt. Future-scheduled and attempt-exhausted jobs are excluded by the worker's queue query. Zero is healthy idle.",
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "mappings": [], "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "orange", "value": 10}]}, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 4, "w": 4, "x": 0, "y": 18},
+      "id": 9,
+      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true},
+      "targets": [{"editorMode": "code", "expr": "max(adept_engine_worker_queue_ready_jobs{environment=~\"$environment\",job=\"adept-engine-worker\"})", "legendFormat": "ready", "instant": true, "range": false, "refId": "A"}],
+      "title": "Ready jobs",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${metrics}"},
+      "description": "Waiting time of the oldest job that is ready now. Scheduled-future jobs do not contribute.",
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "mappings": [], "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "orange", "value": 300}, {"color": "red", "value": 900}]}, "unit": "s"}, "overrides": []},
+      "gridPos": {"h": 4, "w": 5, "x": 4, "y": 18},
+      "id": 10,
+      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true},
+      "targets": [{"editorMode": "code", "expr": "max(adept_engine_worker_queue_oldest_ready_wait_seconds{environment=~\"$environment\",job=\"adept-engine-worker\"})", "legendFormat": "oldest", "instant": true, "range": false, "refId": "A"}],
+      "title": "Oldest ready wait",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${metrics}"},
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "mappings": [], "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "blue", "value": 1}]}, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 4, "w": 4, "x": 9, "y": 18},
+      "id": 11,
+      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true},
+      "targets": [{"editorMode": "code", "expr": "max(adept_engine_worker_queue_running_jobs{environment=~\"$environment\",job=\"adept-engine-worker\"})", "legendFormat": "running", "instant": true, "range": false, "refId": "A"}],
+      "title": "Running jobs",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${metrics}"},
+      "description": "Durable attempt-exhausted jobs. This gauge survives a worker restart, unlike process counters.",
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "mappings": [], "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]}, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 4, "w": 5, "x": 13, "y": 18},
+      "id": 12,
+      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true},
+      "targets": [{"editorMode": "code", "expr": "max(adept_engine_worker_queue_dead_letter_jobs{environment=~\"$environment\",job=\"adept-engine-worker\"})", "legendFormat": "dead-letter", "instant": true, "range": false, "refId": "A"}],
+      "title": "Dead-letter jobs",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${metrics}"},
+      "description": "A failed queue query leaves the prior queue values in place. Treat success=0 or stale age as unknown queue health, never as an empty queue.",
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "mappings": [{"options": {"0": {"color": "red", "index": 0, "text": "FAILED"}, "1": {"color": "green", "index": 1, "text": "FRESH"}}, "type": "value"}], "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 18},
+      "id": 13,
+      "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true},
+      "targets": [
+        {"editorMode": "code", "expr": "max(adept_engine_worker_queue_collection_success{environment=~\"$environment\",job=\"adept-engine-worker\"})", "legendFormat": "collection", "range": true, "refId": "A"},
+        {"editorMode": "code", "expr": "clamp_min(time() - max(adept_engine_worker_queue_last_success_timestamp_seconds{environment=~\"$environment\",job=\"adept-engine-worker\"}), 0)", "legendFormat": "age seconds", "range": true, "refId": "B"}
+      ],
+      "title": "Queue snapshot health",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${metrics}"},
+      "description": "Attempt outcomes are durable transitions: succeeded, retry_scheduled or dead_lettered. Counters restart with the process.",
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"axisCenteredZero": false, "axisColorMode": "text", "axisLabel": "", "axisPlacement": "auto", "barAlignment": 0, "drawStyle": "line", "fillOpacity": 10, "gradientMode": "none", "hideFrom": {"legend": false, "tooltip": false, "viz": false}, "lineInterpolation": "linear", "lineWidth": 1, "pointSize": 5, "scaleDistribution": {"type": "linear"}, "showPoints": "never", "spanNulls": false, "stacking": {"group": "A", "mode": "none"}, "thresholdsStyle": {"mode": "off"}}, "mappings": [], "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]}, "unit": "ops"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 22},
+      "id": 14,
+      "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "right", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"editorMode": "code", "expr": "60 * sum by (job_type, outcome) (rate(adept_engine_worker_job_attempts_total{environment=~\"$environment\",job=\"adept-engine-worker\"}[5m]))", "legendFormat": "{{job_type}} / {{outcome}}", "range": true, "refId": "A"}],
+      "title": "Job attempt outcomes per minute",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${metrics}"},
+      "description": "95th percentile for completed processing observations. No series while idle is normal.",
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"axisCenteredZero": false, "axisColorMode": "text", "axisLabel": "", "axisPlacement": "auto", "barAlignment": 0, "drawStyle": "line", "fillOpacity": 10, "gradientMode": "none", "hideFrom": {"legend": false, "tooltip": false, "viz": false}, "lineInterpolation": "linear", "lineWidth": 1, "pointSize": 5, "scaleDistribution": {"type": "linear"}, "showPoints": "never", "spanNulls": false, "stacking": {"group": "A", "mode": "none"}, "thresholdsStyle": {"mode": "off"}}, "mappings": [], "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]}, "unit": "s"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 22},
+      "id": 15,
+      "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "right", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"editorMode": "code", "expr": "histogram_quantile(0.95, sum by (job_type, outcome, le) (rate(adept_engine_worker_job_processing_duration_seconds_bucket{environment=~\"$environment\",job=\"adept-engine-worker\"}[5m])))", "legendFormat": "{{job_type}} / {{outcome}}", "range": true, "refId": "A"}],
+      "title": "Job processing duration p95",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${metrics}"},
+      "description": "Scope-busy, continuation/pagination and shutdown deferrals are intentionally separate from job failures.",
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"axisCenteredZero": false, "axisColorMode": "text", "axisLabel": "", "axisPlacement": "auto", "barAlignment": 0, "drawStyle": "line", "fillOpacity": 10, "gradientMode": "none", "hideFrom": {"legend": false, "tooltip": false, "viz": false}, "lineInterpolation": "linear", "lineWidth": 1, "pointSize": 5, "scaleDistribution": {"type": "linear"}, "showPoints": "never", "spanNulls": false, "stacking": {"group": "A", "mode": "none"}, "thresholdsStyle": {"mode": "off"}}, "mappings": [], "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]}, "unit": "ops"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 30},
+      "id": 16,
+      "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "right", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"editorMode": "code", "expr": "60 * sum by (job_type, reason) (rate(adept_engine_worker_job_deferrals_total{environment=~\"$environment\",job=\"adept-engine-worker\"}[5m]))", "legendFormat": "{{job_type}} / {{reason}}", "range": true, "refId": "A"}],
+      "title": "Deferrals per minute (not failures)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${metrics}"},
+      "description": "Poll/DB, queue collection, job-operation and lease failures. Each exported label is bounded by the worker contract.",
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"axisCenteredZero": false, "axisColorMode": "text", "axisLabel": "", "axisPlacement": "auto", "barAlignment": 0, "drawStyle": "line", "fillOpacity": 10, "gradientMode": "none", "hideFrom": {"legend": false, "tooltip": false, "viz": false}, "lineInterpolation": "linear", "lineWidth": 1, "pointSize": 5, "scaleDistribution": {"type": "linear"}, "showPoints": "never", "spanNulls": false, "stacking": {"group": "A", "mode": "none"}, "thresholdsStyle": {"mode": "off"}}, "mappings": [], "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]}, "unit": "ops"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 30},
+      "id": 17,
+      "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "right", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"editorMode": "code", "expr": "60 * sum by (thread_slot) (rate(adept_engine_worker_poll_errors_total{environment=~\"$environment\",job=\"adept-engine-worker\"}[5m]))", "legendFormat": "poll / slot {{thread_slot}}", "range": true, "refId": "A"},
+        {"editorMode": "code", "expr": "60 * rate(adept_engine_worker_queue_collection_errors_total{environment=~\"$environment\",job=\"adept-engine-worker\"}[5m])", "legendFormat": "queue collection", "range": true, "refId": "B"},
+        {"editorMode": "code", "expr": "60 * sum by (job_type, operation) (rate(adept_engine_worker_job_operation_errors_total{environment=~\"$environment\",job=\"adept-engine-worker\"}[5m]))", "legendFormat": "{{job_type}} / {{operation}}", "range": true, "refId": "C"},
+        {"editorMode": "code", "expr": "60 * sum by (thread_slot, phase) (rate(adept_engine_worker_lease_failures_total{environment=~\"$environment\",job=\"adept-engine-worker\"}[5m]))", "legendFormat": "lease {{phase}} / slot {{thread_slot}}", "range": true, "refId": "D"}
+      ],
+      "title": "Worker errors per minute",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "loki", "uid": "${logs}"},
+      "description": "Redacted worker logs. Stream labels are restricted to service and environment; job, tenant and owner IDs are not labels.",
+      "gridPos": {"h": 10, "w": 24, "x": 0, "y": 38},
+      "id": 18,
+      "options": {"dedupStrategy": "none", "enableLogDetails": true, "prettifyLogMessage": false, "showCommonLabels": false, "showLabels": false, "showTime": true, "sortOrder": "Descending", "wrapLogMessage": true},
+      "targets": [{"editorMode": "code", "expr": "{environment=~\"$environment\",service=\"engine-worker\"}", "queryType": "range", "refId": "A"}],
+      "title": "Worker operational logs",
+      "type": "logs"
+    }
+  ],
+  "refresh": "1m",
+  "schemaVersion": 41,
+  "tags": ["adept", "worker", "queue", "monitoring"],
+  "templating": {
+    "list": [
+      {"current": {}, "hide": 0, "includeAll": false, "label": "Metrics datasource", "multi": false, "name": "metrics", "options": [], "query": "prometheus", "refresh": 1, "regex": "", "skipUrlSync": false, "type": "datasource"},
+      {"current": {}, "hide": 0, "includeAll": false, "label": "Logs datasource", "multi": false, "name": "logs", "options": [], "query": "loki", "refresh": 1, "regex": "", "skipUrlSync": false, "type": "datasource"},
+      {"current": {"selected": true, "text": "production", "value": "production"}, "datasource": {"type": "prometheus", "uid": "${metrics}"}, "definition": "label_values(up, environment)", "hide": 0, "includeAll": false, "label": "Environment", "multi": false, "name": "environment", "options": [], "query": {"query": "label_values(up, environment)", "refId": "PrometheusVariableQueryEditor-VariableQuery"}, "refresh": 1, "regex": "", "skipUrlSync": false, "sort": 1, "type": "query"}
+    ]
+  },
+  "time": {"from": "now-6h", "to": "now"},
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Adept / Worker and Queue",
+  "uid": "adept-worker-queue",
+  "version": 1,
+  "weekStart": ""
+}

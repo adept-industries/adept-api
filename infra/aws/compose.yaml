@@ -130,8 +130,12 @@ services:
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}"
       ENGINE_POLL_INTERVAL_MS: "${ENGINE_POLL_INTERVAL_MS:-1000}"
       ENGINE_WORKER_ID: "${ENGINE_WORKER_ID:?Set ENGINE_WORKER_ID}"
+      ENGINE_WORKER_THREADS: "${ENGINE_WORKER_THREADS:-2}"
       ENGINE_MAX_JOB_ATTEMPTS: "${ENGINE_MAX_JOB_ATTEMPTS:-8}"
       ENGINE_JOB_LOCK_TIMEOUT_SECONDS: "${ENGINE_JOB_LOCK_TIMEOUT_SECONDS:-900}"
+      ENGINE_METRICS_BIND_ADDRESS: "0.0.0.0"
+      ENGINE_METRICS_PORT: "8001"
+      ENGINE_QUEUE_METRICS_INTERVAL_SECONDS: "${ENGINE_QUEUE_METRICS_INTERVAL_SECONDS:-60}"
       GITHUB_APP_ID: "${GITHUB_APP_ID:-}"
       GITHUB_APP_PRIVATE_KEY_BASE64: "${GITHUB_APP_PRIVATE_KEY_BASE64:-}"
       JIRA_CLIENT_ID: "${JIRA_CLIENT_ID:-}"
@@ -139,6 +143,9 @@ services:
       APP_INTEGRATION_ENCRYPTION_ACTIVE_KEY_VERSION: "${APP_INTEGRATION_ENCRYPTION_ACTIVE_KEY_VERSION:-1}"
       APP_INTEGRATION_ENCRYPTION_KEY_V1_BASE64: "${APP_INTEGRATION_ENCRYPTION_KEY_V1_BASE64:?Set APP_INTEGRATION_ENCRYPTION_KEY_V1_BASE64}"
       APP_FRONTEND_BASE_URL: "https://${ADEPT_DOMAIN:?Set ADEPT_DOMAIN}"
+    expose:
+      # Worker metrics stay private to the adept bridge network.
+      - "8001"
     networks: [adept]
     logging: *default-logging
 
@@ -184,10 +191,10 @@ services:
     logging: *default-logging
 
   # ---------------------------------------------------------------------------
-  # Grafana Alloy — metrics collector (opt-in, requires --profile monitoring)
+  # Grafana Alloy — metrics and log collector (opt-in monitoring profile)
   # ---------------------------------------------------------------------------
-  # Alloy collects host, container, and API metrics and ships them to Grafana
-  # Cloud. It is intentionally outside the default profile so that:
+  # Alloy collects bounded metrics and selected service logs and ships them to
+  # Grafana Cloud. It is intentionally outside the default profile so that:
   #   - Existing 'docker compose up' commands are unaffected.
   #   - CI and application deployments do not require monitoring credentials.
   #   - The owner can enable or disable monitoring independently.
@@ -234,7 +241,8 @@ services:
       # Docker socket for cAdvisor container resource metrics.
       # See security notes above.
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      # Persistent WAL storage so unsent data survives Alloy restarts.
+      # Persistent metrics WAL and Docker log positions. This resumes log reads
+      # at the last recorded offset after Alloy restarts.
       - alloy_data:/var/lib/alloy/data
     entrypoint: ["/bin/sh", "/etc/alloy/start.sh"]
     command:
@@ -242,7 +250,7 @@ services:
       - --storage.path=/var/lib/alloy/data
       - --disable-reporting
       - /etc/alloy/config.alloy
-    # No ports or expose: the UI is container-loopback only; scrapes use adept.
+    # No ports or expose: the UI is loopback-only; private scrapes use adept.
     healthcheck:
       test: ["CMD", "/bin/bash", "/etc/alloy/healthcheck.sh"]
       interval: 30s
@@ -260,7 +268,7 @@ volumes:
   postgres_data:
   caddy_data:
   caddy_config:
-  # WAL storage for Alloy — persists across restarts to avoid data loss.
+  # Metrics WAL and log-position storage persist across collector restarts.
   # This volume is created automatically but only used when --profile monitoring
   # is active. It is safe to delete if monitoring is uninstalled.
   alloy_data:
