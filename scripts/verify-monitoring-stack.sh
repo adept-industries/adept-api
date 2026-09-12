@@ -17,13 +17,7 @@ cleanup() {
   if [[ -n "$worker_mock_id" ]]; then docker rm -f "$worker_mock_id" >/dev/null; fi
   if [[ -n "$api_mock_id" ]]; then docker rm -f "$api_mock_id" >/dev/null; fi
   docker network rm "$test_network" >/dev/null 2>&1 || true
-  rm -f \
-    "$verification_dir/compose.yaml" \
-    "$verification_dir/.env.monitoring" \
-    "$verification_dir/log-redaction-input.txt" \
-    "$verification_dir/production-log-stages" \
-    "$verification_dir/fixture-log-stages"
-  rmdir "$verification_dir"
+  rm -rf "$verification_dir"
 }
 trap cleanup EXIT
 
@@ -59,6 +53,13 @@ jq -e --argjson baseline "$baseline" '
 
 alloy_image="$(jq -r '.services.alloy.image' <<<"$enabled")"
 alloy_mount=(--volume "$repository_root/infra/aws/alloy:/etc/alloy:ro")
+if [[ ! -e /var/run/docker/containerd/containerd.sock && -e /run/containerd/containerd.sock ]]; then
+  alloy_test_dir="$verification_dir/alloy"
+  mkdir -p "$alloy_test_dir"
+  cp "$repository_root/infra/aws/alloy/"* "$alloy_test_dir/"
+  sed -i 's|/rootfs/var/run/docker/containerd/containerd.sock|/rootfs/run/containerd/containerd.sock|g' "$alloy_test_dir/config.alloy"
+  alloy_mount=(--volume "$alloy_test_dir:/etc/alloy:ro")
+fi
 test_env=(--env-file "$repository_root/scripts/fixtures/monitoring.env.example")
 
 echo "Validating the pinned Alloy configuration offline"
