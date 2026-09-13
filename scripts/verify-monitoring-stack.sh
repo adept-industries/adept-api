@@ -4,6 +4,7 @@ set -euo pipefail
 repository_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 verification_dir="$(mktemp -d "${TMPDIR:-/tmp}/adept-monitoring-test.XXXXXX")"
 collector_id=""
+collector_volume=""
 caddy_id=""
 api_mock_id=""
 worker_mock_id=""
@@ -13,6 +14,7 @@ cleanup() {
   # Only remove containers created by this test, never application services.
   if [[ -n "$redaction_id" ]]; then docker rm -f "$redaction_id" >/dev/null; fi
   if [[ -n "$collector_id" ]]; then docker rm -f "$collector_id" >/dev/null; fi
+  if [[ -n "$collector_volume" ]]; then docker volume rm "$collector_volume" >/dev/null; fi
   if [[ -n "$caddy_id" ]]; then docker rm -f "$caddy_id" >/dev/null; fi
   if [[ -n "$worker_mock_id" ]]; then docker rm -f "$worker_mock_id" >/dev/null; fi
   if [[ -n "$api_mock_id" ]]; then docker rm -f "$api_mock_id" >/dev/null; fi
@@ -41,8 +43,10 @@ jq -e --argjson baseline "$baseline" '
   (.services.alloy.mem_limit == "402653184") and
   (.services.alloy.cpus == 0.5) and
   (.services.alloy.cap_drop == ["ALL"]) and
+  (.services.alloy.user == "0:473") and
   (.services.alloy.privileged != true) and
   (.services["engine-worker"].environment.ENGINE_WORKER_THREADS == "2") and
+  (.services["engine-worker"].stop_grace_period == "2m0s") and
   (.services["engine-worker"].environment.ENGINE_METRICS_BIND_ADDRESS == "0.0.0.0") and
   (.services["engine-worker"].environment.ENGINE_METRICS_PORT == "8001") and
   (.services["engine-worker"].environment.ENGINE_QUEUE_METRICS_INTERVAL_SECONDS == "60") and
@@ -134,7 +138,12 @@ worker_mock_id="$(docker run -d --network "$test_network" --network-alias engine
   "$caddy_image" caddy respond --listen :8001 \
   --header 'Content-Type: text/plain; version=0.0.4' --body "$worker_metrics_body")"
 
+collector_volume="$(docker volume create --name "$test_network-data")"
+collector_user="$(jq -r '.services.alloy.user' <<<"$enabled")"
+collector_storage="$(jq -r '.services.alloy.command[] | select(startswith("--storage.path="))' <<<"$enabled")"
+test "$collector_storage" = '--storage.path=/var/lib/alloy/data'
 collector_id="$(docker run -d --network "$test_network" --cgroupns host --cap-drop ALL \
+  --user "$collector_user" \
   --security-opt no-new-privileges --memory 384m --memory-swap 384m --cpus 0.5 --pids-limit 128 \
   --label com.docker.compose.project=adept-production \
   --label com.docker.compose.service=monitoring-test \
@@ -143,8 +152,9 @@ collector_id="$(docker run -d --network "$test_network" --cgroupns host --cap-dr
   --volume /:/rootfs:ro --volume /sys:/sys:ro \
   --volume /var/lib/docker:/var/lib/docker:ro \
   --volume /var/run/docker.sock:/var/run/docker.sock:ro \
+  --volume "$collector_volume:/var/lib/alloy/data" \
   --entrypoint /bin/sh "$alloy_image" /etc/alloy/start.sh \
-  run --disable-reporting --storage.path=/tmp/alloy-data /etc/alloy/config.alloy)"
+  run --disable-reporting "$collector_storage" /etc/alloy/config.alloy)"
 
 for attempt in {1..30}; do
   if docker exec "$collector_id" /bin/bash /etc/alloy/healthcheck.sh >/dev/null 2>&1; then break; fi
@@ -171,6 +181,23 @@ scrape_component() {
     while IFS= read -r line <&3; do printf "%s\n" "$line"; done
   ' -- "$metrics_path"
 }
+
+# Exporter endpoints alone do not prove that the scrape labels match our alert
+# queries. Inspect the pinned Alloy UI API's actual targets, not job_name (which
+# is only used when an exporter has not already supplied a job label).
+for scrape_job in host_metrics:node-exporter container_metrics:cadvisor alloy_metrics:alloy; do
+  scrape_name="${scrape_job%%:*}"
+  expected_job="${scrape_job#*:}"
+  scrape_debug="$(docker exec "$collector_id" /bin/bash -ec '
+    exec 3<>/dev/tcp/127.0.0.1/12345
+    printf "GET /api/v0/web/components/prometheus.scrape.%s HTTP/1.0\r\nHost: localhost\r\n\r\n" "$1" >&3
+    while IFS= read -r line <&3 || [[ -n "$line" ]]; do printf "%s\n" "$line"; done
+  ' -- "$scrape_name" | sed '1,/^\r$/d')"
+  jq -e --arg job "$expected_job" '
+    [.arguments[] | select(.name == "targets") | .value.value[] |
+      .value[] | select(.key == "job") | .value.value] == [$job]
+  ' <<<"$scrape_debug" >/dev/null
+done
 
 host_metrics="$(scrape_component prometheus.exporter.unix.host)"
 grep -q '^node_memory_MemTotal_bytes ' <<<"$host_metrics"

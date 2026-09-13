@@ -5,7 +5,7 @@
     "severity": "critical",
     "summary": "Website content check failed or telemetry is missing",
     "description": "At least one configured external probe is failing, or no website probe data is arriving.",
-    "expr": "(min(probe_success{job=\"__WEBSITE_PROBE_JOB__\",environment=\"__ENV__\"}) == bool 0) or vector(1)"
+    "expr": "(min(probe_success{job=\"__WEBSITE_PROBE_JOB__\",environment=\"__ENV__\"} or (probe_success{job=\"__WEBSITE_PROBE_JOB__\"} and on (job, instance, probe, config_version) sm_check_info{job=\"__WEBSITE_PROBE_JOB__\",label_environment=\"__ENV__\"})) == bool 0) or vector(1)"
   },
   "ApiReadinessDown": {
     "for": "3m",
@@ -13,7 +13,7 @@
     "severity": "critical",
     "summary": "API readiness check failed or telemetry is missing",
     "description": "The external /api/status check must return HTTP 200 and JSON status UP.",
-    "expr": "(min(probe_success{job=\"__API_PROBE_JOB__\",environment=\"__ENV__\"}) == bool 0) or vector(1)"
+    "expr": "(min(probe_success{job=\"__API_PROBE_JOB__\",environment=\"__ENV__\"} or (probe_success{job=\"__API_PROBE_JOB__\"} and on (job, instance, probe, config_version) sm_check_info{job=\"__API_PROBE_JOB__\",label_environment=\"__ENV__\"})) == bool 0) or vector(1)"
   },
   "AlloyCollectorDown": {
     "for": "5m",

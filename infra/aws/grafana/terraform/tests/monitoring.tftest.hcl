@@ -6,6 +6,10 @@ variables {
   grafana_auth              = "local-test-only"
   prometheus_datasource_uid = "test-prometheus"
   notification_emails       = ["test@example.invalid"]
+  # Keep tests independent of the owner's live terraform.tfvars rollout state.
+  alerts_paused             = true
+  notification_test_enabled = false
+  notification_test_firing  = false
 }
 
 run "paused_rules_are_safe_and_routed" {
