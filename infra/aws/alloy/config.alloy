@@ -65,9 +65,20 @@ prometheus.exporter.unix "host" {
 	}
 }
 
+// Exporters supply their own integrations/* job labels. job_name is only a
+// fallback, so normalize targets to the names used by dashboards and alerts.
+discovery.relabel "host_metrics" {
+	targets = prometheus.exporter.unix.host.targets
+
+	rule {
+		target_label = "job"
+		replacement  = "node-exporter"
+	}
+}
+
 prometheus.scrape "host_metrics" {
 	sample_limit    = 5000
-	targets         = prometheus.exporter.unix.host.targets
+	targets         = discovery.relabel.host_metrics.output
 	forward_to      = [prometheus.remote_write.grafana_cloud.receiver]
 	scrape_interval = "60s"
 	scrape_timeout  = "15s"
@@ -87,9 +98,18 @@ prometheus.exporter.cadvisor "containers" {
 	storage_duration             = "1m"
 }
 
+discovery.relabel "container_metrics" {
+	targets = prometheus.exporter.cadvisor.containers.targets
+
+	rule {
+		target_label = "job"
+		replacement  = "cadvisor"
+	}
+}
+
 prometheus.scrape "container_metrics" {
 	sample_limit    = 10000
-	targets         = prometheus.exporter.cadvisor.containers.targets
+	targets         = discovery.relabel.container_metrics.output
 	forward_to      = [prometheus.relabel.container_metrics.receiver]
 	scrape_interval = "60s"
 	scrape_timeout  = "30s"
@@ -281,9 +301,18 @@ loki.process "service_logs" {
 // Collector failures must be visible too; readiness alone does not prove delivery.
 prometheus.exporter.self "alloy" { }
 
+discovery.relabel "alloy_metrics" {
+	targets = prometheus.exporter.self.alloy.targets
+
+	rule {
+		target_label = "job"
+		replacement  = "alloy"
+	}
+}
+
 prometheus.scrape "alloy_metrics" {
 	sample_limit    = 5000
-	targets         = prometheus.exporter.self.alloy.targets
+	targets         = discovery.relabel.alloy_metrics.output
 	forward_to      = [prometheus.relabel.alloy_metrics.receiver]
 	scrape_interval = "60s"
 	scrape_timeout  = "15s"

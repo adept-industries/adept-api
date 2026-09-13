@@ -135,6 +135,77 @@
   ],
   "cases": [
     {
+      "name": "Legacy Synthetic Monitoring joins environment metadata for both checks",
+      "omit": "^probe_success",
+      "overrides": [
+        {"series": "probe_success{job=\"adept-website\",instance=\"https://example.test/\",probe=\"Singapore\",config_version=\"1\"}", "values": "1+0x60"},
+        {"series": "sm_check_info{job=\"adept-website\",instance=\"https://example.test/\",probe=\"Singapore\",config_version=\"1\",label_environment=\"production\"}", "values": "1+0x60"},
+        {"series": "probe_success{job=\"adept-api-readiness\",instance=\"https://example.test/api/status\",probe=\"Singapore\",config_version=\"1\"}", "values": "1+0x60"},
+        {"series": "sm_check_info{job=\"adept-api-readiness\",instance=\"https://example.test/api/status\",probe=\"Singapore\",config_version=\"1\",label_environment=\"production\"}", "values": "1+0x60"}
+      ],
+      "expected": {"WebsiteDown": 0, "ApiReadinessDown": 0}
+    },
+    {
+      "name": "Legacy probe failures fire after three minutes and recover",
+      "omit": "^probe_success",
+      "overrides": [
+        {"series": "probe_success{job=\"adept-website\",instance=\"https://example.test/\",probe=\"Singapore\",config_version=\"1\"}", "values": "0+0x8 1+0x51"},
+        {"series": "sm_check_info{job=\"adept-website\",instance=\"https://example.test/\",probe=\"Singapore\",config_version=\"1\",label_environment=\"production\"}", "values": "1+0x60"},
+        {"series": "probe_success{job=\"adept-api-readiness\",instance=\"https://example.test/api/status\",probe=\"Singapore\",config_version=\"1\"}", "values": "0+0x8 1+0x51"},
+        {"series": "sm_check_info{job=\"adept-api-readiness\",instance=\"https://example.test/api/status\",probe=\"Singapore\",config_version=\"1\",label_environment=\"production\"}", "values": "1+0x60"}
+      ],
+      "expected": {"WebsiteDown": 0, "ApiReadinessDown": 0},
+      "extra_alert_checks": [
+        {"at": "2m", "alert": "WebsiteDown", "firing": false},
+        {"at": "3m", "alert": "WebsiteDown", "firing": true},
+        {"at": "10m", "alert": "WebsiteDown", "firing": false},
+        {"at": "2m", "alert": "ApiReadinessDown", "firing": false},
+        {"at": "3m", "alert": "ApiReadinessDown", "firing": true},
+        {"at": "10m", "alert": "ApiReadinessDown", "firing": false}
+      ]
+    },
+    {
+      "name": "Missing legacy environment metadata does not look healthy",
+      "omit": "^probe_success",
+      "overrides": [
+        {"series": "probe_success{job=\"adept-website\",instance=\"https://example.test/\",probe=\"Singapore\",config_version=\"1\"}", "values": "1+0x60"},
+        {"series": "probe_success{job=\"adept-api-readiness\",instance=\"https://example.test/api/status\",probe=\"Singapore\",config_version=\"1\"}", "values": "1+0x60"}
+      ],
+      "expected": {"WebsiteDown": 1, "ApiReadinessDown": 1}
+    },
+    {
+      "name": "Legacy staging checks cannot satisfy production alerts",
+      "omit": "^probe_success",
+      "overrides": [
+        {"series": "probe_success{job=\"adept-website\",instance=\"https://example.test/\",probe=\"Singapore\",config_version=\"1\"}", "values": "1+0x60"},
+        {"series": "sm_check_info{job=\"adept-website\",instance=\"https://example.test/\",probe=\"Singapore\",config_version=\"1\",label_environment=\"staging\"}", "values": "1+0x60"},
+        {"series": "probe_success{job=\"adept-api-readiness\",instance=\"https://example.test/api/status\",probe=\"Singapore\",config_version=\"1\"}", "values": "1+0x60"},
+        {"series": "sm_check_info{job=\"adept-api-readiness\",instance=\"https://example.test/api/status\",probe=\"Singapore\",config_version=\"1\",label_environment=\"staging\"}", "values": "1+0x60"}
+      ],
+      "expected": {"WebsiteDown": 1, "ApiReadinessDown": 1}
+    },
+    {
+      "name": "Legacy metadata must match the probe configuration version",
+      "omit": "^probe_success",
+      "overrides": [
+        {"series": "probe_success{job=\"adept-website\",instance=\"https://example.test/\",probe=\"Singapore\",config_version=\"1\"}", "values": "1+0x60"},
+        {"series": "sm_check_info{job=\"adept-website\",instance=\"https://example.test/\",probe=\"Singapore\",config_version=\"2\",label_environment=\"production\"}", "values": "1+0x60"},
+        {"series": "probe_success{job=\"adept-api-readiness\",instance=\"https://example.test/api/status\",probe=\"Singapore\",config_version=\"1\"}", "values": "1+0x60"},
+        {"series": "sm_check_info{job=\"adept-api-readiness\",instance=\"https://example.test/api/status\",probe=\"Singapore\",config_version=\"2\",label_environment=\"production\"}", "values": "1+0x60"}
+      ],
+      "expected": {"WebsiteDown": 1, "ApiReadinessDown": 1}
+    },
+    {
+      "name": "A passing direct-label series cannot hide a failed legacy probe",
+      "overrides": [
+        {"series": "probe_success{job=\"adept-website\",instance=\"https://example.test/\",probe=\"Singapore\",config_version=\"1\"}", "values": "0+0x60"},
+        {"series": "sm_check_info{job=\"adept-website\",instance=\"https://example.test/\",probe=\"Singapore\",config_version=\"1\",label_environment=\"production\"}", "values": "1+0x60"},
+        {"series": "probe_success{job=\"adept-api-readiness\",instance=\"https://example.test/api/status\",probe=\"Singapore\",config_version=\"1\"}", "values": "0+0x60"},
+        {"series": "sm_check_info{job=\"adept-api-readiness\",instance=\"https://example.test/api/status\",probe=\"Singapore\",config_version=\"1\",label_environment=\"production\"}", "values": "1+0x60"}
+      ],
+      "expected": {"WebsiteDown": 1, "ApiReadinessDown": 1}
+    },
+    {
       "name": "Healthy two-thread worker, no failed requests and only future scheduled work",
       "overrides": [],
       "expected": {

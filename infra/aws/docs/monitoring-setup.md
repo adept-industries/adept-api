@@ -49,6 +49,16 @@ Alloy can read host files (including secrets) and the socket is root-equivalent.
 A :ro socket mount does not make Docker API operations read-only. This is a
 trusted, digest-pinned collector, not a security sandbox. Its UI is loopback-only.
 
+Alloy runs as UID 0 with GID 473, the pinned image's Alloy group. This permits
+access to its group-owned 0770 storage directories with all Linux capabilities
+dropped. Do not switch it to root:root or work around storage errors with chmod
+777: the live test exercises the same user and persistent-volume mount.
+
+Built-in exporter targets already contain `integrations/*` job labels. The
+collector explicitly relabels them to `node-exporter`, `cadvisor`, and `alloy`
+before scraping, matching the dashboards and alert queries. Setting `job_name`
+alone does not override an existing target label; the live test checks this too.
+
 Alloy is capped at 384 MiB RAM, no extra swap, 0.5 CPU and 128 processes.
 Loki uses bounded batches/retries, at most 16 streams and a 20-lines/second
 per-service limit (burst 100). Docker rotates logs at 10 MiB × 5 files.
@@ -246,12 +256,23 @@ outside the VM. Review estimated usage before enabling them.
 Use a 60-second interval if it fits the approved allowance. Add environment =
 production to both checks. The check name supplies the job label; confirm actual
 labels in Explore rather than adding a conflicting reserved job label.
+For a Free plan with 100,000 API check executions/month, use exactly one public
+probe location per check: two checks every minute consume at most 89,280
+executions in a 31-day month. Include any existing checks in that budget.
 For an HTTP body regex, use `"status"\s*:\s*"UP"` and require JSON content type.
+Spring readiness uses `application/vnd.spring-boot.actuator.v3+json`; accept
+`application/json` **and** vendor `application/*+json` instead of requiring only
+the literal `application/json` header.
 Do not use /api/v1/health, an arbitrary health URL or HTTP 200 alone: the public
 contract added by this PR is exactly /api/status, backed by Spring readiness
 (including DB availability). /actuator* and /metrics* remain blocked.
 
 Preview probe_success for both named jobs before enabling operational alerts.
+Some Grafana tenants attach `environment` directly to `probe_success`; others
+put it only on `sm_check_info` as `label_environment`. Our two uptime queries
+support both: the legacy path matches metadata on `job`, `instance`, `probe`,
+and `config_version`. Missing metadata is unhealthy, not a successful check.
+No tenant-wide label migration is required for this rollout.
 A website HTML check verifies serving the page, not successful JavaScript
 execution or sign-in. A browser journey can be added later if needed.
 
