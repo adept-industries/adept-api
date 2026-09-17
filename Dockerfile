@@ -6,11 +6,20 @@ WORKDIR /workspace
 # application source changes but dependencies do not.
 COPY pom.xml mvnw mvnw.cmd ./
 COPY .mvn .mvn
-RUN ./mvnw -B -DskipTests dependency:go-offline
+RUN --mount=type=cache,target=/root/.m2 \
+    ./mvnw -B -DskipTests \
+    -Dhttp.keepAlive=false \
+    -Dmaven.wagon.http.pool=false \
+    -Dmaven.wagon.http.retryHandler.count=5 \
+    -Dmaven.wagon.http.retryHandler.requestSentEnabled=true \
+    -Daether.connector.requestTimeout=120000 \
+    -Daether.connector.connectTimeout=60000 \
+    dependency:resolve
 
 # Now copy source and produce the executable JAR. CI runs tests before image build.
 COPY src src
-RUN ./mvnw -B clean package -DskipTests
+RUN --mount=type=cache,target=/root/.m2 \
+    ./mvnw -B clean package -DskipTests
 
 # Stage 2 needs only a Java 25 runtime.
 FROM eclipse-temurin:25.0.3_9-jre-alpine
