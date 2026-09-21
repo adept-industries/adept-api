@@ -38,12 +38,12 @@ public record RepositorySettingsDto(
     public static RepositorySettingsDto defaults() {
         return new RepositorySettingsDto(
             "WORKFLOW_RUN",
-            List.of("main", "master", "release/*"),
-            List.of("production", "prod", "live"),
-            List.of("*deploy*", "*production*", "*release*"),
+            List.of(),
+            List.of(),
+            List.of(),
             "GITHUB",
             List.of(),
-            MetricGranularity.WEEK,
+            null,
             90
         );
     }
