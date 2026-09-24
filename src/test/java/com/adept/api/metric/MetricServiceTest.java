@@ -15,14 +15,21 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 
+import com.adept.api.common.domain.DeploymentSource;
+import com.adept.api.common.domain.DeploymentStatus;
 import com.adept.api.common.domain.MembershipRole;
 import com.adept.api.common.domain.MetricGranularity;
 import com.adept.api.common.domain.MetricType;
 import com.adept.api.common.error.NotFoundException;
 import com.adept.api.common.error.ApiException;
+import com.adept.api.deployment.Deployment;
+import com.adept.api.deployment.DeploymentRepository;
 import com.adept.api.integration.github.GitRepository;
 import com.adept.api.integration.github.GitRepositoryRepository;
+import com.adept.api.metric.dto.DeploymentFrequencyDetailsResponse;
 import com.adept.api.metric.dto.DoraMetricsSeriesResponse;
 import com.adept.api.metric.dto.DoraMetricsSummaryResponse;
 import com.adept.api.project.Project;
@@ -62,6 +69,9 @@ class MetricServiceTest {
     @Mock
     private WorkspaceRepository workspaceRepository;
 
+    @Mock
+    private DeploymentRepository deploymentRepository;
+
     @InjectMocks
     private MetricService metricService;
 
@@ -86,7 +96,6 @@ class MetricServiceTest {
             MembershipRole.MANAGER,
             1
         );
-
         leadPrincipal = new AuthenticatedPrincipal(
             UUID.randomUUID(),
             membershipId,
@@ -98,162 +107,21 @@ class MetricServiceTest {
         workspace = new Workspace();
         workspace.setId(workspaceId);
         workspace.setTimezone("UTC");
-        lenient().when(workspaceRepository.findById(workspaceId)).thenReturn(Optional.of(workspace));
 
         repository = new GitRepository();
         repository.setId(repositoryId);
         repository.setWorkspace(workspace);
         repository.setTrackingEnabled(true);
         repository.setArchived(false);
+        repository.setName("core");
+        repository.setFullName("acme/core");
+
+        lenient().when(workspaceRepository.findById(workspaceId)).thenReturn(Optional.of(workspace));
     }
 
     @Test
-    void testGetSummaryReturnsEmptyWhenNoAccessibleRepositories() {
-        when(gitRepositoryRepository.findAllByWorkspaceId(workspaceId)).thenReturn(List.of());
-
-        DoraMetricsSummaryResponse response = metricService.getSummary(
-            managerPrincipal,
-            null,
-            null,
-            null,
-            null
-        );
-
-        assertThat(response.repositoryCount()).isEqualTo(0);
-        assertThat(response.deploymentFrequency().value()).isEqualByComparingTo(BigDecimal.ZERO);
-        assertThat(response.deploymentFrequency().rating()).isEqualTo(MetricRating.UNKNOWN);
-        assertThat(response.changeLeadTime().value()).isEqualByComparingTo(BigDecimal.ZERO);
-        assertThat(response.recoveryTime().value()).isEqualByComparingTo(BigDecimal.ZERO);
-        assertThat(response.changeFailureRate().value()).isEqualByComparingTo(BigDecimal.ZERO);
-    }
-
-    @Test
-    void testGetSummaryAggregatesMetricsForManager() {
+    void managerCanQueryAllAccessibleRepositoriesByDefault() {
         when(gitRepositoryRepository.findAllByWorkspaceId(workspaceId)).thenReturn(List.of(repository));
-
-        Instant now = Instant.now();
-        Instant from = now.minus(30, ChronoUnit.DAYS);
-
-        MetricSnapshot dfSnap = new MetricSnapshot();
-        dfSnap.setRepository(repository);
-        dfSnap.setMetricType(MetricType.DEPLOYMENT_FREQUENCY);
-        dfSnap.setGranularity(MetricGranularity.DAY);
-        dfSnap.setValue(BigDecimal.valueOf(14));
-        dfSnap.setSampleSize(14);
-        dfSnap.setUnit("deployments/day");
-        dfSnap.setPeriodStart(from);
-        dfSnap.setPeriodEnd(now);
-        dfSnap.setCalculatedAt(now);
-        dfSnap.setDimensions(Map.of(
-            "observations",
-            IntStream.range(0, 14)
-                .mapToObj(index -> observation("df-" + index, now.minusSeconds(3600L + index), 1.0))
-                .toList()
-        ));
-
-        MetricSnapshot cltSnap = new MetricSnapshot();
-        cltSnap.setRepository(repository);
-        cltSnap.setMetricType(MetricType.CHANGE_LEAD_TIME_HOURS);
-        cltSnap.setGranularity(MetricGranularity.DAY);
-        cltSnap.setValue(BigDecimal.valueOf(4.5));
-        cltSnap.setSampleSize(10);
-        cltSnap.setUnit("hours");
-        cltSnap.setPeriodStart(from);
-        cltSnap.setPeriodEnd(now);
-        cltSnap.setCalculatedAt(now);
-        cltSnap.setDimensions(Map.of(
-            "observations",
-            IntStream.range(0, 10)
-                .mapToObj(index -> observation("clt-" + index, now.minusSeconds(7200L + index), 4.5))
-                .toList()
-        ));
-
-        MetricSnapshot recSnap = new MetricSnapshot();
-        recSnap.setRepository(repository);
-        recSnap.setMetricType(MetricType.FAILED_DEPLOYMENT_RECOVERY_TIME_HOURS);
-        recSnap.setGranularity(MetricGranularity.DAY);
-        recSnap.setValue(BigDecimal.valueOf(1.5));
-        recSnap.setSampleSize(2);
-        recSnap.setUnit("hours");
-        recSnap.setPeriodStart(from);
-        recSnap.setPeriodEnd(now);
-        recSnap.setCalculatedAt(now);
-        recSnap.setDimensions(Map.of(
-            "observations",
-            List.of(
-                observation("recovery-1", now.minusSeconds(3600), 1.0),
-                observation("recovery-2", now.minusSeconds(1800), 2.0)
-            )
-        ));
-
-        MetricSnapshot cfrSnap = new MetricSnapshot();
-        cfrSnap.setRepository(repository);
-        cfrSnap.setMetricType(MetricType.CHANGE_FAILURE_RATE_PERCENT);
-        cfrSnap.setGranularity(MetricGranularity.DAY);
-        cfrSnap.setValue(BigDecimal.valueOf(7.14));
-        cfrSnap.setSampleSize(14);
-        cfrSnap.setUnit("percent");
-        cfrSnap.setPeriodStart(from);
-        cfrSnap.setPeriodEnd(now);
-        cfrSnap.setCalculatedAt(now);
-        cfrSnap.setDimensions(Map.of(
-            "observations",
-            IntStream.range(0, 14)
-                .mapToObj(index -> observation(
-                    "cfr-" + index,
-                    now.minusSeconds(10_800L + index),
-                    index == 0 ? 1.0 : 0.0
-                ))
-                .toList()
-        ));
-
-        when(metricSnapshotRepository.findSnapshots(
-            eq(workspaceId),
-            eq(List.of(repositoryId)),
-            eq(MetricGranularity.DAY),
-            eq(MetricService.CALCULATION_VERSION),
-            any(),
-            any()
-        )).thenReturn(List.of(dfSnap, cltSnap, recSnap, cfrSnap));
-
-        DoraMetricsSummaryResponse response = metricService.getSummary(
-            managerPrincipal,
-            null,
-            null,
-            from,
-            now
-        );
-
-        assertThat(response.repositoryCount()).isEqualTo(1);
-        assertThat(response.deploymentFrequency().sampleSize()).isEqualTo(14);
-        assertThat(response.deploymentFrequency().rating()).isNotNull();
-        assertThat(response.changeLeadTime().sampleSize()).isEqualTo(10);
-        assertThat(response.changeLeadTime().value()).isEqualByComparingTo("4.50");
-        assertThat(response.changeLeadTime().rating()).isEqualTo(MetricRating.HIGH);
-        assertThat(response.recoveryTime().sampleSize()).isEqualTo(2);
-        assertThat(response.recoveryTime().value()).isEqualByComparingTo("1.50");
-        assertThat(response.changeFailureRate().sampleSize()).isEqualTo(14);
-        assertThat(response.changeFailureRate().rating()).isEqualTo(MetricRating.HIGH);
-        assertThat(response.calculatedAt()).isEqualTo(now);
-    }
-
-    @Test
-    void testGetSummaryWithProjectFilterForLead() {
-        UUID projectId = UUID.randomUUID();
-        Project project = new Project();
-        project.setId(projectId);
-        project.setWorkspace(workspace);
-
-        when(projectRepository.findByIdAndWorkspaceId(projectId, workspaceId))
-            .thenReturn(Optional.of(project));
-
-        ProjectRepositoryLink link = new ProjectRepositoryLink();
-        link.setProject(project);
-        link.setRepository(repository);
-
-        when(projectRepositoryLinkRepository.findAllReadableByLead(projectId, membershipId))
-            .thenReturn(List.of(link));
-
         when(metricSnapshotRepository.findSnapshots(
             eq(workspaceId),
             eq(List.of(repositoryId)),
@@ -264,110 +132,350 @@ class MetricServiceTest {
         )).thenReturn(List.of());
 
         DoraMetricsSummaryResponse response = metricService.getSummary(
-            leadPrincipal,
-            projectId,
-            null,
-            null,
-            null
+            managerPrincipal, null, null, null, null
         );
 
-        assertThat(response.projectId()).isEqualTo(projectId);
         assertThat(response.repositoryCount()).isEqualTo(1);
+        assertThat(response.timezone()).isEqualTo("UTC");
     }
 
     @Test
-    void testGetSummaryProjectNotFoundThrows() {
-        UUID projectId = UUID.randomUUID();
-        when(projectRepository.findByIdAndWorkspaceId(projectId, workspaceId))
-            .thenReturn(Optional.empty());
+    void leadIsRestrictedToAssignedRepositories() {
+        when(gitRepositoryRepository.findAllLeadReadableRepositories(workspaceId, membershipId))
+            .thenReturn(List.of());
 
-        assertThatThrownBy(() -> metricService.getSummary(managerPrincipal, projectId, null, null, null))
-            .isInstanceOf(NotFoundException.class);
+        DoraMetricsSummaryResponse response = metricService.getSummary(
+            leadPrincipal, null, null, null, null
+        );
+
+        assertThat(response.repositoryCount()).isZero();
     }
 
     @Test
-    void testGetSeriesReturnsAggregatedDataPoints() {
-        when(gitRepositoryRepository.findAllByWorkspaceId(workspaceId)).thenReturn(List.of(repository));
+    void aggregatesDeploymentFrequencyFromSnapshots() {
+        Instant from = Instant.parse("2026-08-01T00:00:00Z");
+        Instant to = Instant.parse("2026-08-15T00:00:00Z");
 
-        Instant t1 = Instant.parse("2026-08-01T00:00:00Z");
-        Instant t2 = Instant.parse("2026-08-02T00:00:00Z");
-
-        MetricSnapshot s1 = new MetricSnapshot();
-        s1.setRepository(repository);
-        s1.setMetricType(MetricType.DEPLOYMENT_FREQUENCY);
-        s1.setGranularity(MetricGranularity.DAY);
-        s1.setPeriodStart(t1);
-        s1.setPeriodEnd(t2);
-        s1.setValue(BigDecimal.valueOf(3));
-        s1.setUnit("deployments/day");
-        s1.setSampleSize(3);
-        s1.setCalculatedAt(t2);
-        s1.setDimensions(Map.of(
+        MetricSnapshot snapshot = new MetricSnapshot();
+        snapshot.setRepository(repository);
+        snapshot.setMetricType(MetricType.DEPLOYMENT_FREQUENCY);
+        snapshot.setGranularity(MetricGranularity.DAY);
+        snapshot.setPeriodStart(from);
+        snapshot.setPeriodEnd(to);
+        snapshot.setValue(new BigDecimal("2.00"));
+        snapshot.setUnit("deployments/week");
+        snapshot.setSampleSize(4);
+        snapshot.setCalculatedAt(to);
+        snapshot.setDimensions(Map.of(
             "observations",
             List.of(
-                observation("deployment-1", t1.plusSeconds(1), 1.0),
-                observation("deployment-2", t1.plusSeconds(2), 1.0),
-                observation("deployment-3", t1.plusSeconds(3), 1.0)
+                observation("d1", from.plusSeconds(3600), 1.0),
+                observation("d2", from.plusSeconds(7200), 1.0),
+                observation("d3", from.plusSeconds(10800), 1.0),
+                observation("d4", from.plusSeconds(14400), 1.0)
             )
         ));
 
+        when(gitRepositoryRepository.findAllByWorkspaceId(workspaceId)).thenReturn(List.of(repository));
         when(metricSnapshotRepository.findSnapshots(
-            eq(workspaceId),
-            eq(List.of(repositoryId)),
-            eq(MetricGranularity.DAY),
-            eq(MetricService.CALCULATION_VERSION),
-            any(),
-            any()
-        )).thenReturn(List.of(s1));
-
-        DoraMetricsSeriesResponse response = metricService.getSeries(
-            managerPrincipal,
-            null,
-            null,
-            null,
+            workspaceId,
+            List.of(repositoryId),
             MetricGranularity.DAY,
-            t1,
-            t2
+            MetricService.CALCULATION_VERSION,
+            from,
+            to
+        )).thenReturn(List.of(snapshot));
+
+        DoraMetricsSummaryResponse response = metricService.getSummary(
+            managerPrincipal, null, null, from, to
         );
 
-        assertThat(response.granularity()).isEqualTo(MetricGranularity.DAY);
-        assertThat(response.series()).hasSize(1);
-        assertThat(response.series().get(0).value()).isEqualByComparingTo("3.00");
-        assertThat(response.series().get(0).sampleSize()).isEqualTo(3);
-        assertThat(response.calculatedAt()).isEqualTo(t2);
+        assertThat(response.deploymentFrequency().sampleSize()).isEqualTo(4);
+        assertThat(response.deploymentFrequency().value()).isEqualByComparingTo("2.00");
     }
 
     @Test
-    void recomputesMedianFromUnderlyingObservationsAcrossRepositories() {
-        UUID secondRepositoryId = UUID.randomUUID();
-        GitRepository secondRepository = new GitRepository();
-        secondRepository.setId(secondRepositoryId);
-        secondRepository.setWorkspace(workspace);
-        secondRepository.setTrackingEnabled(true);
-        secondRepository.setArchived(false);
-        when(gitRepositoryRepository.findAllByWorkspaceId(workspaceId))
-            .thenReturn(List.of(repository, secondRepository));
+    void aggregatesChangeLeadTimeMedianFromSnapshots() {
+        Instant from = Instant.parse("2026-08-01T00:00:00Z");
+        Instant to = Instant.parse("2026-08-15T00:00:00Z");
 
+        MetricSnapshot snapshot = new MetricSnapshot();
+        snapshot.setRepository(repository);
+        snapshot.setMetricType(MetricType.CHANGE_LEAD_TIME_HOURS);
+        snapshot.setGranularity(MetricGranularity.DAY);
+        snapshot.setPeriodStart(from);
+        snapshot.setPeriodEnd(to);
+        snapshot.setValue(new BigDecimal("12.00"));
+        snapshot.setUnit("hours");
+        snapshot.setSampleSize(3);
+        snapshot.setCalculatedAt(to);
+        snapshot.setDimensions(Map.of(
+            "observations",
+            List.of(
+                observation("pr-1", from.plusSeconds(100), 6.0),
+                observation("pr-2", from.plusSeconds(200), 12.0),
+                observation("pr-3", from.plusSeconds(300), 18.0)
+            )
+        ));
+
+        when(gitRepositoryRepository.findAllByWorkspaceId(workspaceId)).thenReturn(List.of(repository));
+        when(metricSnapshotRepository.findSnapshots(
+            workspaceId,
+            List.of(repositoryId),
+            MetricGranularity.DAY,
+            MetricService.CALCULATION_VERSION,
+            from,
+            to
+        )).thenReturn(List.of(snapshot));
+
+        DoraMetricsSummaryResponse response = metricService.getSummary(
+            managerPrincipal, null, null, from, to
+        );
+
+        assertThat(response.changeLeadTime().sampleSize()).isEqualTo(3);
+        assertThat(response.changeLeadTime().value()).isEqualByComparingTo("12.00");
+        assertThat(response.changeLeadTime().dimensions()).containsEntry("mean", 12.0);
+        assertThat(response.changeLeadTime().dimensions()).containsEntry("p50", 12.0);
+        assertThat(response.changeLeadTime().dimensions()).containsEntry("p75", 15.0);
+        assertThat(response.changeLeadTime().dimensions()).containsEntry("p90", 16.8);
+    }
+
+    @Test
+    void aggregatesRecoveryTimeMedianFromSnapshots() {
+        Instant from = Instant.parse("2026-08-01T00:00:00Z");
+        Instant to = Instant.parse("2026-08-15T00:00:00Z");
+
+        MetricSnapshot snapshot = new MetricSnapshot();
+        snapshot.setRepository(repository);
+        snapshot.setMetricType(MetricType.FAILED_DEPLOYMENT_RECOVERY_TIME_HOURS);
+        snapshot.setGranularity(MetricGranularity.DAY);
+        snapshot.setPeriodStart(from);
+        snapshot.setPeriodEnd(to);
+        snapshot.setValue(new BigDecimal("2.50"));
+        snapshot.setUnit("hours");
+        snapshot.setSampleSize(2);
+        snapshot.setCalculatedAt(to);
+        snapshot.setDimensions(Map.of(
+            "observations",
+            List.of(
+                observation("inc-1", from.plusSeconds(100), 2.0),
+                observation("inc-2", from.plusSeconds(200), 3.0)
+            )
+        ));
+
+        when(gitRepositoryRepository.findAllByWorkspaceId(workspaceId)).thenReturn(List.of(repository));
+        when(metricSnapshotRepository.findSnapshots(
+            workspaceId,
+            List.of(repositoryId),
+            MetricGranularity.DAY,
+            MetricService.CALCULATION_VERSION,
+            from,
+            to
+        )).thenReturn(List.of(snapshot));
+
+        DoraMetricsSummaryResponse response = metricService.getSummary(
+            managerPrincipal, null, null, from, to
+        );
+
+        assertThat(response.recoveryTime().sampleSize()).isEqualTo(2);
+        assertThat(response.recoveryTime().value()).isEqualByComparingTo("2.50");
+        assertThat(response.recoveryTime().dimensions()).containsEntry("mean", 2.5);
+        assertThat(response.recoveryTime().dimensions()).containsEntry("p50", 2.5);
+    }
+
+    @Test
+    void aggregatesChangeFailureRateFromSnapshots() {
+        Instant from = Instant.parse("2026-08-01T00:00:00Z");
+        Instant to = Instant.parse("2026-08-15T00:00:00Z");
+
+        MetricSnapshot snapshot = new MetricSnapshot();
+        snapshot.setRepository(repository);
+        snapshot.setMetricType(MetricType.CHANGE_FAILURE_RATE_PERCENT);
+        snapshot.setGranularity(MetricGranularity.DAY);
+        snapshot.setPeriodStart(from);
+        snapshot.setPeriodEnd(to);
+        snapshot.setValue(new BigDecimal("25.00"));
+        snapshot.setUnit("percent");
+        snapshot.setSampleSize(4);
+        snapshot.setCalculatedAt(to);
+        snapshot.setDimensions(Map.of(
+            "observations",
+            List.of(
+                observation("dep-1", from.plusSeconds(100), 0.0),
+                observation("dep-2", from.plusSeconds(200), 1.0),
+                observation("dep-3", from.plusSeconds(300), 0.0),
+                observation("dep-4", from.plusSeconds(400), 0.0)
+            )
+        ));
+
+        when(gitRepositoryRepository.findAllByWorkspaceId(workspaceId)).thenReturn(List.of(repository));
+        when(metricSnapshotRepository.findSnapshots(
+            workspaceId,
+            List.of(repositoryId),
+            MetricGranularity.DAY,
+            MetricService.CALCULATION_VERSION,
+            from,
+            to
+        )).thenReturn(List.of(snapshot));
+
+        DoraMetricsSummaryResponse response = metricService.getSummary(
+            managerPrincipal, null, null, from, to
+        );
+
+        assertThat(response.changeFailureRate().sampleSize()).isEqualTo(4);
+        assertThat(response.changeFailureRate().value()).isEqualByComparingTo("25.00");
+        assertThat(response.changeFailureRate().dimensions()).containsEntry("total_deployments", 4);
+        assertThat(response.changeFailureRate().dimensions()).containsEntry("failed_deployments", 1L);
+    }
+
+    @Test
+    void seriesReturnsBucketedPoints() {
+        Instant from = Instant.parse("2026-08-01T00:00:00Z");
+        Instant mid = Instant.parse("2026-08-02T00:00:00Z");
+        Instant to = Instant.parse("2026-08-03T00:00:00Z");
+
+        MetricSnapshot snapshot1 = new MetricSnapshot();
+        snapshot1.setRepository(repository);
+        snapshot1.setMetricType(MetricType.DEPLOYMENT_FREQUENCY);
+        snapshot1.setGranularity(MetricGranularity.DAY);
+        snapshot1.setPeriodStart(from);
+        snapshot1.setPeriodEnd(mid);
+        snapshot1.setValue(new BigDecimal("1.00"));
+        snapshot1.setUnit("deployments");
+        snapshot1.setSampleSize(1);
+        snapshot1.setDimensions(Map.of(
+            "observations",
+            List.of(observation("d1", from.plusSeconds(100), 1.0))
+        ));
+
+        MetricSnapshot snapshot2 = new MetricSnapshot();
+        snapshot2.setRepository(repository);
+        snapshot2.setMetricType(MetricType.DEPLOYMENT_FREQUENCY);
+        snapshot2.setGranularity(MetricGranularity.DAY);
+        snapshot2.setPeriodStart(mid);
+        snapshot2.setPeriodEnd(to);
+        snapshot2.setValue(new BigDecimal("2.00"));
+        snapshot2.setUnit("deployments");
+        snapshot2.setSampleSize(2);
+        snapshot2.setDimensions(Map.of(
+            "observations",
+            List.of(
+                observation("d2", mid.plusSeconds(100), 1.0),
+                observation("d3", mid.plusSeconds(200), 1.0)
+            )
+        ));
+
+        when(gitRepositoryRepository.findAllByWorkspaceId(workspaceId)).thenReturn(List.of(repository));
+        when(metricSnapshotRepository.findSnapshotsByMetricType(
+            workspaceId,
+            List.of(repositoryId),
+            MetricType.DEPLOYMENT_FREQUENCY,
+            MetricGranularity.DAY,
+            MetricService.CALCULATION_VERSION,
+            from,
+            to
+        )).thenReturn(List.of(snapshot1, snapshot2));
+
+        DoraMetricsSeriesResponse series = metricService.getSeries(
+            managerPrincipal,
+            null,
+            null,
+            MetricType.DEPLOYMENT_FREQUENCY,
+            MetricGranularity.DAY,
+            from,
+            to
+        );
+
+        assertThat(series.series()).hasSize(2);
+        assertThat(series.series().get(0).value()).isEqualByComparingTo("1.00");
+        assertThat(series.series().get(1).value()).isEqualByComparingTo("2.00");
+        assertThat(series.series().get(0).sampleSize()).isEqualTo(1);
+        assertThat(series.series().get(1).sampleSize()).isEqualTo(2);
+    }
+
+    @Test
+    void seriesPercentilesAreExactForSmallSamples() {
         Instant from = Instant.parse("2026-08-01T00:00:00Z");
         Instant to = Instant.parse("2026-08-02T00:00:00Z");
+
+        MetricSnapshot single = durationSnapshot(
+            repository,
+            from,
+            to,
+            List.of(observation("k1", from.plusSeconds(10), 42.0))
+        );
+        MetricSnapshot two = durationSnapshot(
+            repository,
+            from,
+            to,
+            List.of(
+                observation("k1", from.plusSeconds(10), 10.0),
+                observation("k2", from.plusSeconds(20), 20.0)
+            )
+        );
+
+        when(gitRepositoryRepository.findAllByWorkspaceId(workspaceId)).thenReturn(List.of(repository));
+        when(metricSnapshotRepository.findSnapshotsByMetricType(
+            workspaceId,
+            List.of(repositoryId),
+            MetricType.CHANGE_LEAD_TIME_HOURS,
+            MetricGranularity.DAY,
+            MetricService.CALCULATION_VERSION,
+            from,
+            to
+        )).thenReturn(List.of(single), List.of(two));
+
+        DoraMetricsSeriesResponse singleResponse = metricService.getSeries(
+            managerPrincipal,
+            null,
+            null,
+            MetricType.CHANGE_LEAD_TIME_HOURS,
+            MetricGranularity.DAY,
+            from,
+            to
+        );
+        DoraMetricsSeriesResponse twoResponse = metricService.getSeries(
+            managerPrincipal,
+            null,
+            null,
+            MetricType.CHANGE_LEAD_TIME_HOURS,
+            MetricGranularity.DAY,
+            from,
+            to
+        );
+
+        assertThat(singleResponse.series().getFirst().value()).isEqualByComparingTo("42.00");
+        assertThat(twoResponse.series().getFirst().value()).isEqualByComparingTo("15.00");
+    }
+
+    @Test
+    void seriesDedupesSharedObservationsAcrossSnapshots() {
+        Instant from = Instant.parse("2026-08-01T00:00:00Z");
+        Instant to = Instant.parse("2026-08-02T00:00:00Z");
+
         MetricSnapshot first = durationSnapshot(
             repository,
             from,
             to,
             List.of(
-                observation("first-1", from.plusSeconds(1), 1.0),
-                observation("first-2", from.plusSeconds(2), 100.0)
+                observation("shared", from.plusSeconds(10), 100.0),
+                observation("first-only", from.plusSeconds(20), 50.0)
             )
         );
         MetricSnapshot second = durationSnapshot(
-            secondRepository,
+            repository,
             from,
             to,
-            List.of(observation("second-1", from.plusSeconds(3), 101.0))
+            List.of(
+                observation("shared", from.plusSeconds(10), 100.0),
+                observation("second-only", from.plusSeconds(30), 150.0)
+            )
         );
+
+        when(gitRepositoryRepository.findAllByWorkspaceId(workspaceId)).thenReturn(List.of(repository));
         when(metricSnapshotRepository.findSnapshots(
             workspaceId,
-            List.of(repositoryId, secondRepositoryId),
+            List.of(repositoryId),
             MetricGranularity.DAY,
             MetricService.CALCULATION_VERSION,
             from,
@@ -523,6 +631,68 @@ class MetricServiceTest {
             null,
             null
         )).isInstanceOf(NotFoundException.class);
+    }
+
+    @Test
+    void getDeploymentFrequencyDetailsReturnsPaginatedDeployments() {
+        Instant from = Instant.parse("2026-08-01T00:00:00Z");
+        Instant to = Instant.parse("2026-08-15T00:00:00Z");
+
+        Deployment deployment = new Deployment();
+        deployment.setId(UUID.randomUUID());
+        deployment.setRepository(repository);
+        deployment.setEnvironment("production");
+        deployment.setSource(DeploymentSource.GITHUB_DEPLOYMENT);
+        deployment.setStatus(DeploymentStatus.SUCCESS);
+        deployment.setCommitSha("abcdef1234567890");
+        deployment.setStartedAt(from.plusSeconds(100));
+        deployment.setFinishedAt(from.plusSeconds(340));
+
+        when(gitRepositoryRepository.findAllByWorkspaceId(workspaceId)).thenReturn(List.of(repository));
+        when(deploymentRepository.findSuccessfulProductionDeployments(
+            eq(List.of(repositoryId)),
+            eq(from),
+            eq(to),
+            any(Pageable.class)
+        )).thenReturn(new PageImpl<>(List.of(deployment)));
+
+        DeploymentFrequencyDetailsResponse response = metricService.getDeploymentFrequencyDetails(
+            managerPrincipal,
+            null,
+            null,
+            from,
+            to,
+            0,
+            20
+        );
+
+        assertThat(response.repositoryCount()).isEqualTo(1);
+        assertThat(response.timezone()).isEqualTo("UTC");
+        assertThat(response.items()).hasSize(1);
+        assertThat(response.items().get(0).commitSha()).isEqualTo("abcdef1234567890");
+        assertThat(response.items().get(0).durationSeconds()).isEqualTo(240L);
+        assertThat(response.items().get(0).repositoryName()).isEqualTo("core");
+        assertThat(response.items().get(0).environment()).isEqualTo("production");
+    }
+
+    @Test
+    void getDeploymentFrequencyDetailsReturnsEmptyWhenNoRepositoriesAccessible() {
+        when(gitRepositoryRepository.findAllLeadReadableRepositories(workspaceId, membershipId))
+            .thenReturn(List.of());
+
+        DeploymentFrequencyDetailsResponse response = metricService.getDeploymentFrequencyDetails(
+            leadPrincipal,
+            null,
+            null,
+            null,
+            null,
+            0,
+            20
+        );
+
+        assertThat(response.repositoryCount()).isZero();
+        assertThat(response.items()).isEmpty();
+        assertThat(response.totalElements()).isZero();
     }
 
     private MetricSnapshot durationSnapshot(

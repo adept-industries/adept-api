@@ -426,6 +426,101 @@
         ],
         "type": "object"
       },
+      "DeploymentFrequencyDetailDto": {
+        "properties": {
+          "commitSha": {
+            "type": "string"
+          },
+          "deployedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "durationSeconds": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "environment": {
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "repositoryFullName": {
+            "type": "string"
+          },
+          "repositoryId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "repositoryName": {
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "GITHUB_DEPLOYMENT",
+              "GITHUB_WORKFLOW",
+              "MANUAL"
+            ],
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "DeploymentFrequencyDetailsResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DeploymentFrequencyDetailDto"
+            },
+            "type": "array"
+          },
+          "page": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "projectId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "rangeEnd": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "rangeStart": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "repositoryCount": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "repositoryId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "size": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "totalElements": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "totalPages": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "workspaceId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "DoraMetricsSeriesResponse": {
         "properties": {
           "calculatedAt": {
@@ -5788,6 +5883,202 @@
         ],
         "tags": [
           "jira-integration-controller"
+        ]
+      }
+    },
+    "/api/v1/metrics/deployment-frequency/details": {
+      "get": {
+        "description": "Returns paginated successful production deployments counted by Deployment Frequency.",
+        "operationId": "getDeploymentFrequencyDetails",
+        "parameters": [
+          {
+            "description": "Optional selected project scope.",
+            "in": "query",
+            "name": "projectId",
+            "required": false,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Optional single repository within the selected scope.",
+            "in": "query",
+            "name": "repositoryId",
+            "required": false,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "format": "int32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "format": "int32",
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentFrequencyDetailsResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Get Deployment Frequency event details",
+        "tags": [
+          "metric-controller"
+        ]
+      }
+    },
+    "/api/v1/metrics/details": {
+      "get": {
+        "description": "Returns paginated raw event records for a specific DORA metric.",
+        "operationId": "getDetails",
+        "parameters": [
+          {
+            "description": "Optional selected project scope.",
+            "in": "query",
+            "name": "projectId",
+            "required": false,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Optional single repository within the selected scope.",
+            "in": "query",
+            "name": "repositoryId",
+            "required": false,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Metric type to fetch details for.",
+            "in": "query",
+            "name": "metricType",
+            "required": false,
+            "schema": {
+              "default": "DEPLOYMENT_FREQUENCY",
+              "enum": [
+                "CHANGE_LEAD_TIME_HOURS",
+                "DEPLOYMENT_FREQUENCY",
+                "FAILED_DEPLOYMENT_RECOVERY_TIME_HOURS",
+                "CHANGE_FAILURE_RATE_PERCENT"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "format": "int32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "format": "int32",
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentFrequencyDetailsResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Get scoped DORA metric event details",
+        "tags": [
+          "metric-controller"
         ]
       }
     },

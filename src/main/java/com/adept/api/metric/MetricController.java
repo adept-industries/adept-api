@@ -13,6 +13,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.adept.api.common.domain.MetricGranularity;
 import com.adept.api.common.domain.MetricType;
+import com.adept.api.common.error.ApiException;
+import com.adept.api.common.error.ProblemCode;
+import com.adept.api.metric.dto.DeploymentFrequencyDetailsResponse;
 import com.adept.api.metric.dto.DoraMetricsSeriesResponse;
 import com.adept.api.metric.dto.DoraMetricsSummaryResponse;
 import com.adept.api.security.AuthenticatedPrincipal;
@@ -20,6 +23,8 @@ import com.adept.api.security.CurrentPrincipal;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 
 @Validated
 @RestController
@@ -86,5 +91,54 @@ public class MetricController {
             to
         );
         return ResponseEntity.ok(response);
+    }
+
+    @GetMapping(value = "/deployment-frequency/details", produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(
+        summary = "Get Deployment Frequency event details",
+        description = "Returns paginated successful production deployments counted by Deployment Frequency."
+    )
+    public ResponseEntity<DeploymentFrequencyDetailsResponse> getDeploymentFrequencyDetails(
+            @Parameter(description = "Optional selected project scope.")
+            @RequestParam(required = false) UUID projectId,
+            @Parameter(description = "Optional single repository within the selected scope.")
+            @RequestParam(required = false) UUID repositoryId,
+            @RequestParam(required = false) Instant from,
+            @RequestParam(required = false) Instant to,
+            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
+        AuthenticatedPrincipal principal = currentPrincipal.require();
+        DeploymentFrequencyDetailsResponse response = metricService.getDeploymentFrequencyDetails(
+            principal,
+            projectId,
+            repositoryId,
+            from,
+            to,
+            page,
+            size
+        );
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping(value = "/details", produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(
+        summary = "Get scoped DORA metric event details",
+        description = "Returns paginated raw event records for a specific DORA metric."
+    )
+    public ResponseEntity<DeploymentFrequencyDetailsResponse> getDetails(
+            @Parameter(description = "Optional selected project scope.")
+            @RequestParam(required = false) UUID projectId,
+            @Parameter(description = "Optional single repository within the selected scope.")
+            @RequestParam(required = false) UUID repositoryId,
+            @Parameter(description = "Metric type to fetch details for.")
+            @RequestParam(required = false, defaultValue = "DEPLOYMENT_FREQUENCY") MetricType metricType,
+            @RequestParam(required = false) Instant from,
+            @RequestParam(required = false) Instant to,
+            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
+        if (metricType != null && metricType != MetricType.DEPLOYMENT_FREQUENCY) {
+            throw new ApiException(ProblemCode.VALIDATION_FAILED, "Details for " + metricType + " are not yet supported.");
+        }
+        return getDeploymentFrequencyDetails(projectId, repositoryId, from, to, page, size);
     }
 }
