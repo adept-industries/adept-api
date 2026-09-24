@@ -15,9 +15,12 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
+import com.adept.api.common.domain.DeploymentSource;
 import com.adept.api.common.domain.MembershipRole;
 import com.adept.api.common.domain.MetricGranularity;
 import com.adept.api.common.domain.MetricType;
+import com.adept.api.metric.dto.DeploymentFrequencyDetailDto;
+import com.adept.api.metric.dto.DeploymentFrequencyDetailsResponse;
 import com.adept.api.metric.dto.DoraMetricsSeriesResponse;
 import com.adept.api.metric.dto.DoraMetricsSummaryResponse;
 import com.adept.api.metric.dto.MetricSeriesItemDto;
@@ -141,5 +144,92 @@ class MetricControllerTest {
         assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody().series()).hasSize(1);
         assertThat(response.getBody().series().get(0).value()).isEqualByComparingTo("3.0");
+    }
+
+    @Test
+    void testGetDeploymentFrequencyDetailsReturnsOk() {
+        when(currentPrincipal.require()).thenReturn(principal);
+
+        Instant now = Instant.now();
+        DeploymentFrequencyDetailDto row = new DeploymentFrequencyDetailDto(
+            UUID.randomUUID(),
+            UUID.randomUUID(),
+            "core",
+            "acme/core",
+            now,
+            "production",
+            DeploymentSource.GITHUB_DEPLOYMENT,
+            "abc1234",
+            120L
+        );
+        DeploymentFrequencyDetailsResponse mockResponse = new DeploymentFrequencyDetailsResponse(
+            workspaceId,
+            null,
+            null,
+            1,
+            now.minusSeconds(86400),
+            now,
+            "UTC",
+            0,
+            20,
+            1L,
+            1,
+            List.of(row)
+        );
+
+        when(metricService.getDeploymentFrequencyDetails(principal, null, null, null, null, 0, 20))
+            .thenReturn(mockResponse);
+
+        ResponseEntity<DeploymentFrequencyDetailsResponse> response = metricController.getDeploymentFrequencyDetails(
+            null,
+            null,
+            null,
+            null,
+            0,
+            20
+        );
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().items()).hasSize(1);
+        assertThat(response.getBody().items().get(0).commitSha()).isEqualTo("abc1234");
+    }
+
+    @Test
+    void testGetMetricDetailsDispatchesToDeploymentFrequency() {
+        when(currentPrincipal.require()).thenReturn(principal);
+
+        Instant now = Instant.now();
+        DeploymentFrequencyDetailsResponse mockResponse = new DeploymentFrequencyDetailsResponse(
+            workspaceId,
+            null,
+            null,
+            1,
+            now.minusSeconds(86400),
+            now,
+            "UTC",
+            0,
+            20,
+            0L,
+            0,
+            List.of()
+        );
+
+        when(metricService.getDeploymentFrequencyDetails(principal, null, null, null, null, 0, 20))
+            .thenReturn(mockResponse);
+
+        ResponseEntity<DeploymentFrequencyDetailsResponse> response = metricController.getDetails(
+            null,
+            null,
+            MetricType.DEPLOYMENT_FREQUENCY,
+            null,
+            null,
+            0,
+            20
+        );
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().items()).isEmpty();
     }
 }

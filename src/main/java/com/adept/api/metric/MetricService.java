@@ -12,6 +12,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,8 +25,12 @@ import com.adept.api.common.domain.MetricType;
 import com.adept.api.common.error.ApiException;
 import com.adept.api.common.error.NotFoundException;
 import com.adept.api.common.error.ProblemCode;
+import com.adept.api.deployment.Deployment;
+import com.adept.api.deployment.DeploymentRepository;
 import com.adept.api.integration.github.GitRepository;
 import com.adept.api.integration.github.GitRepositoryRepository;
+import com.adept.api.metric.dto.DeploymentFrequencyDetailDto;
+import com.adept.api.metric.dto.DeploymentFrequencyDetailsResponse;
 import com.adept.api.metric.dto.DoraMetricsSeriesResponse;
 import com.adept.api.metric.dto.DoraMetricsSummaryResponse;
 import com.adept.api.metric.dto.MetricSeriesItemDto;
@@ -46,6 +54,7 @@ public class MetricService {
     private final ProjectRepositoryLinkRepository projectRepositoryLinkRepository;
     private final RepositoryScopeService repositoryScopeService;
     private final WorkspaceRepository workspaceRepository;
+    private final DeploymentRepository deploymentRepository;
 
     public MetricService(
             MetricSnapshotRepository metricSnapshotRepository,
@@ -53,13 +62,15 @@ public class MetricService {
             ProjectRepository projectRepository,
             ProjectRepositoryLinkRepository projectRepositoryLinkRepository,
             RepositoryScopeService repositoryScopeService,
-            WorkspaceRepository workspaceRepository) {
+            WorkspaceRepository workspaceRepository,
+            DeploymentRepository deploymentRepository) {
         this.metricSnapshotRepository = metricSnapshotRepository;
         this.gitRepositoryRepository = gitRepositoryRepository;
         this.projectRepository = projectRepository;
         this.projectRepositoryLinkRepository = projectRepositoryLinkRepository;
         this.repositoryScopeService = repositoryScopeService;
         this.workspaceRepository = workspaceRepository;
+        this.deploymentRepository = deploymentRepository;
     }
 
     public DoraMetricsSummaryResponse getSummary(
@@ -157,6 +168,81 @@ public class MetricService {
             calculatedAt,
             isStale(calculatedAt),
             aggregateSeries(snapshots, range)
+        );
+    }
+
+    public DeploymentFrequencyDetailsResponse getDeploymentFrequencyDetails(
+            AuthenticatedPrincipal principal,
+            UUID projectId,
+            UUID repositoryId,
+            Instant from,
+            Instant to,
+            int page,
+            int size) {
+        MetricRange range = validateRange(from, to);
+        String timezone = workspaceTimezone(principal);
+        List<UUID> repositoryIds = resolveAccessibleRepositoryIds(principal, projectId, repositoryId);
+
+        if (repositoryIds.isEmpty()) {
+            return new DeploymentFrequencyDetailsResponse(
+                principal.workspaceId(),
+                projectId,
+                repositoryId,
+                0,
+                range.start(),
+                range.end(),
+                timezone,
+                page,
+                size,
+                0L,
+                0,
+                List.of()
+            );
+        }
+
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "finishedAt"));
+        Page<Deployment> deploymentsPage = deploymentRepository.findSuccessfulProductionDeployments(
+            repositoryIds,
+            range.start(),
+            range.end(),
+            pageable
+        );
+
+        List<DeploymentFrequencyDetailDto> items = deploymentsPage.getContent().stream()
+            .map(this::toDeploymentFrequencyDetailDto)
+            .toList();
+
+        return new DeploymentFrequencyDetailsResponse(
+            principal.workspaceId(),
+            projectId,
+            repositoryId,
+            repositoryIds.size(),
+            range.start(),
+            range.end(),
+            timezone,
+            deploymentsPage.getNumber(),
+            deploymentsPage.getSize(),
+            deploymentsPage.getTotalElements(),
+            deploymentsPage.getTotalPages(),
+            items
+        );
+    }
+
+    private DeploymentFrequencyDetailDto toDeploymentFrequencyDetailDto(Deployment d) {
+        Long durationSeconds = null;
+        if (d.getStartedAt() != null && d.getFinishedAt() != null && !d.getStartedAt().isAfter(d.getFinishedAt())) {
+            durationSeconds = Duration.between(d.getStartedAt(), d.getFinishedAt()).toSeconds();
+        }
+        return new DeploymentFrequencyDetailDto(
+            d.getId(),
+            d.getRepository().getId(),
+            d.getRepository().getName(),
+            d.getRepository().getFullName(),
+            d.getFinishedAt(),
+            d.getEnvironment(),
+            d.getSource(),
+            d.getCommitSha(),
+            durationSeconds
         );
     }
 
@@ -293,6 +379,7 @@ public class MetricService {
             .map(Observation::value)
             .sorted()
             .toList();
+
         if (values.isEmpty()) {
             return MetricSummaryDto.empty("hours");
         }
@@ -302,6 +389,7 @@ public class MetricService {
         MetricRating rating = metricType == MetricType.CHANGE_LEAD_TIME_HOURS
             ? MetricRating.rateChangeLeadTime(median, values.size())
             : MetricRating.rateRecoveryTime(median, values.size());
+
         return new MetricSummaryDto(
             decimal(median),
             "hours",
@@ -324,6 +412,7 @@ public class MetricService {
         }
         long failed = deployments.stream().filter(observation -> observation.value() >= 0.5).count();
         double rate = failed * 100.0 / deployments.size();
+
         return new MetricSummaryDto(
             decimal(rate),
             "percent",
@@ -443,8 +532,11 @@ public class MetricService {
     }
 
     private static double percentile(List<Double> sortedValues, double percentile) {
+        if (sortedValues.isEmpty()) {
+            return 0.0;
+        }
         if (sortedValues.size() == 1) {
-            return sortedValues.getFirst();
+            return sortedValues.get(0);
         }
         double rank = percentile * (sortedValues.size() - 1);
         int lower = (int) Math.floor(rank);

@@ -13,7 +13,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.TestPropertySource;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
@@ -34,7 +33,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
     "app.github.enabled=true",
     "app.jira.enabled=true"
 })
-@ActiveProfiles("test")
 class OpenApiContractTest extends PartCIntegrationTestSupport {
 
     private static final String JSON = MediaType.APPLICATION_JSON_VALUE;
@@ -272,6 +270,8 @@ class OpenApiContractTest extends PartCIntegrationTestSupport {
         assertThat(fieldNames(paths)).contains(
             "/api/v1/metrics/summary",
             "/api/v1/metrics/series",
+            "/api/v1/metrics/deployment-frequency/details",
+            "/api/v1/metrics/details",
             "/api/v1/repositories",
             "/api/v1/integrations/github",
             "/api/v1/integrations/jira",
@@ -324,6 +324,10 @@ class OpenApiContractTest extends PartCIntegrationTestSupport {
             .isEqualTo("#/components/schemas/DoraMetricsSummaryResponse");
         assertThat(paths.at("/~1api~1v1~1metrics~1series/get/responses/200/content/application~1json/schema/$ref").asText())
             .isEqualTo("#/components/schemas/DoraMetricsSeriesResponse");
+        assertThat(paths.at("/~1api~1v1~1metrics~1deployment-frequency~1details/get/responses/200/content/application~1json/schema/$ref").asText())
+            .isEqualTo("#/components/schemas/DeploymentFrequencyDetailsResponse");
+        assertThat(paths.at("/~1api~1v1~1metrics~1details/get/responses/200/content/application~1json/schema/$ref").asText())
+            .isEqualTo("#/components/schemas/DeploymentFrequencyDetailsResponse");
         assertThat(paths.at("/~1api~1v1~1metrics~1summary/get/security/0/bearerAuth").isArray())
             .isTrue();
         assertThat(paths.at("/~1api~1v1~1webhooks~1jira~1{integrationId}/post/security").isArray())
@@ -338,6 +342,8 @@ class OpenApiContractTest extends PartCIntegrationTestSupport {
         assertThat(fieldNames(schemas)).contains(
             "DoraMetricsSummaryResponse",
             "DoraMetricsSeriesResponse",
+            "DeploymentFrequencyDetailsResponse",
+            "DeploymentFrequencyDetailDto",
             "MetricSummaryDto",
             "MetricSeriesItemDto",
             "RepositorySettingsDto"
@@ -444,10 +450,11 @@ class OpenApiContractTest extends PartCIntegrationTestSupport {
         String expectedSchema = SUCCESS_SCHEMAS.get(endpoint.operationId());
         if (expectedSchema == null) {
             assertThat(success.has("content")).isFalse();
-        } else {
-            assertThat(fieldNames(success.path("content"))).containsExactly(JSON);
-            assertThat(success.at("/content/application~1json/schema/$ref").asText()).isEqualTo(expectedSchema);
+            return;
         }
+
+        assertThat(fieldNames(success.path("content"))).containsExactly(JSON);
+        assertThat(success.at("/content/application~1json/schema/$ref").asText()).isEqualTo(expectedSchema);
     }
 
     private static void assertSecurity(JsonNode actual, List<String> expectedSchemes) {
