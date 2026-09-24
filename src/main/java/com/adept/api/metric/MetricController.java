@@ -24,6 +24,9 @@ import com.adept.api.security.CurrentPrincipal;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 
@@ -152,7 +155,15 @@ public class MetricController {
     @GetMapping(value = "/details", produces = MediaType.APPLICATION_JSON_VALUE)
     @Operation(
         summary = "Get scoped DORA metric event details",
-        description = "Returns paginated raw event records for a specific DORA metric."
+        description = "Returns paginated raw event records for a specific DORA metric. "
+            + "Defaults to Deployment Frequency when no metric type is specified.",
+        responses = {
+            @ApiResponse(
+                responseCode = "200",
+                description = "Paginated event details for the requested metric.",
+                content = @Content(schema = @Schema(implementation = DeploymentFrequencyDetailsResponse.class))
+            )
+        }
     )
     public ResponseEntity<?> getDetails(
             @Parameter(description = "Optional selected project scope.")

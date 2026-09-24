@@ -186,6 +186,133 @@
         ],
         "type": "object"
       },
+      "ChangeLeadTimeDetailDto": {
+        "properties": {
+          "authorLogin": {
+            "type": "string"
+          },
+          "codingTimeSeconds": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "deployTimeSeconds": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "deployedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "deploymentCommitSha": {
+            "type": "string"
+          },
+          "deploymentEnvironment": {
+            "type": "string"
+          },
+          "firstCommitAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "leadTimeSeconds": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "mergedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "openedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "prId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "prNumber": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "prTitle": {
+            "type": "string"
+          },
+          "prUrl": {
+            "type": "string"
+          },
+          "repositoryFullName": {
+            "type": "string"
+          },
+          "repositoryId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "repositoryName": {
+            "type": "string"
+          },
+          "repositoryOwnerLogin": {
+            "type": "string"
+          },
+          "reviewTimeSeconds": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "ChangeLeadTimeDetailsResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ChangeLeadTimeDetailDto"
+            },
+            "type": "array"
+          },
+          "page": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "projectId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "rangeEnd": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "rangeStart": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "repositoryCount": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "repositoryId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "size": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "totalElements": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "totalPages": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "workspaceId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "CreateAlertRuleRequest": {
         "additionalProperties": false,
         "properties": {
@@ -5886,6 +6013,96 @@
         ]
       }
     },
+    "/api/v1/metrics/change-lead-time/details": {
+      "get": {
+        "description": "Returns paginated pull requests with their lead-time breakdown (coding, review, and deploy stages) based on successful production deployments.",
+        "operationId": "getChangeLeadTimeDetails",
+        "parameters": [
+          {
+            "description": "Optional selected project scope.",
+            "in": "query",
+            "name": "projectId",
+            "required": false,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Optional single repository within the selected scope.",
+            "in": "query",
+            "name": "repositoryId",
+            "required": false,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "format": "int32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "format": "int32",
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChangeLeadTimeDetailsResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Get Change Lead Time event details",
+        "tags": [
+          "metric-controller"
+        ]
+      }
+    },
     "/api/v1/metrics/deployment-frequency/details": {
       "get": {
         "description": "Returns paginated successful production deployments counted by Deployment Frequency.",
@@ -5978,7 +6195,7 @@
     },
     "/api/v1/metrics/details": {
       "get": {
-        "description": "Returns paginated raw event records for a specific DORA metric.",
+        "description": "Returns paginated raw event records for a specific DORA metric. Defaults to Deployment Frequency when no metric type is specified.",
         "operationId": "getDetails",
         "parameters": [
           {
@@ -6068,7 +6285,7 @@
                 }
               }
             },
-            "description": "OK"
+            "description": "Paginated event details for the requested metric."
           }
         },
         "security": [
