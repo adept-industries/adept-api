@@ -218,7 +218,7 @@ class MetricControllerTest {
         when(metricService.getDeploymentFrequencyDetails(principal, null, null, null, null, 0, 20))
             .thenReturn(mockResponse);
 
-        ResponseEntity<DeploymentFrequencyDetailsResponse> response = metricController.getDetails(
+        ResponseEntity<?> response = metricController.getDetails(
             null,
             null,
             MetricType.DEPLOYMENT_FREQUENCY,
@@ -230,6 +230,6 @@ class MetricControllerTest {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isNotNull();
-        assertThat(response.getBody().items()).isEmpty();
+        assertThat(((DeploymentFrequencyDetailsResponse) response.getBody()).items()).isEmpty();
     }
 }
