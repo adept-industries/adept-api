@@ -29,6 +29,8 @@ import com.adept.api.deployment.Deployment;
 import com.adept.api.deployment.DeploymentRepository;
 import com.adept.api.integration.github.GitRepository;
 import com.adept.api.integration.github.GitRepositoryRepository;
+import com.adept.api.metric.dto.ChangeLeadTimeDetailDto;
+import com.adept.api.metric.dto.ChangeLeadTimeDetailsResponse;
 import com.adept.api.metric.dto.DeploymentFrequencyDetailDto;
 import com.adept.api.metric.dto.DeploymentFrequencyDetailsResponse;
 import com.adept.api.metric.dto.DoraMetricsSeriesResponse;
@@ -37,6 +39,8 @@ import com.adept.api.metric.dto.MetricSeriesItemDto;
 import com.adept.api.metric.dto.MetricSummaryDto;
 import com.adept.api.project.ProjectRepository;
 import com.adept.api.project.ProjectRepositoryLinkRepository;
+import com.adept.api.pullrequest.ChangeLeadTimeRow;
+import com.adept.api.pullrequest.PullRequestRepository;
 import com.adept.api.security.AuthenticatedPrincipal;
 import com.adept.api.security.RepositoryScopeService;
 import com.adept.api.workspace.WorkspaceRepository;
@@ -55,6 +59,7 @@ public class MetricService {
     private final RepositoryScopeService repositoryScopeService;
     private final WorkspaceRepository workspaceRepository;
     private final DeploymentRepository deploymentRepository;
+    private final PullRequestRepository pullRequestRepository;
 
     public MetricService(
             MetricSnapshotRepository metricSnapshotRepository,
@@ -63,7 +68,8 @@ public class MetricService {
             ProjectRepositoryLinkRepository projectRepositoryLinkRepository,
             RepositoryScopeService repositoryScopeService,
             WorkspaceRepository workspaceRepository,
-            DeploymentRepository deploymentRepository) {
+            DeploymentRepository deploymentRepository,
+            PullRequestRepository pullRequestRepository) {
         this.metricSnapshotRepository = metricSnapshotRepository;
         this.gitRepositoryRepository = gitRepositoryRepository;
         this.projectRepository = projectRepository;
@@ -71,6 +77,7 @@ public class MetricService {
         this.repositoryScopeService = repositoryScopeService;
         this.workspaceRepository = workspaceRepository;
         this.deploymentRepository = deploymentRepository;
+        this.pullRequestRepository = pullRequestRepository;
     }
 
     public DoraMetricsSummaryResponse getSummary(
@@ -225,6 +232,105 @@ public class MetricService {
             deploymentsPage.getTotalElements(),
             deploymentsPage.getTotalPages(),
             items
+        );
+    }
+
+    public ChangeLeadTimeDetailsResponse getChangeLeadTimeDetails(
+            AuthenticatedPrincipal principal,
+            UUID projectId,
+            UUID repositoryId,
+            Instant from,
+            Instant to,
+            int page,
+            int size) {
+        MetricRange range = validateRange(from, to);
+        String timezone = workspaceTimezone(principal);
+        List<UUID> repositoryIds = resolveAccessibleRepositoryIds(principal, projectId, repositoryId);
+
+        if (repositoryIds.isEmpty()) {
+            return new ChangeLeadTimeDetailsResponse(
+                principal.workspaceId(),
+                projectId,
+                repositoryId,
+                0,
+                range.start(),
+                range.end(),
+                timezone,
+                page,
+                size,
+                0L,
+                0,
+                List.of()
+            );
+        }
+
+        Pageable pageable = PageRequest.of(page, size);
+        Page<ChangeLeadTimeRow> rowsPage = pullRequestRepository.findChangeLeadTimeRows(
+            repositoryIds,
+            range.start(),
+            range.end(),
+            pageable
+        );
+
+        List<ChangeLeadTimeDetailDto> items = rowsPage.getContent().stream()
+            .map(this::toChangeLeadTimeDetailDto)
+            .toList();
+
+        return new ChangeLeadTimeDetailsResponse(
+            principal.workspaceId(),
+            projectId,
+            repositoryId,
+            repositoryIds.size(),
+            range.start(),
+            range.end(),
+            timezone,
+            rowsPage.getNumber(),
+            rowsPage.getSize(),
+            rowsPage.getTotalElements(),
+            rowsPage.getTotalPages(),
+            items
+        );
+    }
+
+    private ChangeLeadTimeDetailDto toChangeLeadTimeDetailDto(ChangeLeadTimeRow row) {
+        Instant firstCommit = row.getFirstCommitAt();
+        Instant opened     = row.getOpenedAt();
+        Instant merged     = row.getMergedAt();
+        Instant deployed   = row.getDeployedAt();
+
+        Long leadTime   = (firstCommit != null && deployed != null && !firstCommit.isAfter(deployed))
+            ? Duration.between(firstCommit, deployed).toSeconds() : null;
+        Long codingTime = (firstCommit != null && opened != null && !firstCommit.isAfter(opened))
+            ? Duration.between(firstCommit, opened).toSeconds() : null;
+        Long reviewTime = (opened != null && merged != null && !opened.isAfter(merged))
+            ? Duration.between(opened, merged).toSeconds() : null;
+        Long deployTime = (merged != null && deployed != null && !merged.isAfter(deployed))
+            ? Duration.between(merged, deployed).toSeconds() : null;
+
+        String prUrl = row.getRepositoryFullName() != null
+            ? "https://github.com/" + row.getRepositoryFullName() + "/pull/" + row.getPrNumber()
+            : null;
+
+        return new ChangeLeadTimeDetailDto(
+            row.getPrId(),
+            row.getPrNumber(),
+            row.getPrTitle(),
+            prUrl,
+            row.getAuthorLogin(),
+            row.getRepositoryId(),
+            row.getRepositoryName(),
+            row.getRepositoryOwnerLogin(),
+            row.getRepositoryFullName(),
+            firstCommit,
+            opened,
+            merged,
+            deployed,
+            leadTime,
+            codingTime,
+            reviewTime,
+            deployTime,
+            row.getDeploymentEnvironment(),
+            row.getDeploymentCommitSha()
         );
     }
 

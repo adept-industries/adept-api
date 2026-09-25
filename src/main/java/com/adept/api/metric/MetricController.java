@@ -15,6 +15,7 @@ import com.adept.api.common.domain.MetricGranularity;
 import com.adept.api.common.domain.MetricType;
 import com.adept.api.common.error.ApiException;
 import com.adept.api.common.error.ProblemCode;
+import com.adept.api.metric.dto.ChangeLeadTimeDetailsResponse;
 import com.adept.api.metric.dto.DeploymentFrequencyDetailsResponse;
 import com.adept.api.metric.dto.DoraMetricsSeriesResponse;
 import com.adept.api.metric.dto.DoraMetricsSummaryResponse;
@@ -23,6 +24,9 @@ import com.adept.api.security.CurrentPrincipal;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 
@@ -120,12 +124,48 @@ public class MetricController {
         return ResponseEntity.ok(response);
     }
 
+    @GetMapping(value = "/change-lead-time/details", produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(
+        summary = "Get Change Lead Time event details",
+        description = "Returns paginated pull requests with their lead-time breakdown "
+            + "(coding, review, and deploy stages) based on successful production deployments."
+    )
+    public ResponseEntity<ChangeLeadTimeDetailsResponse> getChangeLeadTimeDetails(
+            @Parameter(description = "Optional selected project scope.")
+            @RequestParam(required = false) UUID projectId,
+            @Parameter(description = "Optional single repository within the selected scope.")
+            @RequestParam(required = false) UUID repositoryId,
+            @RequestParam(required = false) Instant from,
+            @RequestParam(required = false) Instant to,
+            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
+        AuthenticatedPrincipal principal = currentPrincipal.require();
+        ChangeLeadTimeDetailsResponse response = metricService.getChangeLeadTimeDetails(
+            principal,
+            projectId,
+            repositoryId,
+            from,
+            to,
+            page,
+            size
+        );
+        return ResponseEntity.ok(response);
+    }
+
     @GetMapping(value = "/details", produces = MediaType.APPLICATION_JSON_VALUE)
     @Operation(
         summary = "Get scoped DORA metric event details",
-        description = "Returns paginated raw event records for a specific DORA metric."
+        description = "Returns paginated raw event records for a specific DORA metric. "
+            + "Defaults to Deployment Frequency when no metric type is specified.",
+        responses = {
+            @ApiResponse(
+                responseCode = "200",
+                description = "Paginated event details for the requested metric.",
+                content = @Content(schema = @Schema(implementation = DeploymentFrequencyDetailsResponse.class))
+            )
+        }
     )
-    public ResponseEntity<DeploymentFrequencyDetailsResponse> getDetails(
+    public ResponseEntity<?> getDetails(
             @Parameter(description = "Optional selected project scope.")
             @RequestParam(required = false) UUID projectId,
             @Parameter(description = "Optional single repository within the selected scope.")
@@ -136,6 +176,9 @@ public class MetricController {
             @RequestParam(required = false) Instant to,
             @RequestParam(defaultValue = "0") @Min(0) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
+        if (metricType == MetricType.CHANGE_LEAD_TIME_HOURS) {
+            return getChangeLeadTimeDetails(projectId, repositoryId, from, to, page, size);
+        }
         if (metricType != null && metricType != MetricType.DEPLOYMENT_FREQUENCY) {
             throw new ApiException(ProblemCode.VALIDATION_FAILED, "Details for " + metricType + " are not yet supported.");
         }
