@@ -19,6 +19,8 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.adept.api.common.domain.IncidentSeverity;
+import com.adept.api.common.domain.IncidentSource;
 import com.adept.api.common.domain.MembershipRole;
 import com.adept.api.common.domain.MetricGranularity;
 import com.adept.api.common.domain.MetricType;
@@ -27,6 +29,8 @@ import com.adept.api.common.error.NotFoundException;
 import com.adept.api.common.error.ProblemCode;
 import com.adept.api.deployment.Deployment;
 import com.adept.api.deployment.DeploymentRepository;
+import com.adept.api.incident.IncidentRepository;
+import com.adept.api.incident.RecoveryTimeRow;
 import com.adept.api.integration.github.GitRepository;
 import com.adept.api.integration.github.GitRepositoryRepository;
 import com.adept.api.metric.dto.ChangeLeadTimeDetailDto;
@@ -37,6 +41,9 @@ import com.adept.api.metric.dto.DoraMetricsSeriesResponse;
 import com.adept.api.metric.dto.DoraMetricsSummaryResponse;
 import com.adept.api.metric.dto.MetricSeriesItemDto;
 import com.adept.api.metric.dto.MetricSummaryDto;
+import com.adept.api.metric.dto.RecoveryDeploymentRefDto;
+import com.adept.api.metric.dto.RecoveryTimeDetailDto;
+import com.adept.api.metric.dto.RecoveryTimeDetailsResponse;
 import com.adept.api.project.ProjectRepository;
 import com.adept.api.project.ProjectRepositoryLinkRepository;
 import com.adept.api.pullrequest.ChangeLeadTimeRow;
@@ -60,6 +67,7 @@ public class MetricService {
     private final WorkspaceRepository workspaceRepository;
     private final DeploymentRepository deploymentRepository;
     private final PullRequestRepository pullRequestRepository;
+    private final IncidentRepository incidentRepository;
 
     public MetricService(
             MetricSnapshotRepository metricSnapshotRepository,
@@ -69,7 +77,8 @@ public class MetricService {
             RepositoryScopeService repositoryScopeService,
             WorkspaceRepository workspaceRepository,
             DeploymentRepository deploymentRepository,
-            PullRequestRepository pullRequestRepository) {
+            PullRequestRepository pullRequestRepository,
+            IncidentRepository incidentRepository) {
         this.metricSnapshotRepository = metricSnapshotRepository;
         this.gitRepositoryRepository = gitRepositoryRepository;
         this.projectRepository = projectRepository;
@@ -78,6 +87,7 @@ public class MetricService {
         this.workspaceRepository = workspaceRepository;
         this.deploymentRepository = deploymentRepository;
         this.pullRequestRepository = pullRequestRepository;
+        this.incidentRepository = incidentRepository;
     }
 
     public DoraMetricsSummaryResponse getSummary(
@@ -331,6 +341,101 @@ public class MetricService {
             deployTime,
             row.getDeploymentEnvironment(),
             row.getDeploymentCommitSha()
+        );
+    }
+
+    public RecoveryTimeDetailsResponse getRecoveryTimeDetails(
+            AuthenticatedPrincipal principal,
+            UUID projectId,
+            UUID repositoryId,
+            Instant from,
+            Instant to,
+            int page,
+            int size) {
+        MetricRange range = validateRange(from, to);
+        String timezone = workspaceTimezone(principal);
+        List<UUID> repositoryIds = resolveAccessibleRepositoryIds(principal, projectId, repositoryId);
+
+        if (repositoryIds.isEmpty()) {
+            return new RecoveryTimeDetailsResponse(
+                principal.workspaceId(),
+                projectId,
+                repositoryId,
+                0,
+                range.start(),
+                range.end(),
+                timezone,
+                page,
+                size,
+                0L,
+                0,
+                List.of()
+            );
+        }
+
+        Pageable pageable = PageRequest.of(page, size);
+        Page<RecoveryTimeRow> rowsPage = incidentRepository.findRecoveryTimeRows(
+            repositoryIds,
+            range.start(),
+            range.end(),
+            pageable
+        );
+
+        List<RecoveryTimeDetailDto> items = rowsPage.getContent().stream()
+            .map(this::toRecoveryTimeDetailDto)
+            .toList();
+
+        return new RecoveryTimeDetailsResponse(
+            principal.workspaceId(),
+            projectId,
+            repositoryId,
+            repositoryIds.size(),
+            range.start(),
+            range.end(),
+            timezone,
+            rowsPage.getNumber(),
+            rowsPage.getSize(),
+            rowsPage.getTotalElements(),
+            rowsPage.getTotalPages(),
+            items
+        );
+    }
+
+    private RecoveryTimeDetailDto toRecoveryTimeDetailDto(RecoveryTimeRow row) {
+        Instant detected = row.getDetectedAt();
+        Instant resolved = row.getEffectiveResolvedAt() != null ? row.getEffectiveResolvedAt() : row.getResolvedAt();
+
+        Long recoverySeconds = (detected != null && resolved != null && !detected.isAfter(resolved))
+            ? Duration.between(detected, resolved).toSeconds() : null;
+
+        RecoveryDeploymentRefDto failed = row.getFailedDeploymentId() == null ? null
+            : new RecoveryDeploymentRefDto(
+                row.getFailedDeploymentId(),
+                row.getFailedDeploymentCommitSha(),
+                row.getFailedDeploymentEnvironment(),
+                row.getFailedDeploymentFinishedAt()
+            );
+        RecoveryDeploymentRefDto recovery = row.getRecoveryDeploymentId() == null ? null
+            : new RecoveryDeploymentRefDto(
+                row.getRecoveryDeploymentId(),
+                row.getRecoveryDeploymentCommitSha(),
+                row.getRecoveryDeploymentEnvironment(),
+                row.getRecoveryDeploymentFinishedAt()
+            );
+
+        return new RecoveryTimeDetailDto(
+            row.getIncidentId(),
+            row.getTitle(),
+            row.getSource() != null ? IncidentSource.valueOf(row.getSource()) : null,
+            row.getSeverity() != null ? IncidentSeverity.valueOf(row.getSeverity()) : IncidentSeverity.UNKNOWN,
+            row.getRepositoryId(),
+            row.getRepositoryName(),
+            row.getRepositoryFullName(),
+            detected,
+            resolved,
+            recoverySeconds,
+            failed,
+            recovery
         );
     }
 
