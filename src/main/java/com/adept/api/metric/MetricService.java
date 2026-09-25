@@ -19,6 +19,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.adept.api.common.domain.DeploymentStatus;
 import com.adept.api.common.domain.IncidentSeverity;
 import com.adept.api.common.domain.IncidentSource;
 import com.adept.api.common.domain.MembershipRole;
@@ -27,12 +28,16 @@ import com.adept.api.common.domain.MetricType;
 import com.adept.api.common.error.ApiException;
 import com.adept.api.common.error.NotFoundException;
 import com.adept.api.common.error.ProblemCode;
+import com.adept.api.deployment.ChangeFailureRateRow;
 import com.adept.api.deployment.Deployment;
 import com.adept.api.deployment.DeploymentRepository;
 import com.adept.api.incident.IncidentRepository;
 import com.adept.api.incident.RecoveryTimeRow;
 import com.adept.api.integration.github.GitRepository;
 import com.adept.api.integration.github.GitRepositoryRepository;
+import com.adept.api.metric.dto.ChangeFailureRateDetailDto;
+import com.adept.api.metric.dto.ChangeFailureRateDetailsResponse;
+import com.adept.api.metric.dto.ChangeFailureRateIncidentRefDto;
 import com.adept.api.metric.dto.ChangeLeadTimeDetailDto;
 import com.adept.api.metric.dto.ChangeLeadTimeDetailsResponse;
 import com.adept.api.metric.dto.DeploymentFrequencyDetailDto;
@@ -436,6 +441,102 @@ public class MetricService {
             recoverySeconds,
             failed,
             recovery
+        );
+    }
+
+    public ChangeFailureRateDetailsResponse getChangeFailureRateDetails(
+            AuthenticatedPrincipal principal,
+            UUID projectId,
+            UUID repositoryId,
+            Instant from,
+            Instant to,
+            int page,
+            int size) {
+        MetricRange range = validateRange(from, to);
+        String timezone = workspaceTimezone(principal);
+        List<UUID> repositoryIds = resolveAccessibleRepositoryIds(principal, projectId, repositoryId);
+
+        if (repositoryIds.isEmpty()) {
+            return new ChangeFailureRateDetailsResponse(
+                principal.workspaceId(),
+                projectId,
+                repositoryId,
+                0,
+                range.start(),
+                range.end(),
+                timezone,
+                page,
+                size,
+                0L,
+                0,
+                0L,
+                0L,
+                0.0,
+                List.of()
+            );
+        }
+
+        Pageable pageable = PageRequest.of(page, size);
+        Page<ChangeFailureRateRow> rowsPage = deploymentRepository.findChangeFailureRateRows(
+            repositoryIds,
+            range.start(),
+            range.end(),
+            pageable
+        );
+        long totalDeployments = rowsPage.getTotalElements();
+        long failedDeployments = totalDeployments == 0 ? 0L
+            : deploymentRepository.countFailedProductionDeployments(repositoryIds, range.start(), range.end());
+        double failureRatePercent = totalDeployments == 0 ? 0.0
+            : decimal(failedDeployments * 100.0 / totalDeployments).doubleValue();
+
+        List<ChangeFailureRateDetailDto> items = rowsPage.getContent().stream()
+            .map(this::toChangeFailureRateDetailDto)
+            .toList();
+
+        return new ChangeFailureRateDetailsResponse(
+            principal.workspaceId(),
+            projectId,
+            repositoryId,
+            repositoryIds.size(),
+            range.start(),
+            range.end(),
+            timezone,
+            rowsPage.getNumber(),
+            rowsPage.getSize(),
+            totalDeployments,
+            rowsPage.getTotalPages(),
+            totalDeployments,
+            failedDeployments,
+            failureRatePercent,
+            items
+        );
+    }
+
+    private ChangeFailureRateDetailDto toChangeFailureRateDetailDto(ChangeFailureRateRow row) {
+        DeploymentStatus status = row.getStatus() != null ? DeploymentStatus.valueOf(row.getStatus()) : null;
+
+        ChangeFailureRateIncidentRefDto incident = row.getIncidentId() == null ? null
+            : new ChangeFailureRateIncidentRefDto(
+                row.getIncidentId(),
+                row.getIncidentTitle(),
+                row.getIncidentSeverity() != null
+                    ? IncidentSeverity.valueOf(row.getIncidentSeverity()) : IncidentSeverity.UNKNOWN
+            );
+
+        // Engine parity: a deployment fails when it ended in FAILURE or an incident links to it.
+        boolean isFailure = status == DeploymentStatus.FAILURE || incident != null;
+
+        return new ChangeFailureRateDetailDto(
+            row.getDeploymentId(),
+            row.getRepositoryId(),
+            row.getRepositoryName(),
+            row.getRepositoryFullName(),
+            row.getFinishedAt(),
+            row.getEnvironment(),
+            status,
+            row.getCommitSha(),
+            isFailure,
+            incident
         );
     }
 
