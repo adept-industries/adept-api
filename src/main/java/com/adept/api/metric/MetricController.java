@@ -19,6 +19,7 @@ import com.adept.api.metric.dto.ChangeLeadTimeDetailsResponse;
 import com.adept.api.metric.dto.DeploymentFrequencyDetailsResponse;
 import com.adept.api.metric.dto.DoraMetricsSeriesResponse;
 import com.adept.api.metric.dto.DoraMetricsSummaryResponse;
+import com.adept.api.metric.dto.RecoveryTimeDetailsResponse;
 import com.adept.api.security.AuthenticatedPrincipal;
 import com.adept.api.security.CurrentPrincipal;
 
@@ -152,6 +153,35 @@ public class MetricController {
         return ResponseEntity.ok(response);
     }
 
+    @GetMapping(value = "/recovery-time/details", produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(
+        summary = "Get Failed Deployment Recovery Time event details",
+        description = "Returns paginated resolved incidents whose resolution falls inside the window, "
+            + "with detection/resolution times and correlated failed and recovery deployments. "
+            + "Open incidents are excluded."
+    )
+    public ResponseEntity<RecoveryTimeDetailsResponse> getRecoveryTimeDetails(
+            @Parameter(description = "Optional selected project scope.")
+            @RequestParam(required = false) UUID projectId,
+            @Parameter(description = "Optional single repository within the selected scope.")
+            @RequestParam(required = false) UUID repositoryId,
+            @RequestParam(required = false) Instant from,
+            @RequestParam(required = false) Instant to,
+            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
+        AuthenticatedPrincipal principal = currentPrincipal.require();
+        RecoveryTimeDetailsResponse response = metricService.getRecoveryTimeDetails(
+            principal,
+            projectId,
+            repositoryId,
+            from,
+            to,
+            page,
+            size
+        );
+        return ResponseEntity.ok(response);
+    }
+
     @GetMapping(value = "/details", produces = MediaType.APPLICATION_JSON_VALUE)
     @Operation(
         summary = "Get scoped DORA metric event details",
@@ -178,6 +208,9 @@ public class MetricController {
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
         if (metricType == MetricType.CHANGE_LEAD_TIME_HOURS) {
             return getChangeLeadTimeDetails(projectId, repositoryId, from, to, page, size);
+        }
+        if (metricType == MetricType.FAILED_DEPLOYMENT_RECOVERY_TIME_HOURS) {
+            return getRecoveryTimeDetails(projectId, repositoryId, from, to, page, size);
         }
         if (metricType != null && metricType != MetricType.DEPLOYMENT_FREQUENCY) {
             throw new ApiException(ProblemCode.VALIDATION_FAILED, "Details for " + metricType + " are not yet supported.");

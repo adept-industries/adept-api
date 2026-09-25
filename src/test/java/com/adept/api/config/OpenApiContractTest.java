@@ -222,7 +222,11 @@ class OpenApiContractTest extends PartCIntegrationTestSupport {
         "WorkspaceSummaryResponse",
         // Change Lead Time
         "ChangeLeadTimeDetailsResponse",
-        "ChangeLeadTimeDetailDto"
+        "ChangeLeadTimeDetailDto",
+        // Recovery Time
+        "RecoveryTimeDetailsResponse",
+        "RecoveryTimeDetailDto",
+        "RecoveryDeploymentRefDto"
     );
 
     @Autowired
@@ -275,6 +279,7 @@ class OpenApiContractTest extends PartCIntegrationTestSupport {
             "/api/v1/metrics/series",
             "/api/v1/metrics/deployment-frequency/details",
             "/api/v1/metrics/change-lead-time/details",
+            "/api/v1/metrics/recovery-time/details",
             "/api/v1/metrics/details",
             "/api/v1/repositories",
             "/api/v1/integrations/github",
@@ -334,6 +339,8 @@ class OpenApiContractTest extends PartCIntegrationTestSupport {
             .isEqualTo("#/components/schemas/DeploymentFrequencyDetailsResponse");
         assertThat(paths.at("/~1api~1v1~1metrics~1change-lead-time~1details/get/responses/200/content/application~1json/schema/$ref").asText())
             .isEqualTo("#/components/schemas/ChangeLeadTimeDetailsResponse");
+        assertThat(paths.at("/~1api~1v1~1metrics~1recovery-time~1details/get/responses/200/content/application~1json/schema/$ref").asText())
+            .isEqualTo("#/components/schemas/RecoveryTimeDetailsResponse");
         assertThat(paths.at("/~1api~1v1~1metrics~1summary/get/security/0/bearerAuth").isArray())
             .isTrue();
         assertThat(paths.at("/~1api~1v1~1webhooks~1jira~1{integrationId}/post/security").isArray())
@@ -352,6 +359,9 @@ class OpenApiContractTest extends PartCIntegrationTestSupport {
             "DeploymentFrequencyDetailDto",
             "ChangeLeadTimeDetailsResponse",
             "ChangeLeadTimeDetailDto",
+            "RecoveryTimeDetailsResponse",
+            "RecoveryTimeDetailDto",
+            "RecoveryDeploymentRefDto",
             "MetricSummaryDto",
             "MetricSeriesItemDto",
             "RepositorySettingsDto"
