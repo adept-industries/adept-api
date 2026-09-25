@@ -15,6 +15,7 @@ import com.adept.api.common.domain.MetricGranularity;
 import com.adept.api.common.domain.MetricType;
 import com.adept.api.common.error.ApiException;
 import com.adept.api.common.error.ProblemCode;
+import com.adept.api.metric.dto.ChangeFailureRateDetailsResponse;
 import com.adept.api.metric.dto.ChangeLeadTimeDetailsResponse;
 import com.adept.api.metric.dto.DeploymentFrequencyDetailsResponse;
 import com.adept.api.metric.dto.DoraMetricsSeriesResponse;
@@ -182,6 +183,35 @@ public class MetricController {
         return ResponseEntity.ok(response);
     }
 
+    @GetMapping(value = "/change-failure-rate/details", produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(
+        summary = "Get Change Failure Rate event details",
+        description = "Returns paginated finished production deployments inside the window, both "
+            + "failed and successful, with whether each counts as a failure and any linked incident. "
+            + "Totals cover the whole window and match the metric's numerator and denominator."
+    )
+    public ResponseEntity<ChangeFailureRateDetailsResponse> getChangeFailureRateDetails(
+            @Parameter(description = "Optional selected project scope.")
+            @RequestParam(required = false) UUID projectId,
+            @Parameter(description = "Optional single repository within the selected scope.")
+            @RequestParam(required = false) UUID repositoryId,
+            @RequestParam(required = false) Instant from,
+            @RequestParam(required = false) Instant to,
+            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
+        AuthenticatedPrincipal principal = currentPrincipal.require();
+        ChangeFailureRateDetailsResponse response = metricService.getChangeFailureRateDetails(
+            principal,
+            projectId,
+            repositoryId,
+            from,
+            to,
+            page,
+            size
+        );
+        return ResponseEntity.ok(response);
+    }
+
     @GetMapping(value = "/details", produces = MediaType.APPLICATION_JSON_VALUE)
     @Operation(
         summary = "Get scoped DORA metric event details",
@@ -211,6 +241,9 @@ public class MetricController {
         }
         if (metricType == MetricType.FAILED_DEPLOYMENT_RECOVERY_TIME_HOURS) {
             return getRecoveryTimeDetails(projectId, repositoryId, from, to, page, size);
+        }
+        if (metricType == MetricType.CHANGE_FAILURE_RATE_PERCENT) {
+            return getChangeFailureRateDetails(projectId, repositoryId, from, to, page, size);
         }
         if (metricType != null && metricType != MetricType.DEPLOYMENT_FREQUENCY) {
             throw new ApiException(ProblemCode.VALIDATION_FAILED, "Details for " + metricType + " are not yet supported.");

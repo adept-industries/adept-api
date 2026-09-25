@@ -186,6 +186,139 @@
         ],
         "type": "object"
       },
+      "ChangeFailureRateDetailDto": {
+        "properties": {
+          "commitSha": {
+            "type": "string"
+          },
+          "deploymentId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "environment": {
+            "type": "string"
+          },
+          "finishedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "incident": {
+            "$ref": "#/components/schemas/ChangeFailureRateIncidentRefDto"
+          },
+          "isFailure": {
+            "type": "boolean"
+          },
+          "repositoryFullName": {
+            "type": "string"
+          },
+          "repositoryId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "repositoryName": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "QUEUED",
+              "IN_PROGRESS",
+              "SUCCESS",
+              "FAILURE",
+              "CANCELLED"
+            ],
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ChangeFailureRateDetailsResponse": {
+        "properties": {
+          "failedDeployments": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "failureRatePercent": {
+            "format": "double",
+            "type": "number"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ChangeFailureRateDetailDto"
+            },
+            "type": "array"
+          },
+          "page": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "projectId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "rangeEnd": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "rangeStart": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "repositoryCount": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "repositoryId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "size": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "totalDeployments": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "totalElements": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "totalPages": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "workspaceId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ChangeFailureRateIncidentRefDto": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "severity": {
+            "enum": [
+              "UNKNOWN",
+              "SEV1",
+              "SEV2",
+              "SEV3",
+              "SEV4"
+            ],
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "ChangeLeadTimeDetailDto": {
         "properties": {
           "authorLogin": {
@@ -6141,6 +6274,96 @@
         ],
         "tags": [
           "jira-integration-controller"
+        ]
+      }
+    },
+    "/api/v1/metrics/change-failure-rate/details": {
+      "get": {
+        "description": "Returns paginated finished production deployments inside the window, both failed and successful, with whether each counts as a failure and any linked incident. Totals cover the whole window and match the metric's numerator and denominator.",
+        "operationId": "getChangeFailureRateDetails",
+        "parameters": [
+          {
+            "description": "Optional selected project scope.",
+            "in": "query",
+            "name": "projectId",
+            "required": false,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Optional single repository within the selected scope.",
+            "in": "query",
+            "name": "repositoryId",
+            "required": false,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "format": "int32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "format": "int32",
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChangeFailureRateDetailsResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Get Change Failure Rate event details",
+        "tags": [
+          "metric-controller"
         ]
       }
     },
