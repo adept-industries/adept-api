@@ -36,6 +36,20 @@ public interface ProjectRepositoryLinkRepository
         @Param("membershipId") UUID membershipId
     );
 
+    @Query("""
+        select distinct m
+        from ProjectRepositoryLink link
+        join com.adept.api.integration.github.RepositoryLeadAssignment assignment on assignment.repository = link.repository
+        join assignment.leadMembership m
+        join fetch m.user user
+        where link.project.id = :projectId
+          and link.repository.trackingEnabled = true
+          and link.repository.archived = false
+          and m.status = com.adept.api.common.domain.MembershipStatus.ACTIVE
+        order by lower(user.displayName), user.id
+        """)
+    List<com.adept.api.workspace.Membership> findActiveLeadMembershipsByProjectId(@Param("projectId") UUID projectId);
+
     @Modifying
     @Query("delete from ProjectRepositoryLink link where link.project.id = :projectId")
     void deleteAllByProjectId(@Param("projectId") UUID projectId);
