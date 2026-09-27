@@ -222,7 +222,7 @@ public class ProjectService {
         projectRepository.delete(project);
     }
 
-    private Project requireVisibleProject(AuthenticatedPrincipal principal, UUID projectId) {
+    public Project requireVisibleProject(AuthenticatedPrincipal principal, UUID projectId) {
         Project project = requireProject(principal.workspaceId(), projectId);
         if (principal.role() == MembershipRole.MANAGER) {
             return project;
@@ -244,7 +244,7 @@ public class ProjectService {
             .orElseThrow(() -> new NotFoundException(ProblemCode.PROJECT_NOT_FOUND));
     }
 
-    private Membership requireCurrentMembership(AuthenticatedPrincipal principal) {
+    public Membership requireCurrentMembership(AuthenticatedPrincipal principal) {
         return membershipRepository.findActiveByUserIdAndWorkspaceId(principal.userId(), principal.workspaceId())
             .filter(membership -> membership.getId().equals(principal.membershipId()))
             .orElseThrow(() -> new NotFoundException(ProblemCode.PROJECT_NOT_FOUND));

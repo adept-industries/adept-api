@@ -160,7 +160,9 @@ public class SecurityConfig {
                 // Provider credentials, not browser CSRF tokens, protect webhook deliveries.
                 csrf.ignoringRequestMatchers(
                     "/api/v1/webhooks/github",
-                    "/api/v1/webhooks/jira/**"
+                    "/api/v1/webhooks/jira/**",
+                    "/ws",
+                    "/ws/**"
                 );
                 csrf.spa();
                 csrf.csrfTokenRepository(csrfTokenRepository);
@@ -169,6 +171,7 @@ public class SecurityConfig {
                 .authenticationEntryPoint(authenticationEntryPoint)
                 .accessDeniedHandler(accessDeniedHandler))
             .authorizeHttpRequests(authorize -> authorize
+                .requestMatchers("/ws", "/ws/**").permitAll()
                 .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
                 .requestMatchers("/actuator/**").denyAll()
                 .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()

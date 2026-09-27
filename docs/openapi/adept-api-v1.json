@@ -446,6 +446,58 @@
         },
         "type": "object"
       },
+      "ChatMessageResponse": {
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "projectId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "sender": {
+            "$ref": "#/components/schemas/ChatMessageSenderDto"
+          }
+        },
+        "type": "object"
+      },
+      "ChatMessageSenderDto": {
+        "properties": {
+          "avatarUrl": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "membershipId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "MANAGER",
+              "LEAD"
+            ],
+            "type": "string"
+          },
+          "userId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "CreateAlertRuleRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1941,6 +1993,30 @@
         ],
         "type": "object"
       },
+      "ProjectTeamResponse": {
+        "properties": {
+          "manager": {
+            "$ref": "#/components/schemas/TeamMemberDto"
+          },
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/TeamMemberDto"
+            },
+            "type": "array"
+          },
+          "projectDescription": {
+            "type": "string"
+          },
+          "projectId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "projectName": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "RecoveryDeploymentRefDto": {
         "properties": {
           "commitSha": {
@@ -2285,6 +2361,19 @@
         ],
         "type": "object"
       },
+      "SendChatMessageRequest": {
+        "properties": {
+          "content": {
+            "maxLength": 4000,
+            "minLength": 0,
+            "type": "string"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "type": "object"
+      },
       "SettingsOptions": {
         "properties": {
           "complete": {
@@ -2362,6 +2451,35 @@
           "user",
           "workspace"
         ],
+        "type": "object"
+      },
+      "TeamMemberDto": {
+        "properties": {
+          "avatarUrl": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "membershipId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "MANAGER",
+              "LEAD"
+            ],
+            "type": "string"
+          },
+          "userId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
         "type": "object"
       },
       "UpdateAlertRuleRequest": {
@@ -8220,6 +8338,90 @@
         ]
       }
     },
+    "/api/v1/projects/{projectId}/messages": {
+      "get": {
+        "operationId": "getMessages",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ChatMessageResponse"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "tags": [
+          "chat-controller"
+        ]
+      },
+      "post": {
+        "operationId": "sendMessage",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendChatMessageRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatMessageResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+            "csrfHeader": []
+          }
+        ],
+        "tags": [
+          "chat-controller"
+        ]
+      }
+    },
     "/api/v1/projects/{projectId}/pull-request-risks": {
       "get": {
         "description": "Managers see predictions for every tracked project repository. Leads see only repositories assigned to their active membership. Results contain safe derived metadata and no source code or diffs.",
@@ -8695,6 +8897,42 @@
         "summary": "Replace a project's repository set",
         "tags": [
           "project-controller"
+        ]
+      }
+    },
+    "/api/v1/projects/{projectId}/team": {
+      "get": {
+        "operationId": "getTeam",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectTeamResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "tags": [
+          "chat-controller"
         ]
       }
     },
