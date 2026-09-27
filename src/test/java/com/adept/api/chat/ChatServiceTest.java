@@ -118,7 +118,37 @@ class ChatServiceTest {
         assertThat(response.manager().displayName()).isEqualTo("Alice Manager");
         assertThat(response.members()).hasSize(2);
         assertThat(response.members().stream().map(m -> m.displayName()))
-            .containsExactlyInAnyOrder("Alice Manager", "Bob Lead");
+            .containsExactly("Alice Manager", "Bob Lead");
+    }
+
+    @Test
+    void getTeamSortsLeadsAlphabeticallyAndFallsBackToCurrentManager() {
+        project.setCreatedByMembership(null);
+        when(projectService.requireVisibleProject(principal, project.getId())).thenReturn(project);
+        when(projectService.requireCurrentMembership(principal)).thenReturn(managerMembership);
+
+        User leadUser2 = new User();
+        leadUser2.setId(UUID.randomUUID());
+        leadUser2.setDisplayName("Aaron Lead");
+        leadUser2.setEmail("aaron@adept.test");
+
+        Membership leadMembership2 = new Membership();
+        leadMembership2.setId(UUID.randomUUID());
+        leadMembership2.setWorkspace(workspace);
+        leadMembership2.setUser(leadUser2);
+        leadMembership2.setRole(MembershipRole.LEAD);
+        leadMembership2.setStatus(MembershipStatus.ACTIVE);
+
+        when(linkRepository.findActiveLeadMembershipsByProjectId(project.getId()))
+            .thenReturn(List.of(leadMembership, leadMembership2));
+
+        ProjectTeamResponse response = chatService.getTeam(principal, project.getId());
+
+        assertThat(response.manager()).isNotNull();
+        assertThat(response.manager().displayName()).isEqualTo("Alice Manager");
+        assertThat(response.members()).hasSize(3);
+        assertThat(response.members().stream().map(m -> m.displayName()).toList())
+            .containsExactly("Alice Manager", "Aaron Lead", "Bob Lead");
     }
 
     @Test

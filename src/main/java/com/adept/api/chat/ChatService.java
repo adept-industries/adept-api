@@ -1,6 +1,7 @@
 package com.adept.api.chat;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -63,15 +64,35 @@ public class ChatService {
                 managerMembership.getUser().getAvatarUrl(),
                 MembershipRole.MANAGER
             );
+        } else if (principal.role() == MembershipRole.MANAGER) {
+            Membership currentManager = projectService.requireCurrentMembership(principal);
+            if (currentManager.getUser() != null) {
+                managerDto = new TeamMemberDto(
+                    currentManager.getId(),
+                    currentManager.getUser().getId(),
+                    currentManager.getUser().getDisplayName(),
+                    currentManager.getUser().getEmail(),
+                    currentManager.getUser().getAvatarUrl(),
+                    MembershipRole.MANAGER
+                );
+            }
         }
 
         List<Membership> leadMemberships = linkRepository.findActiveLeadMembershipsByProjectId(projectId);
+        List<Membership> sortedLeads = leadMemberships.stream()
+            .sorted(Comparator.comparing(
+                (Membership m) -> m.getUser() != null && m.getUser().getDisplayName() != null
+                    ? m.getUser().getDisplayName()
+                    : "",
+                String.CASE_INSENSITIVE_ORDER
+            ).thenComparing(Membership::getId))
+            .toList();
 
         Map<UUID, TeamMemberDto> memberMap = new LinkedHashMap<>();
         if (managerDto != null) {
             memberMap.put(managerDto.membershipId(), managerDto);
         }
-        for (Membership lead : leadMemberships) {
+        for (Membership lead : sortedLeads) {
             if (lead.getUser() != null) {
                 memberMap.putIfAbsent(lead.getId(), new TeamMemberDto(
                     lead.getId(),

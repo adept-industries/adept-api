@@ -46,7 +46,6 @@ public interface ProjectRepositoryLinkRepository
           and link.repository.trackingEnabled = true
           and link.repository.archived = false
           and m.status = com.adept.api.common.domain.MembershipStatus.ACTIVE
-        order by lower(user.displayName), user.id
         """)
     List<com.adept.api.workspace.Membership> findActiveLeadMembershipsByProjectId(@Param("projectId") UUID projectId);
 
