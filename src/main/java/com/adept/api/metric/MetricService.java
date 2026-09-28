@@ -147,6 +147,12 @@ public class MetricService {
             MetricGranularity granularity,
             Instant from,
             Instant to) {
+        if (metricType != null && !metricType.isDora()) {
+            throw new ApiException(
+                ProblemCode.VALIDATION_FAILED,
+                "Cycle-time stages are served by /api/v1/metrics/cycle-time."
+            );
+        }
         MetricRange range = validateRange(from, to);
         List<UUID> repositoryIds = resolveAccessibleRepositoryIds(principal, projectId, repositoryId);
         MetricGranularity effectiveGranularity = granularity != null ? granularity : MetricGranularity.DAY;
@@ -558,7 +564,7 @@ public class MetricService {
         );
     }
 
-    private MetricRange validateRange(Instant from, Instant to) {
+    MetricRange validateRange(Instant from, Instant to) {
         Instant end = to != null ? to : Instant.now();
         Instant start = from != null ? from : end.minus(30, ChronoUnit.DAYS);
         if (!start.isBefore(end)) {
@@ -573,13 +579,13 @@ public class MetricService {
         return new MetricRange(start, end);
     }
 
-    private String workspaceTimezone(AuthenticatedPrincipal principal) {
+    String workspaceTimezone(AuthenticatedPrincipal principal) {
         return workspaceRepository.findById(principal.workspaceId())
             .orElseThrow(() -> new NotFoundException(ProblemCode.WORKSPACE_NOT_FOUND))
             .getTimezone();
     }
 
-    private List<UUID> resolveAccessibleRepositoryIds(
+    List<UUID> resolveAccessibleRepositoryIds(
             AuthenticatedPrincipal principal,
             UUID projectId,
             UUID repositoryId) {
@@ -843,7 +849,7 @@ public class MetricService {
         );
     }
 
-    private static double percentile(List<Double> sortedValues, double percentile) {
+    static double percentile(List<Double> sortedValues, double percentile) {
         if (sortedValues.isEmpty()) {
             return 0.0;
         }
@@ -857,11 +863,11 @@ public class MetricService {
         return sortedValues.get(lower) * (1.0 - weight) + sortedValues.get(upper) * weight;
     }
 
-    private static BigDecimal decimal(double value) {
+    static BigDecimal decimal(double value) {
         return BigDecimal.valueOf(value).setScale(2, RoundingMode.HALF_UP);
     }
 
-    private static Instant completeCalculation(
+    static Instant completeCalculation(
             List<UUID> repositoryIds,
             List<MetricSnapshot> snapshots) {
         if (repositoryIds.isEmpty()) {
@@ -888,13 +894,13 @@ public class MetricService {
             .orElse(null);
     }
 
-    private static boolean isStale(Instant calculatedAt) {
+    static boolean isStale(Instant calculatedAt) {
         return calculatedAt == null || calculatedAt.isBefore(Instant.now().minus(STALE_AFTER));
     }
 
     private record Observation(String key, Instant at, double value) {}
 
-    private record MetricRange(Instant start, Instant end) {
+    record MetricRange(Instant start, Instant end) {
         boolean contains(Instant value) {
             return !value.isBefore(start) && value.isBefore(end);
         }

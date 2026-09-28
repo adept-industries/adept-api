@@ -726,6 +726,182 @@
         ],
         "type": "object"
       },
+      "CycleTimePeriodDto": {
+        "properties": {
+          "periodEnd": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "periodStart": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "pullRequestCount": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "stages": {
+            "items": {
+              "$ref": "#/components/schemas/CycleTimeStageDto"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "CycleTimeResponse": {
+        "properties": {
+          "bottleneck": {
+            "description": "Stage with the longest median, or null when there is no data.",
+            "enum": [
+              "CODING",
+              "PICKUP",
+              "REVIEW",
+              "MERGE",
+              "DEPLOY"
+            ],
+            "type": "string"
+          },
+          "calculatedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "calculationVersion": {
+            "type": "string"
+          },
+          "granularity": {
+            "enum": [
+              "DAY",
+              "WEEK",
+              "MONTH"
+            ],
+            "type": "string"
+          },
+          "periodEnd": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "periodStart": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "projectId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "pullRequestCount": {
+            "description": "Merged pull requests in the range with at least one measurable stage.",
+            "format": "int32",
+            "type": "integer"
+          },
+          "repositoryCount": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "repositoryId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "reviewRounds": {
+            "$ref": "#/components/schemas/CycleTimeReviewRoundsDto"
+          },
+          "series": {
+            "items": {
+              "$ref": "#/components/schemas/CycleTimePeriodDto"
+            },
+            "type": "array"
+          },
+          "sizeBreakdown": {
+            "items": {
+              "$ref": "#/components/schemas/CycleTimeSizeBucketDto"
+            },
+            "type": "array"
+          },
+          "stages": {
+            "items": {
+              "$ref": "#/components/schemas/CycleTimeStageDto"
+            },
+            "type": "array"
+          },
+          "stale": {
+            "type": "boolean"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "CycleTimeReviewRoundsDto": {
+        "properties": {
+          "averageRounds": {
+            "description": "Average number of changes-requested reviews per reviewed pull request.",
+            "type": "number"
+          },
+          "pullRequestsWithChangesRequested": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "reviewedPullRequestCount": {
+            "description": "Merged pull requests that received at least one human review.",
+            "format": "int32",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "CycleTimeSizeBucketDto": {
+        "properties": {
+          "pickupMedianHours": {
+            "description": "Median pickup hours, or null when no pull request in the bucket was reviewed.",
+            "type": "number"
+          },
+          "pullRequestCount": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "reviewMedianHours": {
+            "description": "Median review hours, or null when no pull request in the bucket was approved.",
+            "type": "number"
+          },
+          "size": {
+            "description": "Changed-line bucket: XS <= 10, S <= 100, M <= 400, L <= 1000, XL > 1000.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "CycleTimeStageDto": {
+        "properties": {
+          "medianHours": {
+            "description": "Median hours spent in this stage; zero when sampleSize is zero.",
+            "type": "number"
+          },
+          "p75Hours": {
+            "type": "number"
+          },
+          "sampleSize": {
+            "description": "Merged pull requests with a measurable duration for this stage.",
+            "format": "int32",
+            "type": "integer"
+          },
+          "stage": {
+            "enum": [
+              "CODING",
+              "PICKUP",
+              "REVIEW",
+              "MERGE",
+              "DEPLOY"
+            ],
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "DeleteWorkspaceRequest": {
         "properties": {
           "confirmationSlug": {
@@ -1328,7 +1504,12 @@
               "CHANGE_LEAD_TIME_HOURS",
               "DEPLOYMENT_FREQUENCY",
               "FAILED_DEPLOYMENT_RECOVERY_TIME_HOURS",
-              "CHANGE_FAILURE_RATE_PERCENT"
+              "CHANGE_FAILURE_RATE_PERCENT",
+              "PR_CODING_TIME_HOURS",
+              "PR_PICKUP_TIME_HOURS",
+              "PR_REVIEW_TIME_HOURS",
+              "PR_MERGE_TIME_HOURS",
+              "PR_DEPLOY_TIME_HOURS"
             ],
             "type": "string"
           },
@@ -6575,6 +6756,87 @@
         ]
       }
     },
+    "/api/v1/metrics/cycle-time": {
+      "get": {
+        "description": "Splits merged pull requests into coding, pickup, review, merge and deploy stages and returns stage medians for the range, a stacked series per period, a pull request size breakdown and review rounds. Pull requests are grouped by merge time and scoped exactly like the DORA metrics endpoints.",
+        "operationId": "getCycleTime",
+        "parameters": [
+          {
+            "description": "Optional selected project scope.",
+            "in": "query",
+            "name": "projectId",
+            "required": false,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Optional single repository within the selected scope.",
+            "in": "query",
+            "name": "repositoryId",
+            "required": false,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "granularity",
+            "required": false,
+            "schema": {
+              "default": "WEEK",
+              "enum": [
+                "DAY",
+                "WEEK",
+                "MONTH"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CycleTimeResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Get scoped code-review cycle time",
+        "tags": [
+          "metric-controller"
+        ]
+      }
+    },
     "/api/v1/metrics/deployment-frequency/details": {
       "get": {
         "description": "Returns paginated successful production deployments counted by Deployment Frequency.",
@@ -6701,7 +6963,12 @@
                 "CHANGE_LEAD_TIME_HOURS",
                 "DEPLOYMENT_FREQUENCY",
                 "FAILED_DEPLOYMENT_RECOVERY_TIME_HOURS",
-                "CHANGE_FAILURE_RATE_PERCENT"
+                "CHANGE_FAILURE_RATE_PERCENT",
+                "PR_CODING_TIME_HOURS",
+                "PR_PICKUP_TIME_HOURS",
+                "PR_REVIEW_TIME_HOURS",
+                "PR_MERGE_TIME_HOURS",
+                "PR_DEPLOY_TIME_HOURS"
               ],
               "type": "string"
             }
@@ -6895,7 +7162,12 @@
                 "CHANGE_LEAD_TIME_HOURS",
                 "DEPLOYMENT_FREQUENCY",
                 "FAILED_DEPLOYMENT_RECOVERY_TIME_HOURS",
-                "CHANGE_FAILURE_RATE_PERCENT"
+                "CHANGE_FAILURE_RATE_PERCENT",
+                "PR_CODING_TIME_HOURS",
+                "PR_PICKUP_TIME_HOURS",
+                "PR_REVIEW_TIME_HOURS",
+                "PR_MERGE_TIME_HOURS",
+                "PR_DEPLOY_TIME_HOURS"
               ],
               "type": "string"
             }
