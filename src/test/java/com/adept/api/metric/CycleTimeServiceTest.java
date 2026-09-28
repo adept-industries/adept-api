@@ -100,19 +100,20 @@ class CycleTimeServiceTest {
         Instant wednesday = WEEK_START.plusSeconds(2 * 86_400);
         List<MetricSnapshot> days = new ArrayList<>();
         days.add(snapshot(MetricType.PR_CODING_TIME_HOURS, MetricGranularity.DAY, WEEK_START, WEEK_END, List.of(
-            observation("pr-1", tuesday, 6.0, "M", 2),
-            observation("pr-2", wednesday, 2.0, "S", 0))));
+            observation("pr-1", tuesday, 6.0, "M", 50.0, true),
+            observation("pr-2", wednesday, 2.0, "S", 30.0, true),
+            observation("pr-3", wednesday, 1.0, "S", 4.0, false))));
         days.add(snapshot(MetricType.PR_PICKUP_TIME_HOURS, MetricGranularity.DAY, WEEK_START, WEEK_END, List.of(
-            observation("pr-1", tuesday, 44.0, "M", 2),
-            observation("pr-2", wednesday, 24.0, "S", 0))));
+            observation("pr-1", tuesday, 44.0, "M", 50.0, true),
+            observation("pr-2", wednesday, 24.0, "S", 30.0, true))));
         // A second snapshot repeating pr-1 (for example a DAY bucket overlap) is counted once.
         days.add(snapshot(MetricType.PR_PICKUP_TIME_HOURS, MetricGranularity.DAY, WEEK_START, WEEK_END, List.of(
-            observation("pr-1", tuesday, 44.0, "M", 2))));
+            observation("pr-1", tuesday, 44.0, "M", 50.0, true))));
         days.add(snapshot(MetricType.PR_REVIEW_TIME_HOURS, MetricGranularity.DAY, WEEK_START, WEEK_END, List.of(
-            observation("pr-1", tuesday, 5.0, "M", 2))));
+            observation("pr-1", tuesday, 6.0, "M", 50.0, true))));
         // Merged outside the requested range.
         days.add(snapshot(MetricType.PR_DEPLOY_TIME_HOURS, MetricGranularity.DAY, WEEK_START, WEEK_END, List.of(
-            observation("pr-9", WEEK_END.plusSeconds(60), 99.0, "XL", 0))));
+            observation("pr-9", WEEK_END.plusSeconds(60), 99.0, "XL", 99.0, false))));
         when(metricSnapshotRepository.findSnapshots(
             workspaceId, List.of(repositoryId), MetricGranularity.DAY,
             CycleTimeService.CALCULATION_VERSION, WEEK_START, WEEK_END)).thenReturn(days);
@@ -120,37 +121,38 @@ class CycleTimeServiceTest {
             workspaceId, List.of(repositoryId), MetricGranularity.WEEK,
             CycleTimeService.CALCULATION_VERSION, WEEK_START, WEEK_END)).thenReturn(List.of(
                 snapshot(MetricType.PR_PICKUP_TIME_HOURS, MetricGranularity.WEEK, WEEK_START, WEEK_END, List.of(
-                    observation("pr-1", tuesday, 44.0, "M", 2),
-                    observation("pr-2", wednesday, 24.0, "S", 0)))));
+                    observation("pr-1", tuesday, 44.0, "M", 50.0, true),
+                    observation("pr-2", wednesday, 24.0, "S", 30.0, true)))));
 
         CycleTimeResponse response = cycleTimeService.getCycleTime(
             manager, null, null, null, WEEK_START, WEEK_END);
 
         assertThat(response.granularity()).isEqualTo(MetricGranularity.WEEK);
-        assertThat(response.pullRequestCount()).isEqualTo(2);
+        assertThat(response.pullRequestCount()).isEqualTo(3);
+        assertThat(response.unreviewedPullRequestCount()).isOne();
         assertThat(response.bottleneck()).isEqualTo(CycleTimeStage.PICKUP);
         assertThat(response.stages()).extracting(CycleTimeStageDto::stage)
             .containsExactly(CycleTimeStage.values());
         CycleTimeStageDto pickup = response.stages().get(1);
         assertThat(pickup.medianHours()).isEqualByComparingTo("34.00");
         assertThat(pickup.sampleSize()).isEqualTo(2);
-        assertThat(response.stages().get(4).sampleSize()).isZero();
+        assertThat(response.stages().get(3).sampleSize()).isZero();
 
         assertThat(response.series()).hasSize(1);
         assertThat(response.series().get(0).pullRequestCount()).isEqualTo(2);
         assertThat(response.series().get(0).stages().get(1).medianHours()).isEqualByComparingTo("34.00");
 
         assertThat(response.sizeBreakdown()).extracting(CycleTimeSizeBucketDto::size)
-            .containsExactly("XS", "S", "M", "L", "XL");
-        CycleTimeSizeBucketDto medium = response.sizeBreakdown().get(2);
+            .containsExactly("S", "M", "L", "XL");
+        CycleTimeSizeBucketDto small = response.sizeBreakdown().get(0);
+        assertThat(small.pullRequestCount()).isEqualTo(2);
+        assertThat(small.reviewedPullRequestCount()).isOne();
+        assertThat(small.mergeMedianHours()).isEqualByComparingTo("17.00");
+        CycleTimeSizeBucketDto medium = response.sizeBreakdown().get(1);
         assertThat(medium.pullRequestCount()).isOne();
-        assertThat(medium.pickupMedianHours()).isEqualByComparingTo("44.00");
-        assertThat(medium.reviewMedianHours()).isEqualByComparingTo("5.00");
-        assertThat(response.sizeBreakdown().get(1).reviewMedianHours()).isNull();
-
-        assertThat(response.reviewRounds().reviewedPullRequestCount()).isEqualTo(2);
-        assertThat(response.reviewRounds().averageRounds()).isEqualByComparingTo("1.00");
-        assertThat(response.reviewRounds().pullRequestsWithChangesRequested()).isOne();
+        assertThat(medium.mergeMedianHours()).isEqualByComparingTo("50.00");
+        assertThat(response.sizeBreakdown().get(3).pullRequestCount()).isZero();
+        assertThat(response.sizeBreakdown().get(3).mergeMedianHours()).isNull();
     }
 
     @Test
@@ -163,9 +165,9 @@ class CycleTimeServiceTest {
         assertThat(response.repositoryCount()).isZero();
         assertThat(response.bottleneck()).isNull();
         assertThat(response.stale()).isTrue();
-        assertThat(response.stages()).hasSize(5).allMatch(stage -> stage.sampleSize() == 0);
+        assertThat(response.stages()).hasSize(4).allMatch(stage -> stage.sampleSize() == 0);
         assertThat(response.series()).isEmpty();
-        assertThat(response.reviewRounds().reviewedPullRequestCount()).isZero();
+        assertThat(response.unreviewedPullRequestCount()).isZero();
     }
 
     @Test
@@ -199,14 +201,16 @@ class CycleTimeServiceTest {
         return snapshot;
     }
 
-    private static Map<String, Object> observation(String key, Instant at, double hours, String size, int rounds) {
+    private static Map<String, Object> observation(
+            String key, Instant at, double hours, String size, double mergeHours, boolean reviewed) {
         // The engine writes Python isoformat timestamps with an explicit offset.
         return Map.of(
             "key", key,
             "at", at.toString().replace("Z", "+00:00"),
             "value", hours,
             "size", size,
-            "rounds", rounds
+            "merge_hours", mergeHours,
+            "reviewed", reviewed
         );
     }
 }
