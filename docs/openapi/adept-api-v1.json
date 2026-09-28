@@ -1463,7 +1463,6 @@
               "PR_CODING_TIME_HOURS",
               "PR_PICKUP_TIME_HOURS",
               "PR_REVIEW_TIME_HOURS",
-              "PR_MERGE_TIME_HOURS",
               "PR_DEPLOY_TIME_HOURS"
             ],
             "type": "string"
@@ -6922,7 +6921,6 @@
                 "PR_CODING_TIME_HOURS",
                 "PR_PICKUP_TIME_HOURS",
                 "PR_REVIEW_TIME_HOURS",
-                "PR_MERGE_TIME_HOURS",
                 "PR_DEPLOY_TIME_HOURS"
               ],
               "type": "string"
@@ -7121,7 +7119,6 @@
                 "PR_CODING_TIME_HOURS",
                 "PR_PICKUP_TIME_HOURS",
                 "PR_REVIEW_TIME_HOURS",
-                "PR_MERGE_TIME_HOURS",
                 "PR_DEPLOY_TIME_HOURS"
               ],
               "type": "string"
