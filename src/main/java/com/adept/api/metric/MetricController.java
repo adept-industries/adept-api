@@ -109,8 +109,8 @@ public class MetricController {
     @Operation(
         summary = "Get scoped code-review cycle time",
         description = "Splits merged pull requests into coding, pickup, review and deploy "
-            + "stages and returns stage medians for the range, a stacked series per period "
-            + "and a pull request size breakdown. Pull requests are grouped by merge "
+            + "stages and returns stage medians for the range and a stacked series per period. "
+            + "Pull requests are grouped by merge "
             + "time and scoped exactly like the DORA metrics endpoints."
     )
     public ResponseEntity<CycleTimeResponse> getCycleTime(

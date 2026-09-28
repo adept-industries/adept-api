@@ -28,6 +28,5 @@ public record CycleTimeResponse(
     @Schema(description = "Stage with the longest median, or null when there is no data.")
     CycleTimeStage bottleneck,
     List<CycleTimeStageDto> stages,
-    List<CycleTimePeriodDto> series,
-    List<CycleTimeSizeBucketDto> sizeBreakdown
+    List<CycleTimePeriodDto> series
 ) {}

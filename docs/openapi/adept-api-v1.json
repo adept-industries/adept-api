@@ -807,12 +807,6 @@
             },
             "type": "array"
           },
-          "sizeBreakdown": {
-            "items": {
-              "$ref": "#/components/schemas/CycleTimeSizeBucketDto"
-            },
-            "type": "array"
-          },
           "stages": {
             "items": {
               "$ref": "#/components/schemas/CycleTimeStageDto"
@@ -832,31 +826,6 @@
           },
           "workspaceId": {
             "format": "uuid",
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "CycleTimeSizeBucketDto": {
-        "properties": {
-          "mergeMedianHours": {
-            "description": "Median hours from ready for review to merge, or null when no pull request in the bucket has one.",
-            "type": [
-              "number",
-              "null"
-            ]
-          },
-          "pullRequestCount": {
-            "format": "int32",
-            "type": "integer"
-          },
-          "reviewedPullRequestCount": {
-            "description": "Pull requests in the bucket that received at least one human review.",
-            "format": "int32",
-            "type": "integer"
-          },
-          "size": {
-            "description": "Changed-line bucket: S <= 100, M <= 400, L <= 1000, XL > 1000.",
             "type": "string"
           }
         },
@@ -6744,7 +6713,7 @@
     },
     "/api/v1/metrics/cycle-time": {
       "get": {
-        "description": "Splits merged pull requests into coding, pickup, review and deploy stages and returns stage medians for the range, a stacked series per period and a pull request size breakdown. Pull requests are grouped by merge time and scoped exactly like the DORA metrics endpoints.",
+        "description": "Splits merged pull requests into coding, pickup, review and deploy stages and returns stage medians for the range and a stacked series per period. Pull requests are grouped by merge time and scoped exactly like the DORA metrics endpoints.",
         "operationId": "getCycleTime",
         "parameters": [
           {
