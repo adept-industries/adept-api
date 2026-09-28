@@ -1,6 +1,12 @@
 package com.adept.api.metric;
 
+import java.time.DateTimeException;
+import java.time.DayOfWeek;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumMap;
@@ -27,6 +33,11 @@ import com.adept.api.security.AuthenticatedPrincipal;
  * Serves code-review cycle time from pooled per-PR observations written by the engine.
  * Every observation is keyed by pull request and timestamped at its merge, so all stages
  * describe the same cohort of merged pull requests.
+ *
+ * <p>Only DAY snapshots are read. The chart's periods are generated here as calendar days,
+ * Monday-start weeks or months in the workspace timezone (matching the engine's buckets), and
+ * each pull request is placed by its exact merge time, so quiet periods still appear and a
+ * new period starts on its own without waiting for a recalculation.
  */
 @Service
 @Transactional(readOnly = true)
@@ -54,11 +65,7 @@ public class CycleTimeService {
         MetricGranularity effectiveGranularity = granularity != null ? granularity : MetricGranularity.WEEK;
         String timezone = metricService.workspaceTimezone(principal);
 
-        // DAY snapshots give exact range totals; the chart uses the requested granularity.
         List<MetricSnapshot> daySnapshots = findSnapshots(principal, repositoryIds, MetricGranularity.DAY, range);
-        List<MetricSnapshot> seriesSnapshots = effectiveGranularity == MetricGranularity.DAY
-            ? daySnapshots
-            : findSnapshots(principal, repositoryIds, effectiveGranularity, range);
 
         Map<CycleTimeStage, List<StageObservation>> pooled = observationsByStage(daySnapshots, range);
         List<CycleTimeStageDto> stages = stageSummaries(pooled);
@@ -81,7 +88,9 @@ public class CycleTimeService {
             (int) pullRequests.values().stream().filter(item -> !item.reviewed()).count(),
             bottleneck(stages),
             stages,
-            series(seriesSnapshots, range)
+            repositoryIds.isEmpty()
+                ? List.of()
+                : series(pooled, range, effectiveGranularity, zone(timezone))
         );
     }
 
@@ -126,32 +135,57 @@ public class CycleTimeService {
             .orElse(null);
     }
 
-    private static List<CycleTimePeriodDto> series(List<MetricSnapshot> snapshots, MetricRange requestedRange) {
-        record Period(Instant start, Instant end) {}
-        Map<Period, List<MetricSnapshot>> periods = new LinkedHashMap<>();
-        snapshots.stream()
-            .sorted(Comparator.comparing(MetricSnapshot::getPeriodStart))
-            .forEach(snapshot -> periods
-                .computeIfAbsent(new Period(snapshot.getPeriodStart(), snapshot.getPeriodEnd()), ignored -> new ArrayList<>())
-                .add(snapshot));
-
+    private static List<CycleTimePeriodDto> series(
+            Map<CycleTimeStage, List<StageObservation>> pooled,
+            MetricRange range,
+            MetricGranularity granularity,
+            ZoneId zone) {
         List<CycleTimePeriodDto> result = new ArrayList<>();
-        for (Map.Entry<Period, List<MetricSnapshot>> entry : periods.entrySet()) {
-            Period period = entry.getKey();
-            // Partial first and last periods only count merges inside the requested range.
-            MetricRange clipped = new MetricRange(
-                period.start().isAfter(requestedRange.start()) ? period.start() : requestedRange.start(),
-                period.end().isBefore(requestedRange.end()) ? period.end() : requestedRange.end()
-            );
-            Map<CycleTimeStage, List<StageObservation>> pooled = observationsByStage(entry.getValue(), clipped);
+        LocalDate day = periodStart(range.start().atZone(zone).toLocalDate(), granularity);
+        Instant start = day.atStartOfDay(zone).toInstant();
+        while (start.isBefore(range.end())) {
+            day = nextPeriod(day, granularity);
+            Instant end = day.atStartOfDay(zone).toInstant();
+            Map<CycleTimeStage, List<StageObservation>> inPeriod = new EnumMap<>(CycleTimeStage.class);
+            for (Map.Entry<CycleTimeStage, List<StageObservation>> entry : pooled.entrySet()) {
+                Instant periodStart = start;
+                inPeriod.put(entry.getKey(), entry.getValue().stream()
+                    .filter(item -> !item.at().isBefore(periodStart) && item.at().isBefore(end))
+                    .toList());
+            }
             result.add(new CycleTimePeriodDto(
-                period.start(),
-                period.end(),
-                distinctPullRequests(pooled).size(),
-                stageSummaries(pooled)
+                start,
+                end,
+                distinctPullRequests(inPeriod).size(),
+                stageSummaries(inPeriod)
             ));
+            start = end;
         }
         return result;
+    }
+
+    static LocalDate periodStart(LocalDate date, MetricGranularity granularity) {
+        return switch (granularity) {
+            case DAY -> date;
+            case WEEK -> date.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+            case MONTH -> date.withDayOfMonth(1);
+        };
+    }
+
+    private static LocalDate nextPeriod(LocalDate start, MetricGranularity granularity) {
+        return switch (granularity) {
+            case DAY -> start.plusDays(1);
+            case WEEK -> start.plusWeeks(1);
+            case MONTH -> start.plusMonths(1);
+        };
+    }
+
+    private static ZoneId zone(String timezone) {
+        try {
+            return ZoneId.of(timezone);
+        } catch (DateTimeException | NullPointerException ignored) {
+            return ZoneOffset.UTC;
+        }
     }
 
     private static Map<String, StageObservation> distinctPullRequests(
@@ -198,6 +232,7 @@ public class CycleTimeService {
                     double hours = Double.parseDouble(String.valueOf(map.get("value")));
                     result.get(stage).add(new StageObservation(
                         key,
+                        at,
                         hours,
                         Boolean.TRUE.equals(map.get("reviewed"))
                     ));
@@ -209,5 +244,5 @@ public class CycleTimeService {
         return result;
     }
 
-    private record StageObservation(String key, double hours, boolean reviewed) {}
+    private record StageObservation(String key, Instant at, double hours, boolean reviewed) {}
 }

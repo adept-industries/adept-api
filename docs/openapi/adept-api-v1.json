@@ -729,14 +729,17 @@
       "CycleTimePeriodDto": {
         "properties": {
           "periodEnd": {
+            "description": "Exclusive end of the calendar period. The last period can end after the requested range.",
             "format": "date-time",
             "type": "string"
           },
           "periodStart": {
+            "description": "Start of the calendar day, Monday-start week or month in the workspace timezone. The first period can start before the requested range; only merges inside the range are counted.",
             "format": "date-time",
             "type": "string"
           },
           "pullRequestCount": {
+            "description": "Merged pull requests in this period and inside the requested range.",
             "format": "int32",
             "type": "integer"
           },
