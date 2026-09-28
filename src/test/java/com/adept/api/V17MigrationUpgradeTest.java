@@ -39,6 +39,17 @@ class V17MigrationUpgradeTest {
                 name, full_name, default_branch, visibility, tracking_enabled, settings)
             VALUES (?, ?, 17003, 'v17', 'api', 'v17/api', 'main', 'PRIVATE', true, '{}'::jsonb) RETURNING id
             """, UUID.class, workspaceId, githubId);
+        // Untracked and archived repositories must not be backfilled.
+        jdbc.update("""
+            INSERT INTO repositories (workspace_id, github_integration_id, github_repo_id, owner_login,
+                name, full_name, default_branch, visibility, tracking_enabled, settings)
+            VALUES (?, ?, 17007, 'v17', 'untracked', 'v17/untracked', 'main', 'PRIVATE', false, '{}'::jsonb)
+            """, workspaceId, githubId);
+        jdbc.update("""
+            INSERT INTO repositories (workspace_id, github_integration_id, github_repo_id, owner_login,
+                name, full_name, default_branch, visibility, tracking_enabled, archived, settings)
+            VALUES (?, ?, 17008, 'v17', 'archived', 'v17/archived', 'main', 'PRIVATE', true, true, '{}'::jsonb)
+            """, workspaceId, githubId);
         UUID pullRequestId = jdbc.queryForObject("""
             INSERT INTO pull_requests (workspace_id, repository_id, github_pr_id, number, title, state,
                 base_ref, head_ref, opened_at)
@@ -52,6 +63,17 @@ class V17MigrationUpgradeTest {
             """, workspaceId, repositoryId);
 
         assertThat(flyway().target("17").load().migrate().migrationsExecuted).isOne();
+
+        // Exactly one low-priority reviews-only backfill for the tracked repository.
+        assertThat(jdbc.queryForList("""
+            SELECT repository_id FROM processing_jobs
+            WHERE job_type = 'BACKFILL_REPOSITORY'
+              AND status = 'PENDING'
+              AND priority = 200
+              AND payload ->> 'reviewsOnly' = 'true'
+              AND payload ->> 'backfillDays' = '90'
+              AND payload ->> 'repositoryId' = repository_id::text
+            """, UUID.class)).containsExactly(repositoryId);
 
         assertThat(jdbc.queryForObject(
             "SELECT count(*) FROM metric_snapshots WHERE metric_type = 'CHANGE_LEAD_TIME_HOURS'",
@@ -75,13 +97,19 @@ class V17MigrationUpgradeTest {
             INSERT INTO metric_snapshots (workspace_id, repository_id, metric_type, granularity,
                 period_start, period_end, value, unit, calculation_version)
             VALUES (?, ?, 'PR_PICKUP_TIME_HOURS', 'DAY', '2026-09-01T00:00:00Z', '2026-09-02T00:00:00Z',
-                4, 'hours', 'cycle-time-v1')
+                4, 'hours', 'cycle-time-v2')
             """, workspaceId, repositoryId);
         assertThatThrownBy(() -> jdbc.update("""
             INSERT INTO metric_snapshots (workspace_id, repository_id, metric_type, granularity,
                 period_start, period_end, value, unit, calculation_version)
+            VALUES (?, ?, 'PR_MERGE_TIME_HOURS', 'DAY', '2026-09-01T00:00:00Z', '2026-09-02T00:00:00Z',
+                1, 'hours', 'cycle-time-v2')
+            """, workspaceId, repositoryId)).isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> jdbc.update("""
+            INSERT INTO metric_snapshots (workspace_id, repository_id, metric_type, granularity,
+                period_start, period_end, value, unit, calculation_version)
             VALUES (?, ?, 'UNKNOWN_METRIC', 'DAY', '2026-09-01T00:00:00Z', '2026-09-02T00:00:00Z',
-                1, 'hours', 'cycle-time-v1')
+                1, 'hours', 'cycle-time-v2')
             """, workspaceId, repositoryId)).isInstanceOf(DataIntegrityViolationException.class);
 
         jdbc.update("DELETE FROM pull_requests WHERE id = ?", pullRequestId);

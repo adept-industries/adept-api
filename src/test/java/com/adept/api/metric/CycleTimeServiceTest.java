@@ -158,6 +158,26 @@ class CycleTimeServiceTest {
     }
 
     @Test
+    void zeroMinuteStagesAreNotABottleneckAndMalformedObservationsAreSkipped() {
+        Instant tuesday = WEEK_START.plusSeconds(86_400);
+        when(metricSnapshotRepository.findSnapshots(
+            workspaceId, List.of(repositoryId), MetricGranularity.DAY,
+            CycleTimeService.CALCULATION_VERSION, WEEK_START, WEEK_END)).thenReturn(List.of(
+                snapshot(MetricType.PR_CODING_TIME_HOURS, MetricGranularity.DAY, WEEK_START, WEEK_END, List.of(
+                    observation("pr-1", tuesday, 0.0, false),
+                    Map.of("key", "pr-2", "at", "not-a-timestamp", "value", 3.0),
+                    Map.of("at", tuesday.toString(), "value", 3.0)))));
+
+        CycleTimeResponse response = cycleTimeService.getCycleTime(
+            manager, null, null, MetricGranularity.DAY, WEEK_START, WEEK_END);
+
+        assertThat(response.pullRequestCount()).isOne();
+        assertThat(response.unreviewedPullRequestCount()).isOne();
+        assertThat(response.stages().get(0).sampleSize()).isOne();
+        assertThat(response.bottleneck()).isNull();
+    }
+
+    @Test
     void doraSeriesRejectsCycleTimeStageTypes() {
         assertThatThrownBy(() -> metricService.getSeries(
             manager, null, null, MetricType.PR_PICKUP_TIME_HOURS, MetricGranularity.WEEK, WEEK_START, WEEK_END))
