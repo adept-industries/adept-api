@@ -752,7 +752,7 @@
       "CycleTimeResponse": {
         "properties": {
           "bottleneck": {
-            "description": "Stage with the longest median, or null when there is no data.",
+            "description": "Stage with the longest non-zero median, or null when no stage took measurable time.",
             "enum": [
               "CODING",
               "PICKUP",

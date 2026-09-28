@@ -25,7 +25,7 @@ public record CycleTimeResponse(
     int pullRequestCount,
     @Schema(description = "Merged pull requests in the range that no human reviewed before merge.")
     int unreviewedPullRequestCount,
-    @Schema(description = "Stage with the longest median, or null when there is no data.")
+    @Schema(description = "Stage with the longest non-zero median, or null when no stage took measurable time.")
     CycleTimeStage bottleneck,
     List<CycleTimeStageDto> stages,
     List<CycleTimePeriodDto> series

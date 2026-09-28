@@ -118,8 +118,9 @@ public class CycleTimeService {
     }
 
     private static CycleTimeStage bottleneck(List<CycleTimeStageDto> stages) {
+        // A zero-minute median is never a bottleneck, even when it is the only stage with data.
         return stages.stream()
-            .filter(stage -> stage.sampleSize() > 0)
+            .filter(stage -> stage.sampleSize() > 0 && stage.medianHours().signum() > 0)
             .max(Comparator.comparing(CycleTimeStageDto::medianHours))
             .map(CycleTimeStageDto::stage)
             .orElse(null);
