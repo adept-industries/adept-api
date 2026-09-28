@@ -245,7 +245,7 @@ class MetricControllerTest {
         Instant to = Instant.parse("2026-09-29T00:00:00Z");
         CycleTimeResponse expected = new CycleTimeResponse(
             workspaceId, projectId, null, 1, from, to, "UTC", MetricGranularity.WEEK,
-            "cycle-time-v2", to, false, 0, 0, null, List.of(), List.of(), List.of()
+            "cycle-time-v2", to, false, 0, 0, null, List.of(), List.of()
         );
         when(cycleTimeService.getCycleTime(principal, projectId, null, MetricGranularity.WEEK, from, to))
             .thenReturn(expected);
