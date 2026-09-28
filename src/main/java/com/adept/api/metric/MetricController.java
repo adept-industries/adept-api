@@ -108,9 +108,9 @@ public class MetricController {
     @GetMapping(value = "/cycle-time", produces = MediaType.APPLICATION_JSON_VALUE)
     @Operation(
         summary = "Get scoped code-review cycle time",
-        description = "Splits merged pull requests into coding, pickup, review, merge and deploy "
-            + "stages and returns stage medians for the range, a stacked series per period, "
-            + "a pull request size breakdown and review rounds. Pull requests are grouped by merge "
+        description = "Splits merged pull requests into coding, pickup, review and deploy "
+            + "stages and returns stage medians for the range, a stacked series per period "
+            + "and a pull request size breakdown. Pull requests are grouped by merge "
             + "time and scoped exactly like the DORA metrics endpoints."
     )
     public ResponseEntity<CycleTimeResponse> getCycleTime(

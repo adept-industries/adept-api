@@ -23,10 +23,11 @@ public record CycleTimeResponse(
     boolean stale,
     @Schema(description = "Merged pull requests in the range with at least one measurable stage.")
     int pullRequestCount,
+    @Schema(description = "Merged pull requests in the range that no human reviewed before merge.")
+    int unreviewedPullRequestCount,
     @Schema(description = "Stage with the longest median, or null when there is no data.")
     CycleTimeStage bottleneck,
     List<CycleTimeStageDto> stages,
     List<CycleTimePeriodDto> series,
-    List<CycleTimeSizeBucketDto> sizeBreakdown,
-    CycleTimeReviewRoundsDto reviewRounds
+    List<CycleTimeSizeBucketDto> sizeBreakdown
 ) {}

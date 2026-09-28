@@ -1,8 +1,8 @@
 package com.adept.api.metric;
 
-import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.HashMap;
@@ -10,6 +10,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
@@ -21,7 +22,6 @@ import com.adept.api.common.domain.MetricType;
 import com.adept.api.metric.MetricService.MetricRange;
 import com.adept.api.metric.dto.CycleTimePeriodDto;
 import com.adept.api.metric.dto.CycleTimeResponse;
-import com.adept.api.metric.dto.CycleTimeReviewRoundsDto;
 import com.adept.api.metric.dto.CycleTimeSizeBucketDto;
 import com.adept.api.metric.dto.CycleTimeStageDto;
 import com.adept.api.security.AuthenticatedPrincipal;
@@ -35,8 +35,8 @@ import com.adept.api.security.AuthenticatedPrincipal;
 @Transactional(readOnly = true)
 public class CycleTimeService {
 
-    static final String CALCULATION_VERSION = "cycle-time-v1";
-    static final List<String> SIZE_BUCKETS = List.of("XS", "S", "M", "L", "XL");
+    static final String CALCULATION_VERSION = "cycle-time-v2";
+    static final List<String> SIZE_BUCKETS = List.of("S", "M", "L", "XL");
 
     private final MetricService metricService;
     private final MetricSnapshotRepository metricSnapshotRepository;
@@ -66,6 +66,7 @@ public class CycleTimeService {
 
         Map<CycleTimeStage, List<StageObservation>> pooled = observationsByStage(daySnapshots, range);
         List<CycleTimeStageDto> stages = stageSummaries(pooled);
+        Map<String, StageObservation> pullRequests = distinctPullRequests(pooled);
         Instant calculatedAt = MetricService.completeCalculation(repositoryIds, daySnapshots);
 
         return new CycleTimeResponse(
@@ -80,12 +81,12 @@ public class CycleTimeService {
             CALCULATION_VERSION,
             calculatedAt,
             MetricService.isStale(calculatedAt),
-            distinctPullRequests(pooled).size(),
+            pullRequests.size(),
+            (int) pullRequests.values().stream().filter(item -> !item.reviewed()).count(),
             bottleneck(stages),
             stages,
             series(seriesSnapshots, range),
-            sizeBreakdown(pooled),
-            reviewRounds(pooled)
+            sizeBreakdown(pullRequests.values())
         );
     }
 
@@ -157,39 +158,23 @@ public class CycleTimeService {
         return result;
     }
 
-    private static List<CycleTimeSizeBucketDto> sizeBreakdown(Map<CycleTimeStage, List<StageObservation>> pooled) {
-        Map<String, StageObservation> pullRequests = distinctPullRequests(pooled);
+    private static List<CycleTimeSizeBucketDto> sizeBreakdown(Collection<StageObservation> pullRequests) {
         List<CycleTimeSizeBucketDto> result = new ArrayList<>();
         for (String size : SIZE_BUCKETS) {
-            int count = (int) pullRequests.values().stream().filter(item -> size.equals(item.size())).count();
+            List<StageObservation> inBucket = pullRequests.stream().filter(item -> size.equals(item.size())).toList();
+            List<Double> mergeHours = inBucket.stream()
+                .map(StageObservation::mergeHours)
+                .filter(Objects::nonNull)
+                .sorted()
+                .toList();
             result.add(new CycleTimeSizeBucketDto(
                 size,
-                count,
-                medianForSize(pooled.get(CycleTimeStage.PICKUP), size),
-                medianForSize(pooled.get(CycleTimeStage.REVIEW), size)
+                inBucket.size(),
+                (int) inBucket.stream().filter(StageObservation::reviewed).count(),
+                mergeHours.isEmpty() ? null : MetricService.decimal(MetricService.percentile(mergeHours, 0.50))
             ));
         }
         return result;
-    }
-
-    private static CycleTimeReviewRoundsDto reviewRounds(Map<CycleTimeStage, List<StageObservation>> pooled) {
-        // A pickup observation exists exactly when a pull request received a human review.
-        List<StageObservation> reviewed = pooled.get(CycleTimeStage.PICKUP);
-        if (reviewed.isEmpty()) {
-            return new CycleTimeReviewRoundsDto(0, BigDecimal.ZERO.setScale(2), 0);
-        }
-        int totalRounds = reviewed.stream().mapToInt(StageObservation::rounds).sum();
-        int withChangesRequested = (int) reviewed.stream().filter(item -> item.rounds() > 0).count();
-        return new CycleTimeReviewRoundsDto(
-            reviewed.size(),
-            MetricService.decimal(totalRounds / (double) reviewed.size()),
-            withChangesRequested
-        );
-    }
-
-    private static BigDecimal medianForSize(List<StageObservation> observations, String size) {
-        List<Double> hours = sortedHours(observations.stream().filter(item -> size.equals(item.size())).toList());
-        return hours.isEmpty() ? null : MetricService.decimal(MetricService.percentile(hours, 0.50));
     }
 
     private static Map<String, StageObservation> distinctPullRequests(
@@ -234,12 +219,12 @@ public class CycleTimeService {
                         continue;
                     }
                     double hours = Double.parseDouble(String.valueOf(map.get("value")));
-                    Object rounds = map.get("rounds");
                     result.get(stage).add(new StageObservation(
                         key,
                         hours,
                         map.get("size") == null ? null : String.valueOf(map.get("size")),
-                        rounds instanceof Number number ? number.intValue() : 0
+                        map.get("merge_hours") instanceof Number mergeHours ? mergeHours.doubleValue() : null,
+                        Boolean.TRUE.equals(map.get("reviewed"))
                     ));
                 } catch (RuntimeException ignored) {
                     // Malformed observations are excluded instead of corrupting an aggregate.
@@ -249,5 +234,5 @@ public class CycleTimeService {
         return result;
     }
 
-    private record StageObservation(String key, double hours, String size, int rounds) {}
+    private record StageObservation(String key, double hours, String size, Double mergeHours, boolean reviewed) {}
 }

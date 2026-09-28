@@ -757,7 +757,6 @@
               "CODING",
               "PICKUP",
               "REVIEW",
-              "MERGE",
               "DEPLOY"
             ],
             "type": "string"
@@ -802,9 +801,6 @@
             "format": "uuid",
             "type": "string"
           },
-          "reviewRounds": {
-            "$ref": "#/components/schemas/CycleTimeReviewRoundsDto"
-          },
           "series": {
             "items": {
               "$ref": "#/components/schemas/CycleTimePeriodDto"
@@ -829,6 +825,11 @@
           "timezone": {
             "type": "string"
           },
+          "unreviewedPullRequestCount": {
+            "description": "Merged pull requests in the range that no human reviewed before merge.",
+            "format": "int32",
+            "type": "integer"
+          },
           "workspaceId": {
             "format": "uuid",
             "type": "string"
@@ -836,40 +837,26 @@
         },
         "type": "object"
       },
-      "CycleTimeReviewRoundsDto": {
-        "properties": {
-          "averageRounds": {
-            "description": "Average number of changes-requested reviews per reviewed pull request.",
-            "type": "number"
-          },
-          "pullRequestsWithChangesRequested": {
-            "format": "int32",
-            "type": "integer"
-          },
-          "reviewedPullRequestCount": {
-            "description": "Merged pull requests that received at least one human review.",
-            "format": "int32",
-            "type": "integer"
-          }
-        },
-        "type": "object"
-      },
       "CycleTimeSizeBucketDto": {
         "properties": {
-          "pickupMedianHours": {
-            "description": "Median pickup hours, or null when no pull request in the bucket was reviewed.",
-            "type": "number"
+          "mergeMedianHours": {
+            "description": "Median hours from ready for review to merge, or null when no pull request in the bucket has one.",
+            "type": [
+              "number",
+              "null"
+            ]
           },
           "pullRequestCount": {
             "format": "int32",
             "type": "integer"
           },
-          "reviewMedianHours": {
-            "description": "Median review hours, or null when no pull request in the bucket was approved.",
-            "type": "number"
+          "reviewedPullRequestCount": {
+            "description": "Pull requests in the bucket that received at least one human review.",
+            "format": "int32",
+            "type": "integer"
           },
           "size": {
-            "description": "Changed-line bucket: XS <= 10, S <= 100, M <= 400, L <= 1000, XL > 1000.",
+            "description": "Changed-line bucket: S <= 100, M <= 400, L <= 1000, XL > 1000.",
             "type": "string"
           }
         },
@@ -894,7 +881,6 @@
               "CODING",
               "PICKUP",
               "REVIEW",
-              "MERGE",
               "DEPLOY"
             ],
             "type": "string"
@@ -6758,7 +6744,7 @@
     },
     "/api/v1/metrics/cycle-time": {
       "get": {
-        "description": "Splits merged pull requests into coding, pickup, review, merge and deploy stages and returns stage medians for the range, a stacked series per period, a pull request size breakdown and review rounds. Pull requests are grouped by merge time and scoped exactly like the DORA metrics endpoints.",
+        "description": "Splits merged pull requests into coding, pickup, review and deploy stages and returns stage medians for the range, a stacked series per period and a pull request size breakdown. Pull requests are grouped by merge time and scoped exactly like the DORA metrics endpoints.",
         "operationId": "getCycleTime",
         "parameters": [
           {

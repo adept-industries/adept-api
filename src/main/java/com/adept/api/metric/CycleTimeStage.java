@@ -7,7 +7,6 @@ public enum CycleTimeStage {
     CODING(MetricType.PR_CODING_TIME_HOURS),
     PICKUP(MetricType.PR_PICKUP_TIME_HOURS),
     REVIEW(MetricType.PR_REVIEW_TIME_HOURS),
-    MERGE(MetricType.PR_MERGE_TIME_HOURS),
     DEPLOY(MetricType.PR_DEPLOY_TIME_HOURS);
 
     private final MetricType metricType;
