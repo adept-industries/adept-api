@@ -258,6 +258,7 @@ public class AuthService {
         user.setDisplayName(request.displayName().trim());
         user.setPasswordHash(passwordService.encodeNewPassword(request.password()));
         user.setStatus(UserStatus.ACTIVE);
+        user.setOnboardingComplete(false);
         user = userRepository.saveAndFlush(user);
 
         Workspace workspace = new Workspace();
@@ -382,6 +383,17 @@ public class AuthService {
             .toList();
 
         return new MeResponse(userSummary, membershipSummary, workspaces);
+    }
+
+    public void completeOnboarding(UUID userId) {
+        transactionTemplate.executeWithoutResult(status -> {
+            User user = userRepository.findByIdForUpdate(userId)
+                .orElseThrow(() -> new UnauthorizedException(ProblemCode.SESSION_INVALID));
+            if (!user.isOnboardingComplete()) {
+                user.setOnboardingComplete(true);
+                userRepository.save(user);
+            }
+        });
     }
 
     public LoginResult login(LoginRequest request, AccountRequestContext context) {

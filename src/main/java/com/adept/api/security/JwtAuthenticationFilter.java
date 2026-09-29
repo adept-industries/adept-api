@@ -40,6 +40,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String path = request.getRequestURI();
         return !("/api/v1/auth/me".equals(path)
             || "/api/v1/auth/test-me".equals(path)
+            || "/api/v1/auth/onboarding/complete".equals(path)
             || "/api/v1/auth/reauthenticate/password".equals(path)
             || "/api/v1/auth/google/reauthentication/start".equals(path)
             || "/api/v1/workspaces".equals(path)

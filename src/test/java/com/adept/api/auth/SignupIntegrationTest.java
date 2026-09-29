@@ -3,6 +3,7 @@ package com.adept.api.auth;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -26,6 +27,7 @@ import org.springframework.context.annotation.Primary;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 
 import com.adept.api.auth.dto.SignupRequest;
 import com.adept.api.common.error.ApiException;
@@ -33,6 +35,7 @@ import com.adept.api.common.error.ProblemCode;
 import com.adept.api.crypto.PasswordService;
 import com.adept.api.workspace.WorkspaceRepository;
 import com.adept.api.workspace.WorkspaceSlugService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 @Import(SignupIntegrationTest.ControlledSlugConfiguration.class)
 class SignupIntegrationTest extends PartCIntegrationTestSupport {
@@ -67,6 +70,7 @@ class SignupIntegrationTest extends PartCIntegrationTestSupport {
             .andExpect(status().isCreated())
             .andExpect(jsonPath("$.user.email").value(email))
             .andExpect(jsonPath("$.user.emailVerified").value(false))
+            .andExpect(jsonPath("$.user.onboardingComplete").value(false))
             .andExpect(jsonPath("$.workspace.role").value("MANAGER"))
             .andExpect(jsonPath("$.emailVerificationRequired").value(true))
             .andReturn().getResponse().getContentAsString();
@@ -89,6 +93,44 @@ class SignupIntegrationTest extends PartCIntegrationTestSupport {
             .isEqualTo("VERIFY_EMAIL");
         assertThat(jdbc.queryForObject("SELECT metadata::text FROM audit_logs", String.class))
             .doesNotContain(email, VALID_PASSWORD, "token");
+    }
+
+    @Test
+    void newAccountCanCompleteOnboardingAcrossAuthenticatedSessions() throws Exception {
+        String email = uniqueEmail("onboarding");
+        authService.signup(request(email, "Onboarding Workspace"), requestContext());
+        String verificationToken = awaitToken(email, "Verify your Adept email");
+        authService.verifyEmail(verificationToken, requestContext());
+
+        CsrfPair loginCsrf = fetchCsrf(mockMvc);
+        MvcResult login = mockMvc.perform(post("/api/v1/auth/login")
+                .cookie(loginCsrf.cookie())
+                .header("X-XSRF-TOKEN", loginCsrf.token())
+                .header(HttpHeaders.ORIGIN, FRONTEND_ORIGIN)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"email":"%s","password":"%s"}
+                    """.formatted(email, VALID_PASSWORD)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.user.onboardingComplete").value(false))
+            .andReturn();
+        String accessToken = new ObjectMapper()
+            .readTree(login.getResponse().getContentAsString())
+            .path("accessToken")
+            .asText();
+
+        CsrfPair completeCsrf = fetchCsrf(mockMvc);
+        mockMvc.perform(post("/api/v1/auth/onboarding/complete")
+                .cookie(completeCsrf.cookie())
+                .header("X-XSRF-TOKEN", completeCsrf.token())
+                .header(HttpHeaders.ORIGIN, FRONTEND_ORIGIN)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken))
+            .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/v1/auth/me")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.user.onboardingComplete").value(true));
     }
 
     @Test

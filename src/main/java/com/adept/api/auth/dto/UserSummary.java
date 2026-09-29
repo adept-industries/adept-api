@@ -9,7 +9,8 @@ public record UserSummary(
     String email,
     String displayName,
     boolean emailVerified,
-    boolean hasPassword
+    boolean hasPassword,
+    boolean onboardingComplete
 ) {
     public static UserSummary from(User user) {
         return new UserSummary(
@@ -17,7 +18,8 @@ public record UserSummary(
             user.getEmail(),
             user.getDisplayName(),
             user.getEmailVerifiedAt() != null,
-            user.getPasswordHash() != null && !user.getPasswordHash().isBlank()
+            user.getPasswordHash() != null && !user.getPasswordHash().isBlank(),
+            user.isOnboardingComplete()
         );
     }
 }
