@@ -44,6 +44,7 @@ public class OpenApiConfig {
     private static final String REFRESH = "/api/v1/auth/refresh";
     private static final String LOGOUT = "/api/v1/auth/logout";
     private static final String ME = "/api/v1/auth/me";
+    private static final String ONBOARDING_COMPLETE = "/api/v1/auth/onboarding/complete";
     private static final String SWITCH_WORKSPACE = "/api/v1/auth/switch-workspace/{workspaceId}";
     private static final String SESSION_WORKSPACES = "/api/v1/auth/workspaces";
     private static final String FORGOT_PASSWORD = "/api/v1/auth/forgot-password";
@@ -193,6 +194,21 @@ public class OpenApiConfig {
                 componentRef("MeResponse"),
                 SecurityProfile.BEARER,
                 Set.of("401", "403"),
+                CookieBehavior.NONE
+            );
+
+            configure(
+                openApi,
+                ONBOARDING_COMPLETE,
+                PathItem.HttpMethod.POST,
+                "completeOnboarding",
+                "Complete the account onboarding tour",
+                null,
+                "204",
+                "Onboarding marked complete",
+                null,
+                SecurityProfile.BEARER_CSRF,
+                Set.of("401", "403", "429"),
                 CookieBehavior.NONE
             );
 
@@ -843,7 +859,7 @@ public class OpenApiConfig {
         markWriteOnly(components, "ActionTokenRequest", "token");
         markWriteOnly(components, "ResetPasswordRequest", "token", "newPassword");
 
-        require(components, "UserSummary", "id", "email", "displayName", "emailVerified", "hasPassword");
+        require(components, "UserSummary", "id", "email", "displayName", "emailVerified", "hasPassword", "onboardingComplete");
         require(components, "MembershipSummary", "id", "workspaceId", "workspaceName", "workspaceSlug", "timezone", "role");
         require(components, "WorkspaceSummaryResponse", "id", "name", "slug", "timezone", "role");
         require(components, "SignupResponse", "user", "workspace", "emailVerificationRequired");

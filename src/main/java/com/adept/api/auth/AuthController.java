@@ -70,6 +70,13 @@ public class AuthController {
             .body(response);
     }
 
+    @PostMapping("/onboarding/complete")
+    public ResponseEntity<Void> completeOnboarding() {
+        AuthenticatedPrincipal principal = currentPrincipal.require();
+        authService.completeOnboarding(principal.userId());
+        return noStoreNoContent();
+    }
+
     @PostMapping("/login")
     public ResponseEntity<AuthSessionResponse> login(
             @Valid @RequestBody LoginRequest request,

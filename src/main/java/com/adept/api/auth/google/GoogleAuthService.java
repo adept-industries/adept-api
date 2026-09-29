@@ -243,6 +243,7 @@ public final class GoogleAuthService {
         user.setAvatarUrl(pending.avatarUrl());
         user.setStatus(UserStatus.ACTIVE);
         user.setEmailVerifiedAt(now);
+        user.setOnboardingComplete(false);
         user = userRepository.saveAndFlush(user);
 
         GoogleAuthAccount googleAccount = new GoogleAuthAccount();

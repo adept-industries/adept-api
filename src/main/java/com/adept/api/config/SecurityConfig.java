@@ -197,6 +197,7 @@ public class SecurityConfig {
                 ).permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/auth/me", "/api/v1/auth/test-me").authenticated()
                 .requestMatchers(HttpMethod.POST,
+                    "/api/v1/auth/onboarding/complete",
                     "/api/v1/auth/reauthenticate/password",
                     "/api/v1/auth/google/reauthentication/start"
                 ).authenticated()

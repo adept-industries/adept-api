@@ -44,6 +44,9 @@ public class User extends BaseEntity {
     @Column(name = "last_login_at")
     private Instant lastLoginAt;
 
+    @Column(name = "onboarding_complete", nullable = false)
+    private boolean onboardingComplete = true;
+
     // Incrementing this invalidates previously issued access tokens.
     @Column(name = "token_version", nullable = false)
     private int tokenVersion;

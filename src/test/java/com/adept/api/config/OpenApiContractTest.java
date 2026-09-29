@@ -57,6 +57,8 @@ class OpenApiContractTest extends PartCIntegrationTestSupport {
             "403", "429"),
         endpoint("/api/v1/auth/me", "get", "getCurrentUser", "200", security("bearerAuth"), null,
             "401", "403"),
+        endpoint("/api/v1/auth/onboarding/complete", "post", "completeOnboarding", "204",
+            security("bearerAuth", "csrfHeader"), null, "401", "403", "429"),
         endpoint("/api/v1/auth/switch-workspace/{workspaceId}", "post", "switchWorkspace", "200",
             security("refreshCookie", "csrfHeader"), null, "400", "401", "403", "404", "429"),
         endpoint("/api/v1/auth/workspaces", "post", "createWorkspaceForSession", "201",
@@ -403,6 +405,8 @@ class OpenApiContractTest extends PartCIntegrationTestSupport {
             .isFalse();
         assertThat(schemas.at("/WorkspaceSelectionSessionResponse/properties/workspaceSelectionRequired/enum/0").asBoolean())
             .isTrue();
+        assertThat(arrayValues(schemas.at("/UserSummary/required"))).contains("onboardingComplete");
+        assertThat(schemas.at("/UserSummary/properties/onboardingComplete/type").asText()).isEqualTo("boolean");
 
         assertThat(arrayValues(schemas.at("/ProblemDetail/required")))
             .containsExactlyInAnyOrder("type", "title", "status", "detail", "instance", "code", "traceId");
