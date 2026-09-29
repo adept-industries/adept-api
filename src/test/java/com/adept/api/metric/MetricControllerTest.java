@@ -19,6 +19,7 @@ import com.adept.api.common.domain.DeploymentSource;
 import com.adept.api.common.domain.MembershipRole;
 import com.adept.api.common.domain.MetricGranularity;
 import com.adept.api.common.domain.MetricType;
+import com.adept.api.metric.dto.CycleTimeResponse;
 import com.adept.api.metric.dto.DeploymentFrequencyDetailDto;
 import com.adept.api.metric.dto.DeploymentFrequencyDetailsResponse;
 import com.adept.api.metric.dto.DoraMetricsSeriesResponse;
@@ -36,6 +37,9 @@ class MetricControllerTest {
 
     @Mock
     private MetricService metricService;
+
+    @Mock
+    private CycleTimeService cycleTimeService;
 
     @Mock
     private CurrentPrincipal currentPrincipal;
@@ -231,5 +235,25 @@ class MetricControllerTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isNotNull();
         assertThat(((DeploymentFrequencyDetailsResponse) response.getBody()).items()).isEmpty();
+    }
+
+    @Test
+    void cycleTimeDelegatesScopeAndGranularity() {
+        when(currentPrincipal.require()).thenReturn(principal);
+        UUID projectId = UUID.randomUUID();
+        Instant from = Instant.parse("2026-09-01T00:00:00Z");
+        Instant to = Instant.parse("2026-09-29T00:00:00Z");
+        CycleTimeResponse expected = new CycleTimeResponse(
+            workspaceId, projectId, null, 1, from, to, "UTC", MetricGranularity.WEEK,
+            "cycle-time-v2", to, false, 0, 0, null, List.of(), List.of()
+        );
+        when(cycleTimeService.getCycleTime(principal, projectId, null, MetricGranularity.WEEK, from, to))
+            .thenReturn(expected);
+
+        ResponseEntity<CycleTimeResponse> response = metricController.getCycleTime(
+            projectId, null, MetricGranularity.WEEK, from, to);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isSameAs(expected);
     }
 }

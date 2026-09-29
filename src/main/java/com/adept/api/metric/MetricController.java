@@ -17,6 +17,7 @@ import com.adept.api.common.error.ApiException;
 import com.adept.api.common.error.ProblemCode;
 import com.adept.api.metric.dto.ChangeFailureRateDetailsResponse;
 import com.adept.api.metric.dto.ChangeLeadTimeDetailsResponse;
+import com.adept.api.metric.dto.CycleTimeResponse;
 import com.adept.api.metric.dto.DeploymentFrequencyDetailsResponse;
 import com.adept.api.metric.dto.DoraMetricsSeriesResponse;
 import com.adept.api.metric.dto.DoraMetricsSummaryResponse;
@@ -38,10 +39,15 @@ import jakarta.validation.constraints.Min;
 public class MetricController {
 
     private final MetricService metricService;
+    private final CycleTimeService cycleTimeService;
     private final CurrentPrincipal currentPrincipal;
 
-    public MetricController(MetricService metricService, CurrentPrincipal currentPrincipal) {
+    public MetricController(
+            MetricService metricService,
+            CycleTimeService cycleTimeService,
+            CurrentPrincipal currentPrincipal) {
         this.metricService = metricService;
+        this.cycleTimeService = cycleTimeService;
         this.currentPrincipal = currentPrincipal;
     }
 
@@ -97,6 +103,33 @@ public class MetricController {
             to
         );
         return ResponseEntity.ok(response);
+    }
+
+    @GetMapping(value = "/cycle-time", produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(
+        summary = "Get scoped code-review cycle time",
+        description = "Splits merged pull requests into coding, pickup, review and deploy "
+            + "stages and returns stage medians for the range and a stacked series per period. "
+            + "Pull requests are grouped by merge "
+            + "time and scoped exactly like the DORA metrics endpoints."
+    )
+    public ResponseEntity<CycleTimeResponse> getCycleTime(
+            @Parameter(description = "Optional selected project scope.")
+            @RequestParam(required = false) UUID projectId,
+            @Parameter(description = "Optional single repository within the selected scope.")
+            @RequestParam(required = false) UUID repositoryId,
+            @RequestParam(required = false, defaultValue = "WEEK") MetricGranularity granularity,
+            @RequestParam(required = false) Instant from,
+            @RequestParam(required = false) Instant to) {
+        AuthenticatedPrincipal principal = currentPrincipal.require();
+        return ResponseEntity.ok(cycleTimeService.getCycleTime(
+            principal,
+            projectId,
+            repositoryId,
+            granularity,
+            from,
+            to
+        ));
     }
 
     @GetMapping(value = "/deployment-frequency/details", produces = MediaType.APPLICATION_JSON_VALUE)
