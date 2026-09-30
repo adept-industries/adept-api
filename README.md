@@ -3,7 +3,7 @@
 The Adept API is the Java backend and sole owner of the shared PostgreSQL database schema.
 
 ## Tech Stack
-- **Framework & Runtime**: Spring Boot 4.1 on Java 25, Flyway V1–V15, Hibernate, PostgreSQL 18.
+- **Framework & Runtime**: Spring Boot 4.1 on Java 25, Flyway V1–V18, Hibernate, PostgreSQL 18.
 - **Authentication**: JWT access tokens, HttpOnly refresh cookies, CSRF protection.
 
 ## Getting Started

@@ -38,6 +38,7 @@ import com.adept.api.integration.common.IntegrationOauthState;
 import com.adept.api.integration.common.IntegrationOauthStateService;
 import com.adept.api.integration.github.dto.GithubConnectUrlResponse;
 import com.adept.api.job.ProcessingJobRepository;
+import com.adept.api.project.ProjectRepositoryLinkRepository;
 import com.adept.api.user.User;
 import com.adept.api.workspace.Membership;
 import com.adept.api.workspace.Workspace;
@@ -52,6 +53,7 @@ class GithubIntegrationServiceTest {
     @Mock private GitRepositoryRepository gitRepositoryRepository;
     @Mock private WorkspaceRepository workspaceRepository;
     @Mock private ProcessingJobRepository processingJobRepository;
+    @Mock private ProjectRepositoryLinkRepository projectRepositoryLinkRepository;
     @Mock private IntegrationOauthStateService oauthStateService;
     @Mock private GithubApiClient githubApiClient;
     @Mock private GithubAppTokenService githubAppTokenService;
@@ -92,6 +94,7 @@ class GithubIntegrationServiceTest {
             gitRepositoryRepository,
             workspaceRepository,
             processingJobRepository,
+            projectRepositoryLinkRepository,
             oauthStateService,
             githubApiClient,
             githubAppTokenService,
@@ -198,6 +201,35 @@ class GithubIntegrationServiceTest {
             any(),
             any()
         );
+    }
+
+    @Test
+    @DisplayName("disconnect revokes integration, untracks repositories, and cascades project link deletions")
+    void disconnectUntracksRepositoriesAndCascadesLinks() {
+        GithubIntegration integration = new GithubIntegration();
+        integration.setId(UUID.randomUUID());
+        integration.setWorkspace(testWorkspace);
+        integration.setInstallationId(777L);
+        integration.setAccountLogin("acme-org");
+        integration.setStatus(IntegrationStatus.ACTIVE);
+
+        GitRepository repository = new GitRepository();
+        repository.setId(UUID.randomUUID());
+        repository.setWorkspace(testWorkspace);
+        repository.setGithubIntegration(integration);
+        repository.setTrackingEnabled(true);
+
+        when(githubIntegrationRepository.findByIdAndWorkspaceId(integration.getId(), testWorkspace.getId()))
+            .thenReturn(Optional.of(integration));
+        when(gitRepositoryRepository.findAllByGithubIntegrationId(integration.getId()))
+            .thenReturn(List.of(repository));
+
+        service.disconnect(testWorkspace.getId(), integration.getId(), managerMembership);
+
+        assertThat(integration.getStatus()).isEqualTo(IntegrationStatus.REVOKED);
+        assertThat(repository.isTrackingEnabled()).isFalse();
+        verify(projectRepositoryLinkRepository).deleteAllByGithubIntegrationIdAndWorkspaceId(integration.getId(), testWorkspace.getId());
+        verify(gitRepositoryRepository).save(repository);
     }
 
     @Test

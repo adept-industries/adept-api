@@ -14,7 +14,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.adept.api.audit.AuditAction;
 import com.adept.api.audit.AuditService;
+import com.adept.api.common.domain.IntegrationStatus;
 import com.adept.api.common.domain.MembershipRole;
+import com.adept.api.project.ProjectRepositoryLinkRepository;
 import com.adept.api.common.domain.ProcessingJobStatus;
 import com.adept.api.common.domain.ProcessingJobType;
 import com.adept.api.common.error.ApiException;
@@ -35,6 +37,7 @@ public class RepositoryService {
     private final GitRepositoryRepository repositoryRepository;
     private final GithubApiClient githubApiClient;
     private final ProcessingJobRepository processingJobRepository;
+    private final ProjectRepositoryLinkRepository projectRepositoryLinkRepository;
     private final AuditService auditService;
     private final Clock clock;
     private final ObjectMapper objectMapper;
@@ -43,12 +46,14 @@ public class RepositoryService {
             GitRepositoryRepository repositoryRepository,
             GithubApiClient githubApiClient,
             ProcessingJobRepository processingJobRepository,
+            ProjectRepositoryLinkRepository projectRepositoryLinkRepository,
             AuditService auditService,
             Clock clock,
             ObjectMapper objectMapper) {
         this.repositoryRepository = repositoryRepository;
         this.githubApiClient = githubApiClient;
         this.processingJobRepository = processingJobRepository;
+        this.projectRepositoryLinkRepository = projectRepositoryLinkRepository;
         this.auditService = auditService;
         this.clock = clock;
         this.objectMapper = objectMapper;
@@ -116,11 +121,21 @@ public class RepositoryService {
 
         if (request.trackingEnabled() != null) {
             boolean newTracking = request.trackingEnabled();
-            if (newTracking && repo.isArchived()) {
-                throw new ApiException(
-                    ProblemCode.VALIDATION_FAILED,
-                    "Archived repositories cannot be tracked"
-                );
+            if (newTracking) {
+                if (repo.isArchived()) {
+                    throw new ApiException(
+                        ProblemCode.VALIDATION_FAILED,
+                        "Archived repositories cannot be tracked"
+                    );
+                }
+                if (repo.getGithubIntegration().getStatus() != IntegrationStatus.ACTIVE) {
+                    throw new ApiException(
+                        ProblemCode.VALIDATION_FAILED,
+                        "Cannot track repository while GitHub integration is not active"
+                    );
+                }
+            } else if (oldTracking) {
+                projectRepositoryLinkRepository.deleteAllByRepositoryIdAndWorkspaceId(repo.getId(), workspaceId);
             }
             repo.setTrackingEnabled(newTracking);
 

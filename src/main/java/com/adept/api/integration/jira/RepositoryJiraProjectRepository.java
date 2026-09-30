@@ -42,10 +42,44 @@ public interface RepositoryJiraProjectRepository extends JpaRepository<Repositor
     @Query("delete from RepositoryJiraProject rjp where rjp.repository.id in :repositoryIds")
     void deleteAllByRepositoryIds(@Param("repositoryIds") Collection<UUID> repositoryIds);
 
+    @Modifying
+    @Query("delete from RepositoryJiraProject rjp where rjp.jiraProject.id = :jiraProjectId")
+    void deleteAllByJiraProjectId(@Param("jiraProjectId") UUID jiraProjectId);
+
+    @Modifying
+    @Query("delete from RepositoryJiraProject rjp where rjp.jiraProject.jiraIntegration.id = :integrationId")
+    void deleteAllByJiraIntegrationId(@Param("integrationId") UUID integrationId);
+
     @Query("""
         select rjp
         from RepositoryJiraProject rjp
         where rjp.repository.workspace.id = :workspaceId
         """)
     List<RepositoryJiraProject> findAllByWorkspaceId(@Param("workspaceId") UUID workspaceId);
+
+    @Query("""
+        select distinct link.project.name
+        from RepositoryJiraProject rjp
+        join ProjectRepositoryLink link on link.repository = rjp.repository
+        where rjp.jiraProject.id = :jiraProjectId
+          and link.workspace.id = :workspaceId
+        order by link.project.name
+        """)
+    List<String> findProjectNamesByJiraProjectIdAndWorkspaceId(
+        @Param("jiraProjectId") UUID jiraProjectId,
+        @Param("workspaceId") UUID workspaceId
+    );
+
+    @Query("""
+        select distinct link.project.name
+        from RepositoryJiraProject rjp
+        join ProjectRepositoryLink link on link.repository = rjp.repository
+        where rjp.jiraProject.jiraIntegration.id = :integrationId
+          and link.workspace.id = :workspaceId
+        order by link.project.name
+        """)
+    List<String> findProjectNamesByJiraIntegrationIdAndWorkspaceId(
+        @Param("integrationId") UUID integrationId,
+        @Param("workspaceId") UUID workspaceId
+    );
 }
