@@ -70,7 +70,7 @@ public class CycleTimeService {
         Map<CycleTimeStage, List<StageObservation>> pooled = observationsByStage(daySnapshots, range);
         List<CycleTimeStageDto> stages = stageSummaries(pooled);
         Map<String, StageObservation> pullRequests = distinctPullRequests(pooled);
-        Instant calculatedAt = MetricService.completeCalculation(repositoryIds, daySnapshots);
+        Instant calculatedAt = latestCompleteCalculation(principal, repositoryIds);
 
         return new CycleTimeResponse(
             principal.workspaceId(),
@@ -110,6 +110,28 @@ public class CycleTimeService {
             range.start(),
             range.end()
         );
+    }
+
+    /**
+     * The oldest of each repository's latest recalculation, or null until every repository has one.
+     * Days without merges or deployments are never recalculated, so a quiet repository has no
+     * snapshots inside a short range even though its cycle time is fully calculated.
+     */
+    private Instant latestCompleteCalculation(AuthenticatedPrincipal principal, List<UUID> repositoryIds) {
+        if (repositoryIds.isEmpty()) {
+            return null;
+        }
+        Map<UUID, Instant> latest = new HashMap<>();
+        metricSnapshotRepository.findLatestCalculations(
+            principal.workspaceId(),
+            repositoryIds,
+            MetricGranularity.DAY,
+            CALCULATION_VERSION
+        ).forEach(row -> latest.put(row.getRepositoryId(), row.getCalculatedAt()));
+        if (!latest.keySet().containsAll(repositoryIds)) {
+            return null;
+        }
+        return repositoryIds.stream().map(latest::get).min(Comparator.naturalOrder()).orElse(null);
     }
 
     private static List<CycleTimeStageDto> stageSummaries(Map<CycleTimeStage, List<StageObservation>> pooled) {
