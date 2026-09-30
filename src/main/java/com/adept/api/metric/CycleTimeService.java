@@ -153,11 +153,13 @@ public class CycleTimeService {
                     .filter(item -> !item.at().isBefore(periodStart) && item.at().isBefore(end))
                     .toList());
             }
+            List<CycleTimeStageDto> periodStages = stageSummaries(inPeriod);
             result.add(new CycleTimePeriodDto(
                 start,
                 end,
                 distinctPullRequests(inPeriod).size(),
-                stageSummaries(inPeriod)
+                bottleneck(periodStages),
+                periodStages
             ));
             start = end;
         }
