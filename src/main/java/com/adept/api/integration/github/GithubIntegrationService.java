@@ -31,6 +31,7 @@ import com.adept.api.integration.github.dto.GithubIntegrationResponse;
 import com.adept.api.integration.github.dto.RepositorySettingsDto;
 import com.adept.api.job.ProcessingJob;
 import com.adept.api.job.ProcessingJobRepository;
+import com.adept.api.project.ProjectRepositoryLinkRepository;
 import com.adept.api.workspace.Membership;
 import com.adept.api.workspace.Workspace;
 import com.adept.api.workspace.WorkspaceRepository;
@@ -45,6 +46,7 @@ public class GithubIntegrationService {
     private final GitRepositoryRepository gitRepositoryRepository;
     private final WorkspaceRepository workspaceRepository;
     private final ProcessingJobRepository processingJobRepository;
+    private final ProjectRepositoryLinkRepository projectRepositoryLinkRepository;
     private final IntegrationOauthStateService oauthStateService;
     private final GithubApiClient githubApiClient;
     private final GithubAppTokenService githubAppTokenService;
@@ -58,6 +60,7 @@ public class GithubIntegrationService {
             GitRepositoryRepository gitRepositoryRepository,
             WorkspaceRepository workspaceRepository,
             ProcessingJobRepository processingJobRepository,
+            ProjectRepositoryLinkRepository projectRepositoryLinkRepository,
             IntegrationOauthStateService oauthStateService,
             GithubApiClient githubApiClient,
             GithubAppTokenService githubAppTokenService,
@@ -69,6 +72,7 @@ public class GithubIntegrationService {
         this.gitRepositoryRepository = gitRepositoryRepository;
         this.workspaceRepository = workspaceRepository;
         this.processingJobRepository = processingJobRepository;
+        this.projectRepositoryLinkRepository = projectRepositoryLinkRepository;
         this.oauthStateService = oauthStateService;
         this.githubApiClient = githubApiClient;
         this.githubAppTokenService = githubAppTokenService;
@@ -201,6 +205,9 @@ public class GithubIntegrationService {
 
         GithubIntegration integration = githubIntegrationRepository.findByIdAndWorkspaceId(integrationId, workspaceId)
             .orElseThrow(() -> new ApiException(ProblemCode.INTEGRATION_NOT_FOUND));
+
+        // Cascade release all repositories linked to this integration from active projects
+        projectRepositoryLinkRepository.deleteAllByGithubIntegrationIdAndWorkspaceId(integrationId, workspaceId);
 
         integration.setStatus(IntegrationStatus.REVOKED);
         githubIntegrationRepository.save(integration);

@@ -49,7 +49,45 @@ public interface ProjectRepositoryLinkRepository
         """)
     List<com.adept.api.workspace.Membership> findActiveLeadMembershipsByProjectId(@Param("projectId") UUID projectId);
 
+    @Query("""
+        select distinct link.project.name
+        from ProjectRepositoryLink link
+        where link.repository.id = :repositoryId
+          and link.workspace.id = :workspaceId
+        order by link.project.name
+        """)
+    List<String> findProjectNamesByRepositoryIdAndWorkspaceId(
+        @Param("repositoryId") UUID repositoryId,
+        @Param("workspaceId") UUID workspaceId
+    );
+
+    @Query("""
+        select distinct link.project.name
+        from ProjectRepositoryLink link
+        where link.repository.githubIntegration.id = :integrationId
+          and link.workspace.id = :workspaceId
+        order by link.project.name
+        """)
+    List<String> findProjectNamesByGithubIntegrationIdAndWorkspaceId(
+        @Param("integrationId") UUID integrationId,
+        @Param("workspaceId") UUID workspaceId
+    );
+
     @Modifying
     @Query("delete from ProjectRepositoryLink link where link.project.id = :projectId")
     void deleteAllByProjectId(@Param("projectId") UUID projectId);
+
+    @Modifying
+    @Query("delete from ProjectRepositoryLink link where link.repository.id = :repositoryId and link.workspace.id = :workspaceId")
+    void deleteAllByRepositoryIdAndWorkspaceId(
+        @Param("repositoryId") UUID repositoryId,
+        @Param("workspaceId") UUID workspaceId
+    );
+
+    @Modifying
+    @Query("delete from ProjectRepositoryLink link where link.repository.githubIntegration.id = :integrationId and link.workspace.id = :workspaceId")
+    void deleteAllByGithubIntegrationIdAndWorkspaceId(
+        @Param("integrationId") UUID integrationId,
+        @Param("workspaceId") UUID workspaceId
+    );
 }

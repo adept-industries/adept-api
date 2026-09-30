@@ -63,6 +63,7 @@ class JiraIntegrationServiceTest {
     @Mock private JiraIntegrationRepository jiraIntegrationRepository;
     @Mock private JiraProjectRepository jiraProjectRepository;
     @Mock private RepositoryJiraProjectRepository repositoryJiraProjectRepository;
+    @Mock private com.adept.api.project.ProjectJiraProjectRepository projectJiraProjectRepository;
     @Mock private GitRepositoryRepository gitRepositoryRepository;
     @Mock private WorkspaceRepository workspaceRepository;
     @Mock private ProcessingJobRepository processingJobRepository;
@@ -114,6 +115,7 @@ class JiraIntegrationServiceTest {
             jiraIntegrationRepository,
             jiraProjectRepository,
             repositoryJiraProjectRepository,
+            projectJiraProjectRepository,
             gitRepositoryRepository,
             workspaceRepository,
             processingJobRepository,
@@ -418,5 +420,78 @@ class JiraIntegrationServiceTest {
             when(jiraApiClient.listProjects("cloud-123", "access-token"))
                 .thenReturn(List.of());
         }
+    }
+
+    @Test
+    @DisplayName("updateProjectTracking blocks tracking when integration is not active")
+    void updateProjectTrackingBlocksWhenIntegrationNotActive() {
+        JiraIntegration integration = connectedIntegration();
+        integration.setStatus(IntegrationStatus.REVOKED);
+
+        JiraProject project = new JiraProject();
+        project.setId(UUID.randomUUID());
+        project.setWorkspace(testWorkspace);
+        project.setJiraIntegration(integration);
+        project.setProjectKey("DEV");
+        project.setTrackingEnabled(false);
+
+        when(jiraProjectRepository.findByIdAndWorkspaceId(project.getId(), testWorkspace.getId()))
+            .thenReturn(Optional.of(project));
+
+        assertThatThrownBy(() -> service.updateProjectTracking(testWorkspace.getId(), project.getId(), true, managerMembership))
+            .isInstanceOf(ApiException.class)
+            .matches(e -> ((ApiException) e).code() == ProblemCode.VALIDATION_FAILED)
+            .matches(e -> ((ApiException) e).safeDetail().contains("not active"));
+    }
+
+    @Test
+    @DisplayName("untrack cascades Jira project link deletions from projects and mappings")
+    void untrackCascadesProjectLinkDeletions() {
+        JiraIntegration integration = connectedIntegration();
+        integration.setStatus(IntegrationStatus.ACTIVE);
+
+        JiraProject project = new JiraProject();
+        project.setId(UUID.randomUUID());
+        project.setWorkspace(testWorkspace);
+        project.setJiraIntegration(integration);
+        project.setProjectKey("DEV");
+        project.setTrackingEnabled(true);
+
+        when(jiraProjectRepository.findByIdAndWorkspaceId(project.getId(), testWorkspace.getId()))
+            .thenReturn(Optional.of(project));
+
+        service.updateProjectTracking(testWorkspace.getId(), project.getId(), false, managerMembership);
+
+        assertThat(project.isTrackingEnabled()).isFalse();
+        verify(projectJiraProjectRepository).deleteAllByJiraProjectIdAndWorkspaceId(project.getId(), testWorkspace.getId());
+        verify(repositoryJiraProjectRepository).deleteAllByJiraProjectId(project.getId());
+        verify(jiraProjectRepository).save(project);
+    }
+
+    @Test
+    @DisplayName("disconnect revokes integration, untracks Jira projects, and cascades project link deletions")
+    void disconnectRevokesUntracksAndCascadesProjectLinkDeletions() {
+        JiraIntegration integration = connectedIntegration();
+        integration.setStatus(IntegrationStatus.ACTIVE);
+
+        JiraProject project = new JiraProject();
+        project.setId(UUID.randomUUID());
+        project.setWorkspace(testWorkspace);
+        project.setJiraIntegration(integration);
+        project.setProjectKey("DEV");
+        project.setTrackingEnabled(true);
+
+        when(jiraIntegrationRepository.findById(integration.getId()))
+            .thenReturn(Optional.of(integration));
+        when(jiraProjectRepository.findAllByJiraIntegrationId(integration.getId()))
+            .thenReturn(List.of(project));
+
+        service.disconnect(testWorkspace.getId(), integration.getId(), managerMembership);
+
+        assertThat(integration.getStatus()).isEqualTo(IntegrationStatus.REVOKED);
+        assertThat(project.isTrackingEnabled()).isFalse();
+        verify(projectJiraProjectRepository).deleteAllByJiraIntegrationIdAndWorkspaceId(integration.getId(), testWorkspace.getId());
+        verify(repositoryJiraProjectRepository).deleteAllByJiraIntegrationId(integration.getId());
+        verify(jiraProjectRepository).save(project);
     }
 }

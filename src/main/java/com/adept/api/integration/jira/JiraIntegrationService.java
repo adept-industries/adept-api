@@ -9,6 +9,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
+import com.adept.api.project.ProjectJiraProjectRepository;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -58,6 +60,7 @@ public class JiraIntegrationService {
     private final JiraIntegrationRepository jiraIntegrationRepository;
     private final JiraProjectRepository jiraProjectRepository;
     private final RepositoryJiraProjectRepository repositoryJiraProjectRepository;
+    private final ProjectJiraProjectRepository projectJiraProjectRepository;
     private final GitRepositoryRepository gitRepositoryRepository;
     private final WorkspaceRepository workspaceRepository;
     private final ProcessingJobRepository processingJobRepository;
@@ -75,6 +78,7 @@ public class JiraIntegrationService {
             JiraIntegrationRepository jiraIntegrationRepository,
             JiraProjectRepository jiraProjectRepository,
             RepositoryJiraProjectRepository repositoryJiraProjectRepository,
+            ProjectJiraProjectRepository projectJiraProjectRepository,
             GitRepositoryRepository gitRepositoryRepository,
             WorkspaceRepository workspaceRepository,
             ProcessingJobRepository processingJobRepository,
@@ -90,6 +94,7 @@ public class JiraIntegrationService {
         this.jiraIntegrationRepository = jiraIntegrationRepository;
         this.jiraProjectRepository = jiraProjectRepository;
         this.repositoryJiraProjectRepository = repositoryJiraProjectRepository;
+        this.projectJiraProjectRepository = projectJiraProjectRepository;
         this.gitRepositoryRepository = gitRepositoryRepository;
         this.workspaceRepository = workspaceRepository;
         this.processingJobRepository = processingJobRepository;
@@ -259,6 +264,18 @@ public class JiraIntegrationService {
         JiraProject project = jiraProjectRepository.findByIdAndWorkspaceId(projectId, workspaceId)
             .orElseThrow(() -> new ApiException(ProblemCode.JIRA_PROJECT_NOT_FOUND));
 
+        if (trackingEnabled) {
+            if (project.getJiraIntegration().getStatus() != IntegrationStatus.ACTIVE) {
+                throw new ApiException(
+                    ProblemCode.VALIDATION_FAILED,
+                    "Cannot track Jira project while Jira integration is not active"
+                );
+            }
+        } else if (project.isTrackingEnabled()) {
+            projectJiraProjectRepository.deleteAllByJiraProjectIdAndWorkspaceId(project.getId(), workspaceId);
+            repositoryJiraProjectRepository.deleteAllByJiraProjectId(project.getId());
+        }
+
         project.setTrackingEnabled(trackingEnabled);
         jiraProjectRepository.save(project);
 
@@ -344,6 +361,10 @@ public class JiraIntegrationService {
         JiraIntegration integration = jiraIntegrationRepository.findById(integrationId)
             .filter(i -> i.getWorkspace().getId().equals(workspaceId))
             .orElseThrow(() -> new ApiException(ProblemCode.INTEGRATION_NOT_FOUND));
+
+        // Cascade release all Jira projects under this integration from active projects and mappings
+        projectJiraProjectRepository.deleteAllByJiraIntegrationIdAndWorkspaceId(integrationId, workspaceId);
+        repositoryJiraProjectRepository.deleteAllByJiraIntegrationId(integrationId);
 
         deleteRemoteWebhookBestEffort(integration);
         integration.setStatus(IntegrationStatus.REVOKED);
@@ -675,6 +696,20 @@ public class JiraIntegrationService {
         private void releaseCompensation() {
             compensationClaimed.set(false);
         }
+    }
+
+    private List<String> findProjectNamesForJiraProject(UUID jiraProjectId, UUID workspaceId) {
+        Set<String> names = new TreeSet<>();
+        names.addAll(projectJiraProjectRepository.findProjectNamesByJiraProjectIdAndWorkspaceId(jiraProjectId, workspaceId));
+        names.addAll(repositoryJiraProjectRepository.findProjectNamesByJiraProjectIdAndWorkspaceId(jiraProjectId, workspaceId));
+        return new ArrayList<>(names);
+    }
+
+    private List<String> findProjectNamesForJiraIntegration(UUID integrationId, UUID workspaceId) {
+        Set<String> names = new TreeSet<>();
+        names.addAll(projectJiraProjectRepository.findProjectNamesByJiraIntegrationIdAndWorkspaceId(integrationId, workspaceId));
+        names.addAll(repositoryJiraProjectRepository.findProjectNamesByJiraIntegrationIdAndWorkspaceId(integrationId, workspaceId));
+        return new ArrayList<>(names);
     }
 
     private void verifyManagerRole(Membership membership) {
