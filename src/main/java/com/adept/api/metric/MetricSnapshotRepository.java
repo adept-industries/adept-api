@@ -75,4 +75,27 @@ public interface MetricSnapshotRepository
         @Param("from") Instant from,
         @Param("to") Instant to
     );
+
+    /** When each repository last had snapshots of this version recalculated, over all periods. */
+    @Query("""
+        select m.repository.id as repositoryId, max(m.calculatedAt) as calculatedAt
+        from MetricSnapshot m
+        where m.workspace.id = :workspaceId
+          and m.repository.id in :repositoryIds
+          and m.granularity = :granularity
+          and m.calculationVersion = :calculationVersion
+        group by m.repository.id
+        """)
+    List<LatestCalculation> findLatestCalculations(
+        @Param("workspaceId") UUID workspaceId,
+        @Param("repositoryIds") Collection<UUID> repositoryIds,
+        @Param("granularity") MetricGranularity granularity,
+        @Param("calculationVersion") String calculationVersion
+    );
+
+    interface LatestCalculation {
+        UUID getRepositoryId();
+
+        Instant getCalculatedAt();
+    }
 }

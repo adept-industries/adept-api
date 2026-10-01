@@ -184,6 +184,82 @@ class CycleTimeServiceTest {
     }
 
     @Test
+    void eachPeriodReportsItsOwnBottleneck() {
+        Instant from = Instant.parse("2026-09-07T00:00:00Z");
+        Instant to = Instant.parse("2026-09-28T00:00:00Z");
+        Instant firstWeek = Instant.parse("2026-09-08T12:00:00Z");
+        Instant thirdWeek = Instant.parse("2026-09-22T12:00:00Z");
+        when(metricSnapshotRepository.findSnapshots(
+            workspaceId, List.of(repositoryId), MetricGranularity.DAY,
+            CycleTimeService.CALCULATION_VERSION, from, to)).thenReturn(List.of(
+                snapshot(MetricType.PR_PICKUP_TIME_HOURS, MetricGranularity.DAY, from, to, List.of(
+                    // Waiting for review dominates the first week...
+                    observation("pr-1", firstWeek, 30.0, true),
+                    observation("pr-2", thirdWeek, 1.0, true))),
+                snapshot(MetricType.PR_DEPLOY_TIME_HOURS, MetricGranularity.DAY, from, to, List.of(
+                    observation("pr-1", firstWeek, 2.0, true),
+                    // ...while deployment dominates the third.
+                    observation("pr-2", thirdWeek, 20.0, true)))));
+
+        CycleTimeResponse response = cycleTimeService.getCycleTime(
+            manager, null, null, MetricGranularity.WEEK, from, to);
+
+        assertThat(response.series()).extracting(CycleTimePeriodDto::bottleneck)
+            .containsExactly(CycleTimeStage.PICKUP, null, CycleTimeStage.DEPLOY);
+        // The range bottleneck pools both weeks: pickup median 15.5h, deploy median 11h.
+        assertThat(response.bottleneck()).isEqualTo(CycleTimeStage.PICKUP);
+    }
+
+    @Test
+    void aQuietRepositoryIsCalculatedEvenWithoutSnapshotsInTheRange() {
+        Instant from = Instant.parse("2026-09-24T00:00:00Z");
+        Instant to = Instant.parse("2026-09-30T10:00:00Z");
+        Instant lastRecalculated = Instant.now().minusSeconds(3_600);
+        UUID otherRepositoryId = UUID.randomUUID();
+        GitRepository other = new GitRepository();
+        other.setId(otherRepositoryId);
+        other.setWorkspace(repository.getWorkspace());
+        other.setTrackingEnabled(true);
+        other.setArchived(false);
+        when(gitRepositoryRepository.findAllByWorkspaceId(workspaceId)).thenReturn(List.of(repository, other));
+        when(metricSnapshotRepository.findSnapshots(
+            workspaceId, List.of(repositoryId, otherRepositoryId), MetricGranularity.DAY,
+            CycleTimeService.CALCULATION_VERSION, from, to)).thenReturn(List.of());
+        when(metricSnapshotRepository.findLatestCalculations(
+            workspaceId, List.of(repositoryId, otherRepositoryId), MetricGranularity.DAY,
+            CycleTimeService.CALCULATION_VERSION)).thenReturn(List.of(
+                latest(repositoryId, lastRecalculated),
+                latest(otherRepositoryId, lastRecalculated.minusSeconds(60))));
+
+        CycleTimeResponse response = cycleTimeService.getCycleTime(
+            manager, null, null, MetricGranularity.DAY, from, to);
+
+        assertThat(response.pullRequestCount()).isZero();
+        assertThat(response.calculatedAt()).isEqualTo(lastRecalculated.minusSeconds(60));
+        assertThat(response.stale()).isFalse();
+    }
+
+    @Test
+    void cycleTimeIsNotCalculatedUntilEveryRepositoryHasBeen() {
+        UUID otherRepositoryId = UUID.randomUUID();
+        GitRepository other = new GitRepository();
+        other.setId(otherRepositoryId);
+        other.setWorkspace(repository.getWorkspace());
+        other.setTrackingEnabled(true);
+        other.setArchived(false);
+        when(gitRepositoryRepository.findAllByWorkspaceId(workspaceId)).thenReturn(List.of(repository, other));
+        when(metricSnapshotRepository.findLatestCalculations(
+            workspaceId, List.of(repositoryId, otherRepositoryId), MetricGranularity.DAY,
+            CycleTimeService.CALCULATION_VERSION)).thenReturn(List.of(latest(repositoryId, Instant.now())));
+
+        CycleTimeResponse response = cycleTimeService.getCycleTime(
+            manager, null, null, MetricGranularity.WEEK, WEEK_START, WEEK_END);
+
+        assertThat(response.calculatedAt()).isNull();
+        assertThat(response.stale()).isTrue();
+    }
+
+    @Test
     void daySeriesStartsANewPeriodEachCalendarDay() {
         Instant from = Instant.parse("2026-09-21T10:00:00Z");
         Instant to = Instant.parse("2026-09-23T09:00:00Z");
@@ -229,6 +305,20 @@ class CycleTimeServiceTest {
                 assertThat(error.code()).isEqualTo(ProblemCode.VALIDATION_FAILED);
                 assertThat(error.safeDetail()).contains("/api/v1/metrics/cycle-time");
             });
+    }
+
+    private static MetricSnapshotRepository.LatestCalculation latest(UUID repositoryId, Instant calculatedAt) {
+        return new MetricSnapshotRepository.LatestCalculation() {
+            @Override
+            public UUID getRepositoryId() {
+                return repositoryId;
+            }
+
+            @Override
+            public Instant getCalculatedAt() {
+                return calculatedAt;
+            }
+        };
     }
 
     private MetricSnapshot snapshot(
